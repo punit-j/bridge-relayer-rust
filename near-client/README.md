@@ -1,4 +1,4 @@
-# near-jsonrpc-client
+# near_client
 
 Lower-level API for interfacing with the NEAR Protocol via JSONRPC.
 
