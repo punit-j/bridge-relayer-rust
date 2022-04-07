@@ -6,76 +6,63 @@ Lower-level API for interfacing with the NEAR Protocol via JSONRPC.
 [![Documentation](https://docs.rs/near-jsonrpc-client/badge.svg)](https://docs.rs/near-jsonrpc-client)
 [![Dependency Status](https://deps.rs/crate/near-jsonrpc-client/0.3.0/status.svg)](https://deps.rs/crate/near-jsonrpc-client/0.3.0)
 
-## Usage
+Check out [`the examples folder`](https://github.com/near/near-jsonrpc-client-rs/tree/master/examples) for a comprehensive list of helpful demos.
 
-Each one of the valid JSON RPC methods are defined in the `methods` module.
-For instance, to make a `tx` request, you start with the `tx` module
-and construct a request using the `methods::tx::RpcTransactionStatusRequest` struct.
+## Example of calling view method
 
-```rust
-use near_client::{methods, JsonRpcClient};
-use near_jsonrpc_primitives::types::transactions::TransactionInfo;
-
-let mainnet_client = JsonRpcClient::connect("https://archival-rpc.mainnet.near.org");
-
-let tx_status_request = methods::tx::RpcTransactionStatusRequest {
-    transaction_info: TransactionInfo::TransactionId {
-        hash: "9FtHUFBQsZ2MG77K3x3MJ9wjX3UT8zE1TczCrhZEcG8U".parse()?,
-        account_id: "miraclx.near".parse()?,
-    },
-};
-
-// call a method on the server via the connected client
-let tx_status = mainnet_client.call(tx_status_request).await?;
-
-println!("{:?}", tx_status);
-```
-
-Check out [`the examples folder`](https://github.com/near/near-jsonrpc-client-rs/tree/master/examples) for a comprehensive list of helpful demos. You can run the examples with `cargo`. For example: `cargo run --example view_account`.
-
-For all intents and purposes, the predefined structures in `methods` should suffice, if you find that they
-don't or you crave extra flexibility, well, you can opt in to use the generic constructor `methods::any()` with the `any` feature flag.
-
-In this example, we retrieve only the parts from the genesis config response that we care about.
-
-```toml
-# in Cargo.toml
-near_client = { ..., features = ["any"] }
-```
+TO RUN the example, create an "examples" folder in the "near-client" folder, then create a "contract_view_method.rs" file and put the code below in it, changing the parameter values to your own, then write in the CLI "cargo run --example contract_view_method"
 
 ```rust
-use serde::Deserialize;
-use serde_json::json;
 
-use near_client::{methods, JsonRpcClient};
-use near_primitives::serialize::u128_dec_format;
-use near_primitives::types::*;
+use near_jsonrpc_primitives::types::query::QueryResponseKind;
+use serde_json::{from_slice, json};
 
-#[derive(Debug, Deserialize)]
-struct PartialGenesisConfig {
-    protocol_version: ProtocolVersion,
-    chain_id: String,
-    genesis_height: BlockHeight,
-    epoch_length: BlockHeightDelta,
-    #[serde(with = "u128_dec_format")]
-    min_gas_price: Balance,
-    #[serde(with = "u128_dec_format")]
-    max_gas_price: Balance,
-    #[serde(with = "u128_dec_format")]
-    total_supply: Balance,
-    validators: Vec<AccountInfo>,
+use near_client::methods::view;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let response = view(
+        "https://rpc.testnet.near.org".to_string(), // server_addr
+        "arseniyrest.testnet".to_string(), // contract_account_id
+        "get_num".to_string(), // method_name
+        json!({}), // args
+    )
+    .await;
+    if let QueryResponseKind::CallResult(result) = response.unwrap().kind {
+        println!("{:#?}", from_slice::<i8>(&result.result)?);
+    }
+    Ok(())
 }
 
-impl methods::RpcHandlerResponse for PartialGenesisConfig {}
+```
 
-let mainnet_client = JsonRpcClient::connect("https://rpc.mainnet.near.org");
+## Example of calling change method
 
-let genesis_config_request = methods::any::<Result<PartialGenesisConfig, ()>>(
-    "EXPERIMENTAL_genesis_config",
-    json!(null),
-);
+TO RUN the example, create an "examples" folder in the "near-client" folder, then create a "contract_change_method.rs" file and put the code below in it, changing the parameter values to your own, then write in the CLI "cargo run --example contract_change_method"
 
-let partial_genesis = mainnet_client.call(genesis_config_request).await?;
+```rust
 
-println!("{:#?}", partial_genesis);
+use near_client::methods::change;
+use near_client::read_private_key;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let response = change(
+        "https://rpc.testnet.near.org".to_string(), // server_addr
+        "arseniyrest.testnet".to_string(), // signer_account_id
+        read_private_key::read_private_key_from_file(
+            "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
+        ), // signer_secret_key
+        "arseniyrest.testnet".to_string(), // receiver_id
+        "increment".to_string(), // method_name
+        json!({}), // args
+        100_000_000_000_000, // gas
+        0, // deposit
+    )
+    .await;
+    println!("{:#?}", response.unwrap());
+    Ok(())
+}
+
 ```
