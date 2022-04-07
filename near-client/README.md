@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
     if let QueryResponseKind::CallResult(result) = response.unwrap().kind {
-        println!("{:#?}", from_slice::<i8>(&result.result)?);
+        println!("{:#?}", from_slice::<i8>(&result.result)?); // i8 — type of the result returned by the get_num method
     }
     Ok(())
 }
