@@ -20,12 +20,11 @@ pub struct SpectreBridgeTransferEvent {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::str::FromStr;
 
-    #[test]
-    fn serialize() {
-        let mut tt = super::SpectreBridgeTransferEvent{
+    pub fn test_struct_build() -> super::SpectreBridgeTransferEvent {
+        super::SpectreBridgeTransferEvent {
             valid_till: 123897,
             transfer: super::Transfer {
                 token: web3::types::Address::from_str("0xd034739c2ae107c70cd703092b946f12a49509d1").unwrap(),
@@ -35,14 +34,23 @@ mod tests {
                 amount: 789
             },
             recipient: web3::types::Address::from_str("0xd034739c2ae807c70cd743492b946f62a49509d1").unwrap()
-        };
+        }
+    }
+
+    pub fn test_struct_check(first: &super::SpectreBridgeTransferEvent, second: &super::SpectreBridgeTransferEvent) {
+        assert_eq!(first.valid_till, second.valid_till);
+        assert_eq!(first.transfer, second.transfer);
+        assert_eq!(first.fee, second.fee);
+        assert_eq!(first.recipient, second.recipient);
+    }
+
+    #[test]
+    fn serialize() {
+        let tt = test_struct_build();
 
         let serialize = serde_json::to_string(&tt).unwrap();
         let res: super::SpectreBridgeTransferEvent = serde_json::from_str(&serialize).unwrap();
 
-        assert_eq!(tt.valid_till, res.valid_till);
-        assert_eq!(tt.transfer, res.transfer);
-        assert_eq!(tt.fee, res.fee);
-        assert_eq!(tt.recipient, res.recipient);
+        test_struct_check(&tt, &res);
     }
 }
