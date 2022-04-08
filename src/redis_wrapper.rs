@@ -10,30 +10,22 @@ pub struct RedisWrapper {
 }
 
 impl RedisWrapper {
-   pub fn connect() -> Self {
-       let c = redis::Client::open("redis://127.0.0.1/").unwrap();
-       let mut con = c.get_connection().unwrap();
-       let v = RedisWrapper { client: c, connection: con };
-       v
+    pub fn connect(url: &str) -> Self {
+        let c = redis::Client::open(url).expect(format!("Enable to open {}", url).as_str());
+        let con = c.get_connection().expect("Unable to get connection");
+        RedisWrapper { client: c, connection: con }
     }
 
     pub fn set(&mut self, nonce: u128, event: &transfer_event::SpectreBridgeTransferEvent) -> RedisResult<()> {
-        let serialize = serde_json::to_string(&event).unwrap();
+        let serialize = serde_json::to_string(&event).expect("Unable to set value to the redis");
         self.connection.set(nonce.to_string(), serialize)?;
 
         Ok(())
     }
-
     pub fn get(&mut self, nonce: u128) -> Option<transfer_event::SpectreBridgeTransferEvent> {
-        let res: RedisResult<String> = self.connection.get(nonce.to_string());
-        if res.is_ok() {
-            let res = serde_json::from_str(&res.unwrap());
-            if res.is_ok() {
-                return res.unwrap();
-            }
-        }
+        let res: String = self.connection.get(nonce.to_string()).ok()?;
 
-        Option::None
+        serde_json::from_str(&res).expect("Unable to parce JSON")
     }
 }
 
@@ -46,7 +38,7 @@ mod tests {
     fn read_write() {
         let event = super::transfer_event::tests::test_struct_build();
 
-        let mut redis = super::RedisWrapper::connect();
+        let mut redis = super::RedisWrapper::connect("redis://127.0.0.1/");
         redis.set(1, &event);
 
         assert!(redis.get(2).is_none());
