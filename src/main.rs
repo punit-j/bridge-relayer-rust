@@ -1,6 +1,15 @@
+mod transfer_event;
+mod redis_wrapper;
+
 #[macro_use] extern crate rocket;
+
+use std::io::Write;
+use std::str::FromStr;
 use rocket::State;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use redis::Commands;
+use borsh::{BorshSerialize, BorshDeserialize};
+use crate::redis_wrapper::RedisWrapper;
 
 struct HitCount {
     count: AtomicUsize
@@ -10,6 +19,8 @@ struct HitCount {
 fn health() -> String {
     "OK".to_string()
 }
+
+extern crate redis;
 
 #[rocket::main]
 async fn main() {

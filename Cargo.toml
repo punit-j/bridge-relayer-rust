@@ -7,3 +7,11 @@ edition = "2021"
 
 [dependencies]
 rocket = "0.5.0-rc.1"
+web3 = "0.18.0"
+borsh = "0.9.3"
+serde = "1.0.136"
+serde_json = "1.0.79"
+
+[dependencies.redis]
+version = "*"
+git = "https://github.com/mitsuhiko/redis-rs.git"
