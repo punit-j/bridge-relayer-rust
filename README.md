@@ -1,1 +1,0 @@
-# spectre-bridge-service
