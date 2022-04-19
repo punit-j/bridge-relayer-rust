@@ -1,5 +1,6 @@
 mod transfer_event;
 mod redis_wrapper;
+mod near_watcher;
 
 #[macro_use] extern crate rocket;
 
@@ -24,6 +25,9 @@ extern crate redis;
 
 #[rocket::main]
 async fn main() {
+    near_watcher::run().await;
+
+
     let mut rr = rocket::build();
     rr = rr.mount("/v1", routes![health]);
     rr.launch().await;
