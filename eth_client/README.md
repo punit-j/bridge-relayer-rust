@@ -64,8 +64,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .as_bytes(),
      "store", // method_name
      0_u32, // args
-    "ebefaa0570e26ce96cf0876ff68648027de39b30119b16953aa93e73d35064c1").await?; // private_key
+    "ebefaa0570e26ce96cf0876ff68648027de39b30119b16953aa93e73d35064c1" // private_key
+    ).await?; 
     println!("Tx: {}", change_response);
+    Ok(())
+}
+
+```
+
+TO RUN the example, create an "examples" folder in the "eth_client" folder, then create a "contract_estimate_transfer_execution.rs" file and put the code below in it, changing the parameter values to your own, then write in the CLI "cargo run --example contract_estimate_transfer_execution"
+
+## Example of calling estimation transfer execution method
+
+```rust
+
+use eth_client::methods::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let estimated_gas_in_wei = estimate_gas(
+        "https://rinkeby.infura.io/v3/168bdff2f03e417eb8e69cd90fc54615", 
+        "0x8d9Eda359157594F352dc29c0bDB741bb8F6b65e", 
+        get_contract_abi(
+            "https://api-rinkeby.etherscan.io", 
+            "0x8d9Eda359157594F352dc29c0bDB741bb8F6b65e", 
+            "",
+        )
+        .await?
+        .as_bytes(), 
+        "store", 
+        0_u32, 
+    )
+    .await?;
+    let gas_price_in_wei =
+        gas_price("https://rinkeby.infura.io/v3/168bdff2f03e417eb8e69cd90fc54615").await?;
+    println!("USD: {}", estimate_transfer_execution(estimated_gas_in_wei, gas_price_in_wei).await?);
     Ok(())
 }
 

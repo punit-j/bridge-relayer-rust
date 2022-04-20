@@ -1,4 +1,3 @@
-use secp256k1::SecretKey;
 use std::str::FromStr;
 
 pub fn construct_contract_interface(
@@ -46,8 +45,48 @@ pub async fn change(
                 method_name,
                 args,
                 web3::contract::Options::default(),
-                &SecretKey::from_str(private_key).unwrap(),
+                &secp256k1::SecretKey::from_str(private_key).unwrap(),
             )
             .await?,
     )
+}
+
+pub async fn gas_price(server_addr: &str) -> web3::contract::Result<web3::types::U256> {
+    Ok(web3::Web3::new(web3::transports::Http::new(server_addr)?)
+        .eth()
+        .gas_price()
+        .await?)
+}
+
+pub async fn estimate_gas(
+    server_addr: &str,
+    contract_addr: &str,
+    contract_abi: &[u8],
+    method_name: &str,
+    args: impl web3::contract::tokens::Tokenize,
+) -> web3::contract::Result<web3::types::U256> {
+    Ok(
+        construct_contract_interface(server_addr, contract_addr, contract_abi)?
+            .estimate_gas(
+                method_name,
+                args,
+                contract_addr.parse().unwrap(),
+                web3::contract::Options::default(),
+            )
+            .await?,
+    )
+}
+
+pub async fn eth_price() -> Result<f64, reqwest::Error> {
+    Ok(coingecko::CoinGeckoClient::default()
+        .price(&["ethereum"], &["usd"], true, true, true, true)
+        .await?
+        .get("ethereum")
+        .unwrap()
+        .usd
+        .unwrap())
+}
+
+pub async fn estimate_transfer_execution(estimated_gas: web3::types::U256, gas_price: web3::types::U256) -> Result<f64, reqwest::Error> {
+    Ok(estimated_gas.as_usize() as f64 * gas_price.as_usize() as f64 / 1_000_000_000_000_000_000.0 * eth_price().await? as f64)
 }
