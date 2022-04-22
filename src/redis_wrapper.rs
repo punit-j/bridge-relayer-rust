@@ -1,22 +1,32 @@
-
 use crate::transfer_event;
 extern crate redis;
+use crate::config::RedisSettings;
 use redis::{Commands, RedisResult};
 use rocket::yansi::Color::Default;
 
 pub struct RedisWrapper {
-   client: redis::Client,
-   connection: redis::Connection
+    client: redis::Client,
+    connection: redis::Connection,
+    settings: RedisSettings,
 }
 
 impl RedisWrapper {
-    pub fn connect(url: &str) -> Self {
-        let c = redis::Client::open(url).expect(format!("Enable to open {}", url).as_str());
+    pub fn connect(settings: RedisSettings) -> Self {
+        let c = redis::Client::open(settings.url.clone().unwrap())
+            .expect(format!("Enable to open {}", settings.url.clone().unwrap()).as_str());
         let con = c.get_connection().expect("Unable to get connection");
-        RedisWrapper { client: c, connection: con }
+        RedisWrapper {
+            client: c,
+            connection: con,
+            settings: settings,
+        }
     }
 
-    pub fn set(&mut self, nonce: u128, event: &transfer_event::SpectreBridgeTransferEvent) -> RedisResult<()> {
+    pub fn set(
+        &mut self,
+        nonce: u128,
+        event: &transfer_event::SpectreBridgeTransferEvent,
+    ) -> RedisResult<()> {
         let serialize = serde_json::to_string(&event).expect("Unable to set value to the redis");
         self.connection.set(nonce.to_string(), serialize)?;
 
@@ -31,14 +41,19 @@ impl RedisWrapper {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use crate::config::RedisSettings;
     use crate::transfer_event;
+    use std::str::FromStr;
 
     #[test]
     fn read_write() {
         let event = super::transfer_event::tests::test_struct_build();
 
-        let mut redis = super::RedisWrapper::connect("redis://127.0.0.1/");
+        let settings = RedisSettings {
+            url: Some("redis://127.0.0.1/".to_string()),
+        };
+
+        let mut redis = super::RedisWrapper::connect(settings);
         redis.set(1, &event);
 
         assert!(redis.get(2).is_none());
