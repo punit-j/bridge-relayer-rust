@@ -1,6 +1,6 @@
 mod transfer_event;
 mod redis_wrapper;
-mod near_watcher;
+mod near;
 
 #[macro_use] extern crate rocket;
 
@@ -9,7 +9,7 @@ use std::str::FromStr;
 use rocket::State;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use redis::Commands;
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 use crate::redis_wrapper::RedisWrapper;
 
 struct HitCount {
@@ -25,7 +25,7 @@ extern crate redis;
 
 #[rocket::main]
 async fn main() {
-    near_watcher::run().await;
+    near::run_watcher().await;
 
 
     let mut rr = rocket::build();

@@ -12,6 +12,9 @@ borsh = "0.9.3"
 serde = "1.0.136"
 serde_json = "1.0.79"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework" }
+near-sdk = "4.0.0-pre.7"
+
+uint = { version = "0.8.3", default-features = false }
 
 [dependencies.redis]
 version = "*"
