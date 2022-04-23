@@ -5,9 +5,10 @@ pub fn construct_contract_interface(
     contract_addr: &str,
     contract_abi: &[u8],
 ) -> web3::contract::Result<web3::contract::Contract<web3::transports::Http>> {
-    let client = web3::Web3::new(web3::transports::Http::new(server_addr)?).eth();
+    let transport = web3::transports::Http::new(server_addr)?;
+    let client = web3::Web3::new(transport);
     Ok(web3::contract::Contract::from_json(
-        client,
+        client.eth(),
         contract_addr.parse().unwrap(),
         contract_abi,
     )?)
@@ -51,8 +52,9 @@ pub async fn change(
 }
 
 pub async fn gas_price(server_addr: &str) -> web3::contract::Result<web3::types::U256> {
-    let client = web3::Web3::new(web3::transports::Http::new(server_addr)?).eth();
-    Ok(client.gas_price().await?)
+    let transport = web3::transports::Http::new(server_addr)?;
+    let client = web3::Web3::new(transport);
+    Ok(client.eth().gas_price().await?)
 }
 
 pub async fn estimate_gas(
@@ -89,7 +91,7 @@ pub fn estimate_transfer_execution(
     gas_price: web3::types::U256,
     ether_price: f64,
 ) -> f64 {
-    let ether_in_wei = web3::types::U256::from(1_000_000_000_000_000_000u64);
+    let ether_in_wei: web3::types::U256 = web3::types::U256::from(1_000_000_000_000_000_000u64);
     let precision = u32::pow(10, 4) as f64;
     let ether_price = web3::types::U256::from((ether_price * precision) as u64);
     estimated_gas
