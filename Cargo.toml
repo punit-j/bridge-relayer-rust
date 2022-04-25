@@ -16,9 +16,6 @@ url = "2.2.2"
 near_client = { path = "near_client" }
 eth_client = { path = "eth_client" }
 
-[env]
-ENV_CONFIG_FILE = "config.ini"
-
 [dependencies.redis]
 version = "*"
 git = "https://github.com/mitsuhiko/redis-rs.git"

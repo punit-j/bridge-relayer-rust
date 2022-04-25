@@ -3,6 +3,7 @@ extern crate redis;
 use crate::config::RedisSettings;
 use redis::{Commands, RedisResult};
 use rocket::yansi::Color::Default;
+use url::Url;
 
 pub struct RedisWrapper {
     client: redis::Client,
@@ -44,13 +45,14 @@ mod tests {
     use crate::config::RedisSettings;
     use crate::transfer_event;
     use std::str::FromStr;
+    use url::Url;
 
     #[test]
     fn read_write() {
         let event = super::transfer_event::tests::test_struct_build();
 
         let settings = RedisSettings {
-            url: Some("redis://127.0.0.1/".to_string()),
+            url: Some(Url::parse("redis://127.0.0.1/").unwrap()),
         };
 
         let mut redis = super::RedisWrapper::connect(settings);
