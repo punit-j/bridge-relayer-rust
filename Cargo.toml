@@ -11,6 +11,8 @@ web3 = "0.18.0"
 borsh = "0.9.3"
 serde = "1.0.136"
 serde_json = "1.0.79"
+eth_client = { path = "eth_client" }
+tokio = "1.17.0"
 
 [dependencies.redis]
 version = "*"

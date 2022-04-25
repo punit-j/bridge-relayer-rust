@@ -1,18 +1,20 @@
-mod transfer_event;
+mod profit_estimation;
 mod redis_wrapper;
+mod transfer_event;
 
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
+use crate::redis_wrapper::RedisWrapper;
+use borsh::{BorshDeserialize, BorshSerialize};
+use redis::Commands;
+use rocket::State;
 use std::io::Write;
 use std::str::FromStr;
-use rocket::State;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use redis::Commands;
-use borsh::{BorshSerialize, BorshDeserialize};
-use crate::redis_wrapper::RedisWrapper;
 
 struct HitCount {
-    count: AtomicUsize
+    count: AtomicUsize,
 }
 
 #[get("/health")]
