@@ -1,0 +1,14 @@
+profit_thershold: 10000
+
+redis:
+ url: "redis://127.0.0.1/"
+
+near:
+ private_key: "123"
+ rpc_url: "https://github.com/"
+ contract_address: "123"
+
+eth:
+ private_key: "123"
+ rpc_url: "https://github.com/"
+ contract_address: "123"

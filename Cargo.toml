@@ -12,6 +12,7 @@ borsh = "0.9.3"
 serde = "1.0.136"
 serde_json = "1.0.79"
 config = "0.13.1"
+url = "2.2.2"
 near_client = { path = "near_client" }
 eth_client = { path = "eth_client" }
 
