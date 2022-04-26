@@ -9,6 +9,7 @@ keywords = ["jsonrpc", "web3", "ethereum", "rpc", "client"]
 
 [dependencies]
 web3 = "0.18.0"
+coingecko = "1.0.0"
 
 arrayvec = "0.7.1"
 derive_more = "0.99.1"
