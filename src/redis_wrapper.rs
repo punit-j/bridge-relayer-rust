@@ -8,18 +8,16 @@ use url::Url;
 pub struct RedisWrapper {
     client: redis::Client,
     connection: redis::Connection,
-    settings: RedisSettings,
 }
 
 impl RedisWrapper {
-    pub fn connect(settings: RedisSettings) -> Self {
-        let c = redis::Client::open(settings.url.clone().unwrap())
-            .expect(format!("Enable to open {}", settings.url.clone().unwrap()).as_str());
+    pub fn connect(settings: &RedisSettings) -> Self {
+        let c = redis::Client::open(settings.url.clone())
+            .expect(format!("Enable to open {}", settings.url.clone()).as_str());
         let con = c.get_connection().expect("Unable to get connection");
         RedisWrapper {
             client: c,
             connection: con,
-            settings: settings,
         }
     }
 
@@ -52,10 +50,10 @@ mod tests {
         let event = super::transfer_event::tests::test_struct_build();
 
         let settings = RedisSettings {
-            url: Some(Url::parse("redis://127.0.0.1/").unwrap()),
+            url: Url::parse("redis://127.0.0.1/").unwrap(),
         };
 
-        let mut redis = super::RedisWrapper::connect(settings);
+        let mut redis = super::RedisWrapper::connect(&settings);
         redis.set(1, &event);
 
         assert!(redis.get(2).is_none());

@@ -4,6 +4,7 @@ use near_jsonrpc_primitives::types::transactions::TransactionInfo;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{BlockReference, Finality, FunctionArgs};
 use near_primitives::views::{FinalExecutionOutcomeView, QueryRequest};
+use near_sdk::AccountId;
 use url::Url;
 use tokio::time;
 
@@ -11,12 +12,12 @@ pub struct NearClient
 {
     private_key: String,
     rpc_url: Url,
-    contract_address: String,
+    contract_address: AccountId,
 }
 
 impl NearClient
 {
-    pub fn init(private_key: String, rpc_url: Url, contract_address: String) -> Self {
+    pub fn init(private_key: String, rpc_url: Url, contract_address: AccountId) -> Self {
         Self {
             private_key,
             rpc_url,

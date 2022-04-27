@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+near-sdk = "4.0.0-pre.7"
 rocket = "0.5.0-rc.1"
 web3 = "0.18.0"
 borsh = "0.9.3"
