@@ -12,6 +12,7 @@ use redis::Commands;
 use borsh::{BorshSerialize, BorshDeserialize};
 use std::env;
 use std::path::Path;
+use serde_json::json;
 use crate::config::Settings;
 use crate::redis_wrapper::RedisWrapper;
 
@@ -22,6 +23,14 @@ struct HitCount {
 #[get("/health")]
 fn health() -> String {
     "OK".to_string()
+}
+
+#[get("/transactions")]
+fn transactions(settings: &State<Settings>) -> String {
+    let mut redis = RedisWrapper::connect(settings.redis_setting.clone());
+    let res = redis.get_all();
+
+    json!(res).to_string()
 }
 
 extern crate redis;
@@ -38,23 +47,11 @@ async fn main() {
     }
 
     let settings = Settings::init(config_file_path);
+    let mut redis = RedisWrapper::connect(settings.redis_setting.clone());
 
-    // TODO: Probably it's better to hide all this unpacking to submodules, but didn't find a proper way to include config structures
-    let near_settings = settings.near_settings.clone();
-    let near_client = near_client::methods::NearClient::init(
-        near_settings.private_key,
-        near_settings.rpc_url,
-        near_settings.contract_address,
-    );
-
-    let eth_settings = settings.near_settings.clone();
-    let eth_client = eth_client::methods::EthClient::init(
-        eth_settings.private_key,
-        eth_settings.rpc_url,
-        eth_settings.contract_address.to_string(),
-    );
-
-    let mut rr = rocket::build();
-    rr = rr.mount("/v1", routes![health]);
-    rr.launch().await;
+    let mut rr = rocket::build()
+    .mount("/v1", routes![health, transactions])
+    .manage(settings)
+    .manage(redis)
+    .launch().await;
 }

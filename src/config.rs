@@ -1,6 +1,5 @@
 use config::{Config, File};
 use near_sdk::AccountId;
-use std::env;
 use std::path::Path;
 use url::Url;
 
@@ -18,10 +17,12 @@ pub struct NearSettings {
     pub contract_address: AccountId,
 }
 
+#[derive(Clone)]
 pub struct RedisSettings {
     pub url: Url,
 }
 
+#[derive(Clone)]
 pub struct Settings {
     pub eth_settings: EthSettings,
     pub near_settings: NearSettings,
