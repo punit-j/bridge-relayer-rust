@@ -1,24 +1,15 @@
-mod transfer_event;
-mod redis_wrapper;
 mod config;
+mod redis_wrapper;
+mod transfer_event;
 
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
-use std::io::Write;
-use std::str::FromStr;
-use rocket::State;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use redis::Commands;
-use borsh::{BorshSerialize, BorshDeserialize};
-use std::env;
-use std::path::Path;
-use serde_json::json;
 use crate::config::Settings;
 use crate::redis_wrapper::RedisWrapper;
-
-struct HitCount {
-    count: AtomicUsize
-}
+use rocket::State;
+use serde_json::json;
+use std::env;
 
 #[get("/health")]
 fn health() -> String {
@@ -27,10 +18,23 @@ fn health() -> String {
 
 #[get("/transactions")]
 fn transactions(settings: &State<Settings>) -> String {
-    let mut redis = RedisWrapper::connect(settings.redis_setting.clone());
+    let redis = RedisWrapper::connect(settings.redis_setting.clone());
     let res = redis.get_all();
 
     json!(res).to_string()
+}
+
+#[post("/set_threshold", data = "<input>")]
+fn set_threshold(input: String, settings: &State<Settings>) {
+    let json_data: serde_json::Value =
+        serde_json::from_str(input.as_str()).expect("Cannot parse JSON request body");
+    let new_threshold = json_data
+        .get("profit_threshold")
+        .unwrap()
+        .as_u64()
+        .expect("Cannot parse unsigned int");
+
+    settings.set_single_value("profit_thershold", new_threshold);
 }
 
 extern crate redis;
@@ -39,19 +43,13 @@ extern crate redis;
 async fn main() {
     // Reading arguments that was given to binary
     let args: Vec<String> = env::args().collect();
-    let config_file_path = Path::new(args.get(1).unwrap());
-
-    if !config_file_path.exists()
-    {
-        panic!("Given config path doesn't exist");
-    }
+    let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
-    let mut redis = RedisWrapper::connect(settings.redis_setting.clone());
 
-    let mut rr = rocket::build()
-    .mount("/v1", routes![health, transactions])
-    .manage(settings)
-    .manage(redis)
-    .launch().await;
+    let _res = rocket::build()
+        .mount("/v1", routes![health, transactions, set_threshold])
+        .manage(settings)
+        .launch()
+        .await;
 }

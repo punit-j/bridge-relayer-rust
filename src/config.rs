@@ -1,5 +1,6 @@
 use config::{Config, File};
 use near_sdk::AccountId;
+use std::fs;
 use std::path::Path;
 use url::Url;
 
@@ -22,18 +23,24 @@ pub struct RedisSettings {
     pub url: Url,
 }
 
-#[derive(Clone)]
 pub struct Settings {
     pub eth_settings: EthSettings,
     pub near_settings: NearSettings,
     pub redis_setting: RedisSettings,
     pub profit_thershold: u64,
+
+    pub config_path: String,
 }
 
 impl Settings {
-    pub fn init(file_path: &Path) -> Self {
+    pub fn init(file_path: String) -> Self {
+        let config_file_path = Path::new(&file_path);
+        if !config_file_path.exists() {
+            panic!("Given config path doesn't exist");
+        }
+
         let config = Config::builder()
-            .add_source(File::with_name(file_path.to_str().unwrap()))
+            .add_source(File::with_name(file_path.clone().as_str()))
             .build()
             .unwrap();
 
@@ -75,6 +82,17 @@ impl Settings {
             near_settings: near,
             redis_setting: redis,
             profit_thershold,
+            config_path: file_path.clone(),
         }
+    }
+
+    pub fn set_single_value(&self, object: &str, value: u64) {
+        let config_data =
+            fs::read_to_string(self.config_path.as_str()).expect("Unable to read file");
+        let mut json: serde_json::Value = serde_json::from_str(&config_data).unwrap();
+        *json.get_mut(object).unwrap() = serde_json::json!(value);
+
+        let json_final: String = serde_json::to_string(&json).unwrap();
+        fs::write(self.config_path.as_str(), &json_final).expect("Unable to write file");
     }
 }

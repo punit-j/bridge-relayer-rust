@@ -1,10 +1,9 @@
-use std::borrow::BorrowMut;
 use crate::transfer_event;
+use std::borrow::BorrowMut;
 extern crate redis;
 use crate::config::RedisSettings;
 use redis::{Commands, RedisResult};
 use rocket::yansi::Color::Default;
-use url::Url;
 
 const REDIS_CUSTOM_HASH: &str = "myhash";
 
