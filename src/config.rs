@@ -1,6 +1,10 @@
 use config::{Config, File};
 use near_sdk::AccountId;
+use redis::Value;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
 use url::Url;
 
@@ -16,6 +20,7 @@ pub struct NearSettings {
     pub private_key: String,
     pub rpc_url: Url,
     pub contract_address: AccountId,
+    pub allowed_tokens: Vec<AccountId>,
 }
 
 #[derive(Clone)]
@@ -27,7 +32,7 @@ pub struct Settings {
     pub eth_settings: EthSettings,
     pub near_settings: NearSettings,
     pub redis_setting: RedisSettings,
-    pub profit_thershold: u64,
+    pub profit_thershold: Mutex<u64>,
 
     pub config_path: String,
 }
@@ -53,6 +58,18 @@ impl Settings {
         };
 
         let near_config = config.get_table("near").unwrap();
+        let allowed_tokens: Vec<config::Value> = near_config
+            .get("allowed_tokens")
+            .unwrap()
+            .clone()
+            .into_array()
+            .unwrap();
+
+        let mut token_accounts: Vec<AccountId> = Vec::new();
+        for val in allowed_tokens.iter() {
+            token_accounts.push(AccountId::new_unchecked(val.to_string()));
+        }
+
         let near = NearSettings {
             private_key: near_config.get("private_key").unwrap().to_string(),
             rpc_url: Url::parse(near_config.get("rpc_url").unwrap().to_string().as_str()).unwrap(),
@@ -60,6 +77,7 @@ impl Settings {
             contract_address: AccountId::new_unchecked(
                 near_config.get("contract_address").unwrap().to_string(),
             ),
+            allowed_tokens: token_accounts,
         };
 
         let redis = RedisSettings {
@@ -81,7 +99,7 @@ impl Settings {
             eth_settings: eth,
             near_settings: near,
             redis_setting: redis,
-            profit_thershold,
+            profit_thershold: Mutex::new(profit_thershold),
             config_path: file_path.clone(),
         }
     }
@@ -94,5 +112,7 @@ impl Settings {
 
         let json_final: String = serde_json::to_string(&json).unwrap();
         fs::write(self.config_path.as_str(), &json_final).expect("Unable to write file");
+
+       *self.profit_thershold.lock().unwrap().deref_mut() = value;
     }
 }
