@@ -1,1 +1,20 @@
-{"eth":{"contract_address":"0x4F04E2dbEB74016CE52F5A6D136C65AE0C61e236","private_key":"","rpc_url":"https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a"},"near":{"contract_address":"transfer.spectrebridge.testnet","private_key":"","rpc_url":"https://rpc.testnet.near.org"},"profit_thershold":10000,"redis":{"url":"redis://127.0.0.1/"}}
+{
+  "eth":{
+    "contract_address":"0x4F04E2dbEB74016CE52F5A6D136C65AE0C61e236",
+    "private_key":"",
+    "rpc_url":"https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a"
+  },
+  "near":{
+    "allowed_tokens":[
+      "token8.spectrebridge.testnet",
+      "token16.spectrebridge.testnet"
+    ],
+    "contract_address":"transfer.spectrebridge.testnet",
+    "private_key":"",
+    "rpc_url":"https://rpc.testnet.near.org"
+  },
+  "profit_thershold":2999,
+  "redis":{
+    "url":"redis://127.0.0.1/"
+  }
+}

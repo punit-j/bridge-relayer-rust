@@ -2,10 +2,12 @@ use config::{Config, File};
 use near_sdk::AccountId;
 use redis::Value;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::borrow::{Borrow, BorrowMut};
 use std::fs;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Mutex, MutexGuard};
 use std::path::Path;
+use std::sync::{Mutex, MutexGuard};
 use url::Url;
 
 #[derive(Clone)]
@@ -15,12 +17,11 @@ pub struct EthSettings {
     pub contract_address: String,
 }
 
-#[derive(Clone)]
 pub struct NearSettings {
     pub private_key: String,
     pub rpc_url: Url,
     pub contract_address: AccountId,
-    pub allowed_tokens: Vec<AccountId>,
+    pub allowed_tokens: Mutex<Vec<AccountId>>,
 }
 
 #[derive(Clone)]
@@ -77,7 +78,7 @@ impl Settings {
             contract_address: AccountId::new_unchecked(
                 near_config.get("contract_address").unwrap().to_string(),
             ),
-            allowed_tokens: token_accounts,
+            allowed_tokens: Mutex::new(token_accounts),
         };
 
         let redis = RedisSettings {
@@ -94,7 +95,6 @@ impl Settings {
         };
 
         let profit_thershold: u64 = config.get("profit_thershold").unwrap();
-
         Self {
             eth_settings: eth,
             near_settings: near,
@@ -104,15 +104,39 @@ impl Settings {
         }
     }
 
-    pub fn set_single_value(&self, object: &str, value: u64) {
+    fn set_json_value(&self, fields: Vec<String>, value: serde_json::Value) {
         let config_data =
             fs::read_to_string(self.config_path.as_str()).expect("Unable to read file");
         let mut json: serde_json::Value = serde_json::from_str(&config_data).unwrap();
-        *json.get_mut(object).unwrap() = serde_json::json!(value);
+
+        let mut nested_value: &mut serde_json::Value = json.borrow_mut();
+        for val in fields.clone() {
+            if fields.last().unwrap().eq(&val) {
+                *nested_value.get_mut(val).unwrap() = value.clone();
+            } else {
+                nested_value = nested_value.get_mut(val).unwrap().borrow_mut();
+            }
+        }
 
         let json_final: String = serde_json::to_string(&json).unwrap();
         fs::write(self.config_path.as_str(), &json_final).expect("Unable to write file");
+    }
 
-       *self.profit_thershold.lock().unwrap().deref_mut() = value;
+    pub fn set_threshold(&self, value: u64) {
+        self.set_json_value(vec!["profit_thershold".to_string()], json!(value));
+    }
+
+    pub fn set_allowed_tokens(&self, tokens: Vec<AccountId>) {
+        *self
+            .near_settings
+            .allowed_tokens
+            .lock()
+            .unwrap()
+            .deref_mut() = tokens.clone();
+
+        self.set_json_value(
+            vec!["near".to_string(), "allowed_tokens".to_string()],
+            json!(tokens),
+        );
     }
 }
