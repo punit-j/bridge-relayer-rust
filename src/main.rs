@@ -1,6 +1,7 @@
 mod config;
 mod redis_wrapper;
 mod transfer_event;
+mod near;
 
 #[macro_use]
 extern crate rocket;
@@ -63,6 +64,8 @@ async fn main() {
     let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
+
+    //near::run_watcher().await;
 
     let _res = rocket::build()
         .mount(
