@@ -3,7 +3,7 @@ pub async fn is_profitable(
     estimated_transfer_execution_price: f64,
     profit_threshold: f64,
 ) -> bool {
-    let precision = u32::pow(10, 4) as f64;
+    let precision = f64::powf(10.0, 4.0);
     let token_price = eth_client::methods::token_price(transfer_message.token)
         .await
         .expect("Failed to get token price");
