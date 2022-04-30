@@ -6,7 +6,6 @@ edition = "2018"
 description = "Ethereum JSON-RPC client"
 keywords = ["jsonrpc", "web3", "ethereum", "rpc", "client"]
 
-
 [dependencies]
 web3 = { version = "0.18.0", features = ["signing"] }
 coingecko = "1.0.0"
