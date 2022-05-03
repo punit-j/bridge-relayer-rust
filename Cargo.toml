@@ -13,6 +13,9 @@ serde = "1.0.136"
 serde_json = "1.0.79"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework" }
 near-sdk = "4.0.0-pre.7"
+near_client = { path = "near_client" }
+tokio = "1.17.0"
+near-primitives = "0.12.0"
 
 uint = { version = "0.8.3", default-features = false }
 

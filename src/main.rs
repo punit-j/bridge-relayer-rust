@@ -1,6 +1,7 @@
 mod transfer_event;
 mod redis_wrapper;
 mod near;
+mod unlock_tokens;
 
 #[macro_use] extern crate rocket;
 
