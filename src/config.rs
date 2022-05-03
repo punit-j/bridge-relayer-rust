@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::borrow::{Borrow, BorrowMut};
 use std::fs;
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 use url::Url;
 
 #[derive(Clone)]

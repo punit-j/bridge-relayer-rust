@@ -19,11 +19,8 @@ fn health() -> String {
 }
 
 #[get("/transactions")]
-fn transactions(settings: &State<Settings>) -> String {
-    let redis = RedisWrapper::connect(settings.redis_setting.clone());
-    let res = redis.get_all();
-
-    json!(res).to_string()
+fn transactions(redis: &State<RedisWrapper>) -> String {
+    json!(redis.get_all()).to_string()
 }
 
 #[post("/set_threshold", data = "<input>")]
@@ -55,6 +52,11 @@ fn set_allowed_tokens(input: String, settings: &State<Settings>) {
     settings.set_allowed_tokens(new_allowed_token_accounts);
 }
 
+#[get("/profit")]
+fn profit(redis: &State<RedisWrapper>) -> String {
+    json!(redis.get_profit()).to_string()
+}
+
 extern crate redis;
 
 #[rocket::main]
@@ -65,12 +67,10 @@ async fn main() {
 
     let settings = Settings::init(config_file_path);
 
-    //near::run_watcher().await;
-
     let _res = rocket::build()
         .mount(
             "/v1",
-            routes![health, transactions, set_threshold, set_allowed_tokens],
+            routes![health, transactions, set_threshold, set_allowed_tokens, profit],
         )
         .manage(settings)
         .launch()
