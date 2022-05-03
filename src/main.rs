@@ -2,6 +2,7 @@ mod config;
 mod redis_wrapper;
 mod transfer_event;
 mod near;
+mod profit_estimation;
 mod unlock_tokens;
 
 #[macro_use]

@@ -94,6 +94,7 @@ impl RedisWrapper {
 
 #[cfg(test)]
 mod tests {
+    use crate::transfer_event;
     use crate::config::RedisSettings;
     use std::str::FromStr;
     use url::Url;
