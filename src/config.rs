@@ -34,6 +34,7 @@ pub struct Settings {
     pub near_settings: NearSettings,
     pub redis_setting: RedisSettings,
     pub profit_thershold: Mutex<u64>,
+    pub vault_addr: Url,
 
     pub config_path: String,
 }
@@ -94,12 +95,18 @@ impl Settings {
             .unwrap(),
         };
 
+        // Example: http://127.0.0.1:8200/v1/kv/
+        // `v1` - version of secrets that are using
+        // `kv` - name of secret engine that must be initialized before use
+        let vault_addr: String = config.get("vault_addr").unwrap();
+
         let profit_thershold: u64 = config.get("profit_thershold").unwrap();
         Self {
             eth_settings: eth,
             near_settings: near,
             redis_setting: redis,
             profit_thershold: Mutex::new(profit_thershold),
+            vault_addr: Url::parse(&vault_addr).unwrap(),
             config_path: file_path.clone(),
         }
     }
