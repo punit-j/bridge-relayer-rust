@@ -1,11 +1,11 @@
 pub struct Storage {
-    number: std::sync::Mutex<u64>,
+    block: std::sync::Mutex<web3::types::Block<web3::types::H256>>,
 }
 
 impl Storage {
     pub fn new() -> Self {
         Storage {
-            number: std::sync::Mutex::new(0),
+            block: std::sync::Mutex::new(web3::types::Block::default()),
         }
     }
 }
@@ -20,10 +20,26 @@ pub async fn last_block_number_worker(
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(seconds));
         loop {
             let number = last_block_number(server_addr.clone(), contract_account_id.clone()).await;
-            {
-                let mut storage = storage.lock().unwrap();
-                storage.number = std::sync::Mutex::new(number);
+            let latest_block =
+                eth_client::methods::block(&server_addr, web3::types::BlockNumber::Latest)
+                    .await
+                    .expect("Failed to get latest block");
+            match latest_block.number.unwrap().as_u64() < number {
+                true => {
+                    let block = eth_client::methods::block(
+                        &server_addr,
+                        web3::types::BlockNumber::Number(web3::types::U64::from(number)),
+                    )
+                    .await
+                    .expect("Failed to get block by number");
+                    {
+                        let mut storage = storage.lock().unwrap();
+                        storage.block = std::sync::Mutex::new(block);
+                    }
+                }
+                false => (),
             }
+
             interval.tick().await;
         }
     });
