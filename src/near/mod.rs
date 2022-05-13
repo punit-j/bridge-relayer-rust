@@ -1,5 +1,7 @@
 pub mod near_event;
 
+use transfer_event_custon_logs;
+use transfer_event_custon_logs::*;
 use near_lake_framework::LakeConfig;
 use near_lake_framework::near_indexer_primitives::types::{AccountId, BlockHeight};
 use near_lake_framework::near_indexer_primitives::views::{
@@ -19,7 +21,6 @@ pub async fn run_watcher() {
     let mut stream = near_lake_framework::streamer(config);
 
     while let Some(streamer_message) = stream.recv().await {
-        //println!("\r\nBlock {} {}", streamer_message.block.header.height, streamer_message.block.author);
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
 
@@ -35,7 +36,6 @@ pub async fn run_watcher() {
 
                             println!("Log: {:?}", r);
                         }
-                        //println!("log: {}", log);
                     }
                 }
 
@@ -56,31 +56,21 @@ pub enum ParceError {
     Other,
 }
 
-fn parce_event_message(json: &str) -> serde_json::Result<near_event::EventMessage> {
-    let r: serde_json::Result<near_event::EventMessage> = serde_json::from_str(json);
+fn parce_event_message(json: &str) -> serde_json::Result<EventMessage> {
+    let r: serde_json::Result<EventMessage> = serde_json::from_str(json);
     r
 }
 
-fn parce_event_json(json: &str) -> Result<near_event::EventMessage, ParceError> {
-    let r: serde_json::Result<near_event::EventMessage> = serde_json::from_str(json);
+fn parce_event_json(json: &str) -> Result<EventMessage, ParceError> {
+    let r: serde_json::Result<EventMessage> = serde_json::from_str(json);
     let r = r.map_err(|e| ParceError::Json(e))?;
 
-    if r.version != near_event::VERSION {
+    if r.version != VERSION {
         return Err(ParceError::WrongVersion(r.version));
     }
-    if r.standard != near_event::STANDARD {
+    if r.standard != STANDARD {
         return Err(ParceError::WrongStandart(r.standard));
     }
 
     Ok(r)
 }
-/*
-#[cfg(test)]
-pub mod tests {
-    use std::str::FromStr;
-
-    #[test]
-    fn parce() {
-
-    }
-}*/
