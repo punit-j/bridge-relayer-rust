@@ -1,4 +1,4 @@
-use near_sdk::{log, serde_json, AccountId, serde::Serialize, serde::Deserialize};
+use near_sdk::{log, serde::Deserialize, serde::Serialize, serde_json, AccountId};
 use serde_json::json;
 
 pub type EthAddress = [u8; 20];

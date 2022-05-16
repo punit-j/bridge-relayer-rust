@@ -1,7 +1,7 @@
 mod config;
 mod redis_wrapper;
 mod transfer_event;
-//mod near;
+mod near;
 mod last_block;
 mod profit_estimation;
 mod unlock_tokens;
