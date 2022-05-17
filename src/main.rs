@@ -93,9 +93,9 @@ async fn main() {
     let redis = RedisWrapper::connect(settings.redis_setting.clone());
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
-    let seconds = 15;
+    
     last_block::last_block_number_worker(
-        seconds,
+        settings.worker_interval,
         "https://rpc.testnet.near.org".to_string(),
         "client6.goerli.testnet".to_string(),
         storage.clone(),

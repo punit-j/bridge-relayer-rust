@@ -19,7 +19,10 @@ pub async fn last_block_number_worker(
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(seconds));
         loop {
-            let number = last_block_number(server_addr.clone(), contract_account_id.clone()).await;
+            let number = last_block_number(server_addr.clone(), contract_account_id.clone())
+                .await
+                .expect("Failed to fetch block number");
+            println!("{}", number);
             {
                 let mut storage = storage.lock().unwrap();
                 storage.last_block_number = std::sync::Mutex::new(number);
@@ -29,7 +32,10 @@ pub async fn last_block_number_worker(
     });
 }
 
-async fn last_block_number(server_addr: String, contract_account_id: String) -> u64 {
+async fn last_block_number(
+    server_addr: String,
+    contract_account_id: String,
+) -> Result<u64, near_sdk::serde_json::Error> {
     let response = near_client::methods::view(
         server_addr,
         contract_account_id,
@@ -40,8 +46,7 @@ async fn last_block_number(server_addr: String, contract_account_id: String) -> 
     if let near_jsonrpc_primitives::types::query::QueryResponseKind::CallResult(result) =
         response.unwrap().kind
     {
-        return near_sdk::serde_json::from_slice::<u64>(&result.result)
-            .expect("Failed to get result");
+        return Ok(near_sdk::serde_json::from_slice::<u64>(&result.result)?);
     };
-    0
+    panic!("Critical error while fetching last block number")
 }
