@@ -22,7 +22,5 @@ http-client = "6.5.1"
 http-types = "2.12.0"
 near_client = { path = "near_client" }
 eth_client = { path = "eth_client" }
-
-[dependencies.redis]
-version = "*"
-git = "https://github.com/mitsuhiko/redis-rs.git"
+redis = "0.21.5"
+transfer-event-custon-logs = { git = "https://github.com/convowork1/transfer-event-custon-logs.git", branch = "master" }
