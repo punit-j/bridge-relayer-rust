@@ -6,6 +6,7 @@ mod profit_estimation;
 mod redis_wrapper;
 mod transfer_event;
 mod unlock_tokens;
+mod approve;
 
 #[macro_use]
 extern crate rocket;
