@@ -4,6 +4,7 @@ mod transfer_event;
 mod near;
 mod profit_estimation;
 mod unlock_tokens;
+mod approve;
 
 #[macro_use]
 extern crate rocket;
