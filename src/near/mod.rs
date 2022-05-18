@@ -1,7 +1,7 @@
 pub mod near_event;
 
-use transfer_event_custon_logs;
-use transfer_event_custon_logs::*;
+use transfer_event_logs;
+use transfer_event_logs::*;
 use near_lake_framework::LakeConfig;
 use near_lake_framework::near_indexer_primitives::types::{AccountId, BlockHeight};
 use near_lake_framework::near_indexer_primitives::views::{
