@@ -1,6 +1,7 @@
 mod config;
 mod near;
 mod private_key;
+mod last_block;
 mod profit_estimation;
 mod redis_wrapper;
 mod transfer_event;
@@ -71,6 +72,16 @@ async fn main() {
     let settings = Settings::init(config_file_path);
     let redis = RedisWrapper::connect(settings.redis_setting.clone());
 
+    let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
+    
+    last_block::last_block_number_worker(
+        settings.worker_interval,
+        "https://rpc.testnet.near.org".to_string(),
+        "client6.goerli.testnet".to_string(),
+        storage.clone(),
+    )
+    .await;
+
     let _res = rocket::build()
         .mount(
             "/v1",
@@ -84,6 +95,7 @@ async fn main() {
         )
         .manage(settings)
         .manage(redis)
+        .manage(storage)
         .launch()
         .await;
 }

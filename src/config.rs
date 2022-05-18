@@ -35,8 +35,8 @@ pub struct Settings {
     pub redis_setting: RedisSettings,
     pub profit_thershold: Mutex<u64>,
     pub vault_addr: Url,
-
     pub config_path: String,
+    pub worker_interval: u64,
 }
 
 impl Settings {
@@ -108,6 +108,7 @@ impl Settings {
             profit_thershold: Mutex::new(profit_thershold),
             vault_addr: Url::parse(&vault_addr).unwrap(),
             config_path: file_path.clone(),
+            worker_interval: 15,
         }
     }
 
