@@ -1,9 +1,10 @@
 mod config;
-mod redis_wrapper;
-mod transfer_event;
 mod near;
+mod private_key;
 mod last_block;
 mod profit_estimation;
+mod redis_wrapper;
+mod transfer_event;
 mod unlock_tokens;
 
 #[macro_use]
@@ -15,9 +16,6 @@ use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
-
-use http_client::HttpClient;
-use http_types::{Method, Request};
 
 #[get("/health")]
 fn health() -> String {
@@ -63,24 +61,6 @@ fn profit(redis: &State<RedisWrapper>) -> String {
     json!(redis.get_profit()).to_string()
 }
 
-#[post("/vault_secret", data = "<input>")]
-async fn vault_secret(input: String, settings: &State<Settings>) -> String {
-    let json_data: serde_json::Value =
-        serde_json::from_str(input.as_str()).expect("Cannot parse JSON request body");
-
-    let token = String::from(json_data.get("token").unwrap().as_str().unwrap());
-
-    let client = http_client::h1::H1Client::new();
-    let mut addr = settings.vault_addr.to_string();
-    addr.push_str("key2"); // Example, but it can be any const str
-
-    let mut req = Request::new(Method::Get, addr.as_str());
-    req.insert_header("X-Vault-Token", &token);
-
-    let res = client.send(req).await.unwrap().body_string().await.unwrap();
-    json!(res).to_string()
-}
-
 extern crate redis;
 
 #[rocket::main]
@@ -105,7 +85,13 @@ async fn main() {
     let _res = rocket::build()
         .mount(
             "/v1",
-            routes![health, transactions, set_threshold, set_allowed_tokens, profit, vault_secret],
+            routes![
+                health,
+                transactions,
+                set_threshold,
+                set_allowed_tokens,
+                profit
+            ],
         )
         .manage(settings)
         .manage(redis)
