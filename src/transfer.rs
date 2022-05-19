@@ -8,26 +8,6 @@ pub fn poll_tx(mempool: &mut Vec<String>) -> crate::transfer_event::SpectreBridg
     event.unwrap()
 }
 
-// For testing only (token: USDC)
-async fn is_profitable(
-    fee: crate::transfer_event::Transfer,
-    estimated_transfer_execution_price: f64,
-    profit_threshold: f64,
-) -> bool {
-    let precision = f64::powf(10.0, 4.0);
-    let token_price = eth_client::methods::token_price(
-        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-            .parse()
-            .unwrap(),
-    )
-    .await
-    .expect("Failed to get token price");
-    let token_price = web3::types::U256::from((token_price * precision) as u64);
-    let fee_amount = web3::types::U256::from(fee.amount);
-    let fee_amount_usd = token_price.checked_mul(fee_amount).unwrap().as_u64() as f64 / precision;
-    fee_amount_usd - estimated_transfer_execution_price > profit_threshold
-}
-
 pub async fn execute_transfer(
     from: &str,
     private_key: &str,
@@ -66,7 +46,7 @@ pub async fn execute_transfer(
         eth_price_in_usd,
     );
     let profit_threshold = config.profit_thershold.lock().unwrap().to_owned() as f64;
-    let is_profitable_tx = is_profitable(
+    let is_profitable_tx = crate::profit_estimation::is_profitable(
         transfer_message.fee,
         estimated_transfer_execution_price,
         profit_threshold,
