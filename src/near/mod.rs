@@ -78,6 +78,7 @@ pub fn fix_json(mut json: serde_json::Value) -> serde_json::Value {
     json
 }
 
+/// Gets an event from json and checks standard+version
 pub fn get_event(mut json: serde_json::Value) -> Result<spectre_bridge_common::Event, ParceError> {
     let mut json = fix_json(json);
 
@@ -102,8 +103,10 @@ pub fn get_event(mut json: serde_json::Value) -> Result<spectre_bridge_common::E
 pub mod tests {
     use std::str::FromStr;
     use serde_json::json;
-    use crate::near::fix_json;
+    use crate::near::{fix_json, get_event};
     use assert_json_diff::assert_json_eq;
+    use near_sdk::AccountId;
+    use near_sdk::json_types::U128;
 
     #[test]
     fn fix_json_test() {
@@ -114,5 +117,19 @@ pub mod tests {
 
         let json = json!({"data": [1]});
         assert_json_eq!(fix_json(json), json_valid)
+    }
+
+    #[test]
+    fn get_event_test() {
+        let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"spectre_bridge_transfer_failed_event","data":{"nonce":"238","account":"alice"}}"#;
+        let json = spectre_bridge_common::remove_prefix(json_str).unwrap();
+        let event = get_event(json).unwrap();
+
+        assert_eq!(
+            event,
+            spectre_bridge_common::Event::SpectreBridgeTransferFailedEvent {
+                nonce: U128(238),
+                account: AccountId::new_unchecked("alice".to_string()),
+            })
     }
 }
