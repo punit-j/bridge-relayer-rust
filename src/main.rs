@@ -1,9 +1,13 @@
 mod config;
+mod near;
+mod private_key;
+mod last_block;
+mod profit_estimation;
 mod redis_wrapper;
 mod transfer_event;
-mod near;
-mod profit_estimation;
 mod unlock_tokens;
+mod transfer;
+mod approve;
 
 #[macro_use]
 extern crate rocket;
@@ -14,9 +18,6 @@ use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
-
-use http_client::HttpClient;
-use http_types::{Method, Request};
 
 #[get("/health")]
 fn health() -> String {
@@ -62,25 +63,6 @@ fn profit(redis: &State<RedisWrapper>) -> String {
     json!(redis.get_profit()).to_string()
 }
 
-#[post("/vault_secret", data = "<input>")]
-async fn vault_secret(input: String, settings: &State<Settings>) -> String
-{
-    let json_data: serde_json::Value =
-        serde_json::from_str(input.as_str()).expect("Cannot parse JSON request body");
-
-    let token = String::from(json_data.get("token").unwrap().as_str().unwrap());
-
-    let client = http_client::h1::H1Client::new();
-    let mut addr = settings.vault_addr.to_string();
-    addr.push_str("key2"); // Example, but it can be any const str
-
-    let mut req = Request::new(Method::Get, addr.as_str());
-    req.insert_header("X-Vault-Token", &token);
-
-    let res = client.send(req).await.unwrap().body_string().await.unwrap();
-    json!(res).to_string()
-}
-
 extern crate redis;
 
 #[rocket::main]
@@ -92,13 +74,30 @@ async fn main() {
     let settings = Settings::init(config_file_path);
     let redis = RedisWrapper::connect(settings.redis_setting.clone());
 
+    let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
+    
+    last_block::last_block_number_worker(
+        settings.worker_interval,
+        "https://rpc.testnet.near.org".to_string(),
+        "client6.goerli.testnet".to_string(),
+        storage.clone(),
+    )
+    .await;
+
     let _res = rocket::build()
         .mount(
             "/v1",
-            routes![health, transactions, set_threshold, set_allowed_tokens, profit, vault_secret],
+            routes![
+                health,
+                transactions,
+                set_threshold,
+                set_allowed_tokens,
+                profit
+            ],
         )
         .manage(settings)
         .manage(redis)
+        .manage(storage)
         .launch()
         .await;
 }
