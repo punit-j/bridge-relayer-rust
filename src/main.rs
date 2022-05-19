@@ -1,10 +1,13 @@
 mod config;
+mod near;
+mod private_key;
+mod last_block;
+mod profit_estimation;
 mod redis_wrapper;
 mod transfer_event;
-mod near;
-mod profit_estimation;
 mod unlock_tokens;
 mod transfer;
+mod approve;
 
 #[macro_use]
 extern crate rocket;
@@ -69,13 +72,32 @@ async fn main() {
     let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
+    let redis = RedisWrapper::connect(settings.redis_setting.clone());
+
+    let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
+    
+    last_block::last_block_number_worker(
+        settings.worker_interval,
+        "https://rpc.testnet.near.org".to_string(),
+        "client6.goerli.testnet".to_string(),
+        storage.clone(),
+    )
+    .await;
 
     let _res = rocket::build()
         .mount(
             "/v1",
-            routes![health, transactions, set_threshold, set_allowed_tokens, profit],
+            routes![
+                health,
+                transactions,
+                set_threshold,
+                set_allowed_tokens,
+                profit
+            ],
         )
         .manage(settings)
+        .manage(redis)
+        .manage(storage)
         .launch()
         .await;
 }
