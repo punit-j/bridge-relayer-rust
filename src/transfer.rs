@@ -1,13 +1,3 @@
-// Somewhere define and init mempool by calling get_all() of RedisWrapper -- let mut mempool = redis.get_all(); --
-// loop poll_tx() to get and remove first tx in mempool
-// pass as a second parameter to execute_transfer()
-
-pub fn poll_tx(mempool: &mut Vec<String>) -> crate::transfer_event::SpectreBridgeTransferEvent {
-    let event: Option<crate::transfer_event::SpectreBridgeTransferEvent> = serde_json::from_str(mempool.first().unwrap()).expect("Unable to parse JSON");
-    mempool.remove(0);
-    event.unwrap()
-}
-
 pub async fn execute_transfer(
     from: &str,
     private_key: &str,
@@ -67,26 +57,5 @@ pub async fn execute_transfer(
             format!("{:#?}", tx_hash)
         }
         false => "".to_string(),
-    }
-}
-
-// From: https://github.com/spectrebridge/spectre-bridge-protocol/blob/main/near/contracts/transfer/src/lp_relayer.rs#L28
-pub struct Proof {
-    pub log_index: u64,
-    pub log_entry_data: Vec<u8>,
-    pub receipt_index: u64,
-    pub receipt_data: Vec<u8>,
-    pub header_data: Vec<u8>,
-    pub proof: Vec<Vec<u8>>,
-}
-
-pub fn generate_proof(tx_hash: String, block: web3::types::BlockNumber) -> Proof {
-    Proof {
-        log_index: 0,
-        log_entry_data: vec![],
-        receipt_index: 0,
-        receipt_data: vec![],
-        header_data: vec![],
-        proof: vec![],
     }
 }

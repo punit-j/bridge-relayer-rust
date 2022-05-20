@@ -1,5 +1,5 @@
 mod config;
-mod near;
+// mod near;
 mod private_key;
 mod last_block;
 mod profit_estimation;
@@ -8,6 +8,7 @@ mod transfer_event;
 mod unlock_tokens;
 mod transfer;
 mod approve;
+mod enqueue_tx;
 
 #[macro_use]
 extern crate rocket;
