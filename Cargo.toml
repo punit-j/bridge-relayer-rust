@@ -27,3 +27,5 @@ redis = { version = "0.21.5", features = ["tokio-comp"] }
 spectre-bridge-common = { path = "./spectre-bridge-common" }
 assert-json-diff = "2.0.1"
 secp256k1 = "0.21.0"
+rlp = "0.5.1"
+bytes = "1.1.0"

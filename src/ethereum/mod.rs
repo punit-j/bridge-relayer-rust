@@ -1,13 +1,92 @@
 extern crate serde;
 
+use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::fs;
 use std::str::FromStr;
+use near_sdk::BlockHeight;
 use web3::contract::{Contract, Options};
 use web3::ethabi::Uint;
+use web3::types::{H256, TransactionReceipt};
+use web3::Web3;
+use bytes::{BytesMut, BufMut};
+use near_primitives::types::TransactionOrReceiptId::Receipt;
+use serde_json::json;
 
-pub async fn doit() {
+fn get_client() -> web3::Web3<web3::transports::Http> {
     let transport = web3::transports::Http::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5").unwrap();
     let client = web3::Web3::new(transport);
+    client
+}
+
+// Processes case if input == 0 but rlp::encode processes it correct
+fn encode(input: &web3::types::Index) -> bytes::BytesMut {
+    if *input == web3::types::U64::from(0) {
+        return rlp::encode(&Vec::new());
+    }
+    rlp::encode(input)
+}
+
+pub async fn get_proof() {
+    let client = get_client().eth();
+
+    let tr_hash = H256::from_str("0x2d2312374f04069d603accfc6a05c80d2ea7f48dccb073cee7ac7800b7da98ee").unwrap();
+    println!("tr_hash {}", tr_hash);
+
+    let receipt = client.transaction_receipt(tr_hash).await.unwrap();
+    println!("receipt {:?}", receipt);
+    let receipt = receipt.unwrap();
+    receipt.block_number.unwrap();
+
+    // get log of block contains this transaction
+    let logs = client.logs(web3::types::FilterBuilder::default()
+        .block_hash(receipt.block_hash.unwrap())
+        .address(vec!(receipt.to.unwrap()))// contract address
+        .build()).await.unwrap();
+    println!("logs {:?}", logs);
+    let log = logs.iter().find(|&log| log.transaction_hash.unwrap() == tr_hash);
+    println!("log {:?}", log);
+
+    let log_index = log.unwrap().log_index.unwrap();
+
+    let block = client.block(web3::types::BlockId::Hash(receipt.block_hash.unwrap())).await.unwrap();
+    println!("block {:?}", block);
+    let block = block.unwrap();
+
+    // build trie
+    //let mut trie = HashMap::new();
+    for transaction in block.transactions {
+        let receipt = client.transaction_receipt(transaction).await.unwrap().unwrap();
+        let path = rlp::encode(&receipt.transaction_index);
+        //let serialized_receipt = receiptFromWeb3(receipt).serialize();
+        //println!("path {:?} {}", path.to_vec(), receipt.transaction_index);
+
+        let path = encode(&receipt.transaction_index);
+
+        let mut receipt_json = serde_json::to_value(&receipt).unwrap();//.as_object_mut().unwrap();
+
+        //let tt = serde_json::json!(format!("{:X}", receipt.cumulative_gas_used));
+
+        *receipt_json.get_mut("cumulativeGasUsed").unwrap() = serde_json::json!(format!("{:X}", receipt.cumulative_gas_used));
+
+        let mut status_j = receipt_json.get_mut("status").unwrap();
+        if let Some(s) = receipt.status {
+            *status_j = serde_json::Value::String((if s != web3::types::U64::from(0) {"0x1"} else {"0x0"}).parse().unwrap());
+        }
+
+        /*receipt_json.cumulativeGasUsed = web3.utils.toHex(rpcResult.cumulativeGasUsed)
+        if (web3Result.status === true) {
+            rpcResult.status = '0x1'
+        } else if (web3Result.status === false) {
+            rpcResult.status = '0x0'
+        }*/
+
+        println!("receipt_json {:?}", receipt_json);
+    }
+}
+
+pub async fn doit() {
+    let client = get_client();
 
     println!("Calling accounts.");
     let mut accounts = client.eth().accounts().await.unwrap();
