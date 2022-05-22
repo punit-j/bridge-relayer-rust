@@ -7,12 +7,14 @@ use std::str::FromStr;
 use near_sdk::BlockHeight;
 use web3::contract::{Contract, Options};
 use web3::ethabi::Uint;
-use web3::types::{H256, TransactionReceipt};
+use web3::types::{H256, TransactionReceipt, U256};
 use web3::Web3;
 use bytes::{BytesMut, BufMut};
 use near_primitives::types::TransactionOrReceiptId::Receipt;
 use serde_json::json;
 use std::process::Command;
+use web3::api::Eth;
+use web3::ethabi::ParamType::String;
 
 fn get_client() -> web3::Web3<web3::transports::Http> {
     let transport = web3::transports::Http::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5").unwrap();
@@ -86,22 +88,43 @@ pub async fn get_proof() {
     }
 }
 
+pub async fn get_transaction_log_index(client: &web3::api::Eth<web3::transports::Http>, tr_hash: H256) -> Option<U256> {
+    let receipt = client.transaction_receipt(tr_hash).await.unwrap();
+
+    let receipt = receipt.unwrap();
+    receipt.block_number.unwrap();
+    // get log of block contains this transaction
+    let logs = client.logs(web3::types::FilterBuilder::default()
+        .block_hash(receipt.block_hash.unwrap())
+        .address(vec!(receipt.to.unwrap()))// contract address
+        .build()).await.unwrap();
+
+    let log = logs.iter().find(|&log| log.transaction_hash.unwrap() == tr_hash);
+
+    log.unwrap().log_index
+}
+
 pub async fn get_proof_nodejs() {
     let client = get_client().eth();
 
     let tr_hash = H256::from_str("0x2d2312374f04069d603accfc6a05c80d2ea7f48dccb073cee7ac7800b7da98ee").unwrap();
-    println!("tr_hash {}", tr_hash);
+    println!("tr_hash {:#x}", tr_hash);
 
-
-    //let cbd = Command::new("node").arg("/home/misha/trash/rr/rainbow-bridge/cli/index.js");
+    let log_index = get_transaction_log_index(&client, tr_hash).await.unwrap();
+    println!("log_index {}", log_index);
+    let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tr_hash});
 
     let mut tt = Command::new("node");
-        tt.arg("/home/misha/trash/rr/rainbow-bridge/cli/index.js")
-        .arg("eth-to-near-find-proof")
-        .arg(r#"{"logIndex": 105, "transactionHash": "0x2d2312374f04069d603accfc6a05c80d2ea7f48dccb073cee7ac7800b7da98ee"}"#)
+    tt.arg("/home/misha/trash/rr/rainbow-bridge/cli/index.js").arg("eth-to-near-find-proof")
+        .arg(json_args.to_string())
         .arg("--eth-node-url").arg("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5");
+    println!("wbb {:?}", tt.get_args());
+    let rr = tt.output().unwrap().stdout;
+    let out = std::str::from_utf8(&rr).unwrap();
 
-    println!("bb {:?}", tt.output());
+    let j = serde_json::from_str::<serde_json::Value>(out);
+
+    println!("bb {:?}", out);
 }
 
 pub async fn doit() {
