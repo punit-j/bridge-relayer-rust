@@ -12,6 +12,7 @@ use web3::Web3;
 use bytes::{BytesMut, BufMut};
 use near_primitives::types::TransactionOrReceiptId::Receipt;
 use serde_json::json;
+use std::process::Command;
 
 fn get_client() -> web3::Web3<web3::transports::Http> {
     let transport = web3::transports::Http::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5").unwrap();
@@ -85,6 +86,24 @@ pub async fn get_proof() {
     }
 }
 
+pub async fn get_proof_nodejs() {
+    let client = get_client().eth();
+
+    let tr_hash = H256::from_str("0x2d2312374f04069d603accfc6a05c80d2ea7f48dccb073cee7ac7800b7da98ee").unwrap();
+    println!("tr_hash {}", tr_hash);
+
+
+    //let cbd = Command::new("node").arg("/home/misha/trash/rr/rainbow-bridge/cli/index.js");
+
+    let mut tt = Command::new("node");
+        tt.arg("/home/misha/trash/rr/rainbow-bridge/cli/index.js")
+        .arg("eth-to-near-find-proof")
+        .arg(r#"{"logIndex": 105, "transactionHash": "0x2d2312374f04069d603accfc6a05c80d2ea7f48dccb073cee7ac7800b7da98ee"}"#)
+        .arg("--eth-node-url").arg("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5");
+
+    println!("bb {:?}", tt.output());
+}
+
 pub async fn doit() {
     let client = get_client();
 
@@ -120,8 +139,8 @@ pub async fn doit() {
                                                       web3::types::Address::from_str("2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633").unwrap(),  // to
                                                       Uint::from(112),
                                                       Uint::from(10)),    // amount
-                                                      Default::default(),
-                                                      &priv_key).await;
+                                   Default::default(),
+                                   &priv_key).await;
     println!("transferTokens {:?}", res);
 
     //contract.call("transferTokens", (), my_addr, Default::default())
