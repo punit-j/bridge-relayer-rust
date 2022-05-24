@@ -22,7 +22,6 @@ pub async fn last_block_number_worker(
             let number = last_block_number(server_addr.clone(), contract_account_id.clone())
                 .await
                 .expect("Failed to fetch block number");
-            println!("{}", number);
             {
                 let mut storage = storage.lock().unwrap();
                 storage.last_block_number = std::sync::Mutex::new(number);
