@@ -1,14 +1,14 @@
 mod config;
-// mod near;
-mod private_key;
-mod last_block;
-mod profit_estimation;
-mod redis_wrapper;
-mod transfer_event;
-mod unlock_tokens;
-mod transfer;
+mod near;
 mod approve;
 mod enqueue_tx;
+mod last_block;
+mod private_key;
+mod profit_estimation;
+mod redis_wrapper;
+mod transfer;
+mod transfer_event;
+mod unlock_tokens;
 
 #[macro_use]
 extern crate rocket;
@@ -76,7 +76,7 @@ async fn main() {
     let redis = RedisWrapper::connect(settings.redis_setting.clone());
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
-    
+
     last_block::last_block_number_worker(
         settings.worker_interval,
         "https://rpc.testnet.near.org".to_string(),
@@ -101,4 +101,42 @@ async fn main() {
         .manage(storage)
         .launch()
         .await;
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
+    const ETH_RPC_ENDPOINT_URL: &str =
+        "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";
+    const ETHERSCAN_RPC_ENDPOINT_URL: &str = "https://api-goerli.etherscan.io";
+
+    #[tokio::test]
+    async fn near_rpc_status() {
+        let client = near_jsonrpc_client::JsonRpcClient::connect(NEAR_RPC_ENDPOINT_URL);
+        let status = client
+            .call(near_jsonrpc_client::methods::status::RpcStatusRequest)
+            .await;
+        assert!(
+            matches!(
+                status,
+                Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
+            ),
+            "expected an Ok(RpcStatusResponse), found [{:?}]",
+            status
+        );
+    }
+
+    #[tokio::test]
+    pub async fn eth_rpc_status() {
+        let transport = web3::transports::Http::new(ETH_RPC_ENDPOINT_URL);
+        assert!(transport.is_ok());
+    }
+
+    #[tokio::test]
+    pub async fn etherscan_rpc_status() {
+        let status = reqwest::get(ETHERSCAN_RPC_ENDPOINT_URL).await;
+        assert!(status.is_ok());
+        assert_eq!(reqwest::StatusCode::OK, status.unwrap().status());
+    }
 }

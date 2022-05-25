@@ -14,6 +14,7 @@ serde = "1.0.136"
 serde_json = "1.0.79"
 near-lake-framework = { git = "https://github.com/near/near-lake-framework", tag = "v0.2.0" }
 tokio = "1.17.0"
+near-jsonrpc-client = "0.3.0"
 near-primitives = "0.12.0"
 near-jsonrpc-primitives = "0.12.0"
 uint = { version = "0.8.3", default-features = false }
@@ -21,7 +22,8 @@ config = "0.13.1"
 url = "2.2.2"
 http-client = "6.5.1"
 http-types = "2.12.0"
-# transfer-event-logs = { git = "https://github.com/spectrebridge/spectre-bridge-common.git", branch = "main" }
+transfer-event-logs = { git = "https://github.com/spectrebridge/spectre-bridge-common.git", branch = "main" }
 near_client = { path = "near_client" }
 eth_client = { path = "eth_client" }
 redis = { version = "0.21.5", features = ["tokio-comp"] }
+reqwest = "0.11.10"
