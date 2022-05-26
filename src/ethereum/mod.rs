@@ -15,6 +15,9 @@ use serde_json::json;
 use std::process::Command;
 use web3::api::Eth;
 use web3::ethabi::ParamType::String;
+use base64;
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::serde::{Deserialize, Serialize};
 
 fn get_client() -> web3::Web3<web3::transports::Http> {
     let transport = web3::transports::Http::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5").unwrap();
@@ -104,10 +107,21 @@ pub async fn get_transaction_log_index(client: &web3::api::Eth<web3::transports:
     log.unwrap().log_index
 }
 
+#[derive(Default, BorshDeserialize, BorshSerialize, Clone, Serialize, Deserialize)]
+pub struct Proof {
+    pub log_index: u64,
+    pub log_entry_data: Vec<u8>,
+    pub receipt_index: u64,
+    pub receipt_data: Vec<u8>,
+    pub header_data: Vec<u8>,
+    pub proof: Vec<Vec<u8>>,
+    pub skip_bridge_call: bool,
+}
+
 pub async fn get_proof_nodejs() {
     let client = get_client().eth();
 
-    let tr_hash = H256::from_str("0x2d2312374f04069d603accfc6a05c80d2ea7f48dccb073cee7ac7800b7da98ee").unwrap();
+    let tr_hash = H256::from_str("0xcb50c668e750650fc53d0027112d0580b42f3b658780598cb6899344e2b94183").unwrap();
     println!("tr_hash {:#x}", tr_hash);
 
     let log_index = get_transaction_log_index(&client, tr_hash).await.unwrap();
@@ -120,11 +134,20 @@ pub async fn get_proof_nodejs() {
         .arg("--eth-node-url").arg("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5");
     println!("wbb {:?}", tt.get_args());
     let rr = tt.output().unwrap().stdout;
-    let out = std::str::from_utf8(&rr).unwrap();
+    let mut out = std::str::from_utf8(&rr).unwrap();
+    //let out = std::string::String::from_utf8(rr);
+    //let out = out.;
 
-    let j = serde_json::from_str::<serde_json::Value>(out);
+    let mut j = serde_json::from_str::<serde_json::Value>(out).unwrap();
+    let mut proof_locker = j.get_mut("proof_locker").unwrap().take();
+    proof_locker.as_object_mut().unwrap().insert("skip_bridge_call".parse().unwrap(), serde_json::Value::Bool(false));
 
-    println!("bb {:?}", out);
+    println!("json {:?}", proof_locker.to_string());
+
+    let pp = serde_json::from_value::<Proof>(proof_locker).unwrap();
+
+    let serialized: Vec<u8> = pp.try_to_vec().unwrap();
+    println!("base64 {:?}", base64::encode(serialized));
 }
 
 pub async fn doit() {
