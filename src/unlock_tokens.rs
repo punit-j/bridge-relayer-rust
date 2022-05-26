@@ -3,7 +3,7 @@ pub async fn unlock_tokens(
     signer_account_id: &str,
     signer_secret_key: &str,
     contract_address: &str,
-    nonce: u128,
+    proof: crate::enqueue_tx::Proof,
     gas: u64,
 ) -> near_primitives::views::FinalExecutionStatus {
     let response = near_client::methods::change(
@@ -11,15 +11,15 @@ pub async fn unlock_tokens(
         signer_account_id.to_string(),
         signer_secret_key.to_string(),
         contract_address.to_string(),
-        "unlock".to_string(),
+        "lp_unlock".to_string(),
         near_sdk::serde_json::json!({
-            "nonce": near_sdk::json_types::U128(nonce),
+            "proof": proof,
         }),
         gas,
         0,
     )
     .await
-    .expect("Failed to get response by calling unlock() contract method");
+    .expect("Failed to get response by calling lp_unlock contract method");
     response.status
 }
 
@@ -37,7 +37,7 @@ pub mod tests {
             )
             .as_str(),
             "transfer.spectrebridge.testnet",
-            1,
+            crate::enqueue_tx::Proof::default(),
             100_000_000_000_000,
         )
         .await;
