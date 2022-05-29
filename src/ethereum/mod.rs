@@ -1,7 +1,11 @@
 mod proof;
 mod transactions;
 
-use std::borrow::Borrow;
+use core::time;
+use std::{
+    borrow::Borrow,
+    string
+};
 use std::collections::HashMap;
 use std::fs;
 use std::str::FromStr;
@@ -9,12 +13,13 @@ use near_sdk::BlockHeight;
 use web3::contract::{Contract, Options};
 use web3::ethabi::Uint;
 use web3::types::{H256, TransactionReceipt, U256};
-use web3::Web3;
+use web3::{api, Web3};
 use bytes::{BytesMut, BufMut};
 use near_primitives::types::TransactionOrReceiptId::Receipt;
 use serde_json::json;
 use std::process::Command;
-use web3::api::Eth;
+use std::thread::sleep;
+use web3::api::{Eth, Namespace};
 use web3::ethabi::ParamType::String;
 //use base64;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -24,24 +29,28 @@ use web3::transports::Http;
 
 #[derive(Debug)]
 pub struct Ethereum {
-    client: Web3<Http>,
+    api_url: string::String,
+    rainbow_bridge_index: string::String,
+    client: Eth<Http>,
     contract: Contract<Http>,
     key: secp256k1::SecretKey
 }
 
 impl Ethereum {
-    pub fn new(url: &str,
+    pub fn new(url: &str, rainbow_bridge_index: string::String,
                contract_addr: web3::ethabi::Address,
                abi_json: &[u8],
                key: secp256k1::SecretKey
     ) -> Result<Self, std::string::String> {
         let transport = web3::transports::Http::new(url).unwrap();
-        let client = web3::Web3::new(transport);
+        let client = api::Eth::new(transport);
 
-        let contract = web3::contract::Contract::from_json(client.eth(), contract_addr, &*abi_json)
+        let contract = web3::contract::Contract::from_json(client.clone(), contract_addr, &*abi_json)
             .map_err(|e| e.to_string())?;
 
         Ok(Self {
+            api_url: url.to_string(),
+            rainbow_bridge_index: rainbow_bridge_index,
             client: client,
             contract: contract,
             key: key
@@ -54,6 +63,10 @@ impl Ethereum {
                                 nonce: web3::types::U256
     ) -> web3::error::Result<web3::types::H256> {
         transactions::transfer_token(&self.contract, &self.key, token, receiver, amount, nonce).await
+    }
+
+    pub async fn get_proof<'a, 'b>(&self, tr_hash: &'a H256) -> Result<spectre_bridge_common::Proof, proof::Error<'b>> {
+        proof::get_proof(&self.api_url, &self.client, &self.rainbow_bridge_index, &tr_hash).await
     }
 }
 
@@ -68,7 +81,7 @@ pub async fn get_proof_nodejs() {
 
     let res = proof::get_proof(&"https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5".to_string(),
                                &client, &"/home/misha/trash/rr/rainbow-bridge/cli/index.js".to_string(),
-                               &H256::from_str("0xcb50c668e750650fc53d0027112d0580b42f3b658780598cb6899344e2b94183").unwrap()).await;
+                               &H256::from_str("0xcac7838f4f8265259624c9bc6fe7e65ac6c4438dc9759e7efdd95c1c456b497b").unwrap()).await;
     println!("res {:?}", res);
     /*
     let serialized: Vec<u8> = pp.try_to_vec().unwrap();
@@ -105,13 +118,18 @@ pub async fn doit() {
 */
 
     let eth = Ethereum::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5",
+                            "/home/misha/trash/rr/rainbow-bridge/cli/index.js".to_string(),
                             contract_addr,
                             &*abi, priv_key).unwrap();
 
     let res = eth.transfer_token(token_addr,
                                  web3::types::Address::from_str("2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633").unwrap(),
-                                 151, web3::types::U256::from(200)).await;
+                                 152, web3::types::U256::from(200)).await;
     println!("transferTokens {:?}", res);
+
+    sleep(time::Duration::from_secs(20));
+    let res = eth.get_proof(&res.unwrap()).await;
+    println!("proof {:?}", res);
 
 
     /*let proof = proof::get_proof(&"https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5".to_string(),
