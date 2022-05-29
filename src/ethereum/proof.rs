@@ -1,3 +1,25 @@
+//! Generation proof for hash using the rainbow-bridge
+//!
+//! To use this module you need to clone the https://github.com/aurora-is-near/rainbow-bridge (commit b759c1bef868b8609c15c72e35d6647985a97315),
+//! install the NodeJS and install node_modules.
+//! To check you can to cal ./cli/index.js
+//!
+//! # Example
+//!
+//! ```
+//! let url = "https://goerli.infura.io/v3/<your api key>";
+//! let transport = web3::transports::Http::new(url).unwrap();
+//! let client = web3::Web3::new(transport);
+//!
+//! let transaction_hash = H256::from_str("0xcb50c668e750650fc53d0027112d0580b42f3b658780598cb6899344e2b94183").unwrap();
+//!
+//! let res = proof::get_proof(&url.to_string(), &client,
+//!                             &"rainbow-bridge/cli/index.js".to_string(),
+//!                             &transaction_hash)
+//! .await;
+//!
+//! println!("res {:?}", res);
+//! ```
 
 use std::process;
 use serde_json::json;
@@ -7,7 +29,8 @@ use web3::ethabi::Uint;
 use web3::types::{H256, TransactionReceipt, U256};
 use web3::Web3;
 use spectre_bridge_common;
-use web3::api::Eth;
+use web3::api;
+use std::string;
 
 #[derive(Debug)]
 pub enum Error<'a> {
@@ -17,12 +40,12 @@ pub enum Error<'a> {
     Json(serde_json::Error),
 }
 
-pub async fn get_proof<T: web3::Transport>(url: std::string::String,
-                                           client: &web3::api::Eth<T>,
-                                           index_js: std::string::String,
-                                           tr_hash: H256)
-    -> Result<spectre_bridge_common::Proof, Error<'_>> {
-    let log_index = get_transaction_log_index(&client, tr_hash).await?;
+pub async fn get_proof<'a, 'b, T: web3::Transport>(url: &'a string::String,
+                                           client: &'a api::Eth<T>,
+                                           index_js: &'a string::String,
+                                           tr_hash: &'a H256)
+    -> Result<spectre_bridge_common::Proof, Error<'b>> {
+    let log_index = get_transaction_log_index(&client, &tr_hash).await?;
 
     let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tr_hash});
 
@@ -41,8 +64,8 @@ pub async fn get_proof<T: web3::Transport>(url: std::string::String,
     Ok(res)
 }
 
-pub async fn get_transaction_log_index<T: web3::Transport>(client: &web3::api::Eth<T>, tr_hash: H256) -> Result<U256, Error<'_>> {
-    let receipt = client.transaction_receipt(tr_hash)
+pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(client: &'a api::Eth<T>, tr_hash: &'a H256) -> Result<U256, Error<'b>> {
+    let receipt = client.transaction_receipt(tr_hash.clone())
         .await
         .map_err(|e| Error::Web3(e))?
         .ok_or(Error::Other("Unable to unwrap receipt"))?;
@@ -58,7 +81,7 @@ pub async fn get_transaction_log_index<T: web3::Transport>(client: &web3::api::E
     let log = logs.iter()
         .find(|&log| {
             if let Some(hash) = log.transaction_hash {
-                if hash == tr_hash {
+                if hash == *tr_hash {
                     return true;
                 }
             };
