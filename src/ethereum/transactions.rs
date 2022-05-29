@@ -22,7 +22,7 @@ pub async fn transfer_token<'a, T: web3::Transport>(contract: &'a Contract<T>,
     res
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransactionStatus {
     Pengind,
     Failure,

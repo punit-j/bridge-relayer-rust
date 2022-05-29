@@ -1,3 +1,45 @@
+//! Operations with eth contact
+//!
+//! # Example
+//!
+//! ```
+//! let abi = fs::read("/home/misha/trash/abi.json").unwrap();
+//! let priv_key = secp256k1::SecretKey::from_str(&(fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).unwrap();
+//! let contract_addr = web3::types::Address::from_str("5c739e4039D552E2DBF94ce9E7Db261c88BcEc84").unwrap();
+//! let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
+//!
+//! let eth = Ethereum::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5",
+//!                         "/home/misha/trash/rr/rainbow-bridge/cli/index.js".to_string(),
+//!                         contract_addr,
+//!                         &*abi, priv_key).unwrap();
+//!
+//! let res = eth.transfer_token(token_addr,
+//!                              web3::types::Address::from_str("2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633").unwrap(),
+//!                              158, web3::types::U256::from(200)).await;
+//! println!("transfer_token hash {:?}", &res);
+//! let tx_hash = res.unwrap();
+//!
+//! // wait for transaction process
+//! let res = loop {
+//!     sleep(time::Duration::from_secs(2));
+//!     let res = eth.transaction_status(tx_hash.clone()).await.unwrap();
+//!     if res == transactions::TransactionStatus::Pengind {
+//!         continue;
+//!     }
+//!
+//!     break res;
+//! };
+//!
+//! // get proof
+//! if res == transactions::TransactionStatus::Sucess {
+//!     let proof = eth.get_proof(&tx_hash).await;
+//!     println!("proof {:?}", proof);
+//! }
+//! else {
+//!     println!("Transaction is failure");
+//! }
+//! ```
+
 mod proof;
 mod transactions;
 
@@ -11,6 +53,7 @@ use std::{
     process::Command,
     thread::sleep
 };
+use std::time::Duration;
 use near_sdk::{
     BlockHeight,
     borsh::{self, BorshDeserialize, BorshSerialize},
@@ -24,8 +67,6 @@ use web3::{
     api::Namespace
 };
 use bytes::{BytesMut, BufMut};
-use near_primitives::types::TransactionOrReceiptId::Receipt;
-use serde_json::json;
 
 #[derive(Debug)]
 pub struct Ethereum {
@@ -65,28 +106,11 @@ impl Ethereum {
         transactions::transfer_token(&self.contract, &self.key, token, receiver, amount, nonce).await
     }
 
+    pub async fn transaction_status(&self, tr_hash: web3::types::H256) -> web3::error::Result<transactions::TransactionStatus> {
+        transactions::transaction_status(&self.client, tr_hash).await
+    }
+
     pub async fn get_proof<'a, 'b>(&self, tr_hash: &'a web3::types::H256) -> Result<spectre_bridge_common::Proof, proof::Error<'b>> {
         proof::get_proof(&self.api_url, &self.client, &self.rainbow_bridge_index, &tr_hash).await
     }
-}
-
-pub async fn doit() {
-    let abi = fs::read("/home/misha/trash/abi.json").unwrap();
-    let priv_key = secp256k1::SecretKey::from_str(&(fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).unwrap();
-    let contract_addr = web3::types::Address::from_str("5c739e4039D552E2DBF94ce9E7Db261c88BcEc84").unwrap();
-    let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
-
-    let eth = Ethereum::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5",
-                            "/home/misha/trash/rr/rainbow-bridge/cli/index.js".to_string(),
-                            contract_addr,
-                            &*abi, priv_key).unwrap();
-
-    let res = eth.transfer_token(token_addr,
-                                 web3::types::Address::from_str("2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633").unwrap(),
-                                 152, web3::types::U256::from(200)).await;
-    println!("transferTokens {:?}", res);
-
-    sleep(time::Duration::from_secs(20));
-    let res = eth.get_proof(&res.unwrap()).await;
-    println!("proof {:?}", res);
 }
