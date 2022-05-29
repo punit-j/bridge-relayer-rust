@@ -21,16 +21,20 @@
 //! println!("res {:?}", res);
 //! ```
 
-use std::process;
 use serde_json::json;
-use web3::contract::{Contract, Options};
-use web3::ethabi::ParamType::String;
-use web3::ethabi::Uint;
-use web3::types::{H256, TransactionReceipt, U256};
-use web3::Web3;
+use web3::{
+    contract::{Contract, Options},
+    ethabi::ParamType::String,
+    ethabi::Uint,
+    types::{H256, TransactionReceipt, U256},
+    Web3,
+    api
+};
 use spectre_bridge_common;
-use web3::api;
-use std::string;
+use std::{
+    string,
+    process
+};
 
 #[derive(Debug)]
 pub enum Error<'a> {
