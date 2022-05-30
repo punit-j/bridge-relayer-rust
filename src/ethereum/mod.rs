@@ -8,14 +8,14 @@
 //! let contract_addr = web3::types::Address::from_str("5c739e4039D552E2DBF94ce9E7Db261c88BcEc84").unwrap();
 //! let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
 //!
-//! let eth = Ethereum::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5",
-//!                         "/home/misha/trash/rr/rainbow-bridge/cli/index.js".to_string(),
-//!                         contract_addr,
-//!                         &*abi, priv_key).unwrap();
+//! let eth = RainbowBridgeEthereumClient::new("https://goerli.infura.io/v3/05155f003f604cd884bfd577c2219da5",
+//!                                            "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
+//!                                            contract_addr,
+//!                                            &*abi, priv_key).unwrap();
 //!
 //! let res = eth.transfer_token(token_addr,
 //!                              web3::types::Address::from_str("2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633").unwrap(),
-//!                              158, web3::types::U256::from(200)).await;
+//!                              159, web3::types::U256::from(200)).await;
 //! println!("transfer_token hash {:?}", &res);
 //! let tx_hash = res.unwrap();
 //!
@@ -69,16 +69,16 @@ use web3::{
 use bytes::{BytesMut, BufMut};
 
 #[derive(Debug)]
-pub struct Ethereum {
-    api_url: string::String,
-    rainbow_bridge_index: string::String,
+pub struct RainbowBridgeEthereumClient<'a> {
+    api_url: &'a str,
+    rainbow_bridge_index: &'a str,
     client: web3::api::Eth<Http>,
     contract: Contract<Http>,
     key: secp256k1::SecretKey
 }
 
-impl Ethereum {
-    pub fn new(url: &str, rainbow_bridge_index: string::String,
+impl <'a>RainbowBridgeEthereumClient<'a> {
+    pub fn new(url: &'a str, rainbow_bridge_index: &'a str,
                contract_addr: web3::ethabi::Address,
                abi_json: &[u8],
                key: secp256k1::SecretKey
@@ -90,7 +90,7 @@ impl Ethereum {
             .map_err(|e| e.to_string())?;
 
         Ok(Self {
-            api_url: url.to_string(),
+            api_url: url,
             rainbow_bridge_index,
             client,
             contract,
@@ -110,7 +110,7 @@ impl Ethereum {
         transactions::transaction_status(&self.client, tr_hash).await
     }
 
-    pub async fn get_proof<'a, 'b>(&self, tr_hash: &'a web3::types::H256) -> Result<spectre_bridge_common::Proof, proof::Error<'b>> {
-        proof::get_proof(&self.api_url, &self.client, &self.rainbow_bridge_index, &tr_hash).await
+    pub async fn get_proof<'b, 'c>(&self, tr_hash: &'b web3::types::H256) -> Result<spectre_bridge_common::Proof, proof::Error<'c>> {
+        proof::get_proof(self.api_url, &self.client, self.rainbow_bridge_index, &tr_hash).await
     }
 }

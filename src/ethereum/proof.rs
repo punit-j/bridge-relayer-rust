@@ -44,9 +44,9 @@ pub enum Error<'a> {
     Json(serde_json::Error),
 }
 
-pub async fn get_proof<'a, 'b, T: web3::Transport>(url: &'a string::String,
+pub async fn get_proof<'a, 'b, T: web3::Transport>(url: &'a str,
                                            client: &'a api::Eth<T>,
-                                           index_js: &'a string::String,
+                                           index_js: &'a str,
                                            tr_hash: &'a H256)
     -> Result<spectre_bridge_common::Proof, Error<'b>> {
     let log_index = get_transaction_log_index(&client, &tr_hash).await?;
