@@ -1,19 +1,9 @@
 use redis::AsyncCommands;
 
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Proof {
-    pub log_index: u64,
-    pub log_entry_data: Vec<u8>,
-    pub receipt_index: u64,
-    pub receipt_data: Vec<u8>,
-    pub header_data: Vec<u8>,
-    pub proof: Vec<Vec<u8>>,
-}
-
-#[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TxData {
     block: u64,
-    proof: Proof,
+    proof: spectre_bridge_common::Proof,
 }
 
 const TRANSACTIONS: &str = "txs";
@@ -97,11 +87,12 @@ pub async fn unlock_tokens_worker(
                     match tx_data.block + some_number <= last_block_number {
                         true => {
                             crate::unlock_tokens::unlock_tokens(
-                                &server_addr,
-                                &signer_account_id,
-                                &signer_secret_key,
-                                &contract_address,
+                                server_addr.clone(),
+                                signer_account_id.clone(),
+                                signer_secret_key.clone(),
+                                contract_address.clone(),
                                 tx_data.proof,
+                                1,
                                 gas,
                             )
                             .await;
