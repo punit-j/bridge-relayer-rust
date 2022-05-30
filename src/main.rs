@@ -70,15 +70,16 @@ extern crate redis;
 async fn main() {
     // Reading arguments that was given to binary
     let args: Vec<String> = env::args().collect();
+    println!("{:#?}", args);
     let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
     let redis = RedisWrapper::connect(settings.redis_setting.clone());
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
-    
+
     last_block::last_block_number_worker(
-        settings.worker_interval,
+        settings.last_block_number_worker.request_interval,
         "https://rpc.testnet.near.org".to_string(),
         "client6.goerli.testnet".to_string(),
         storage.clone(),
