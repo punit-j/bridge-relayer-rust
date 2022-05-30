@@ -10,6 +10,27 @@ use std::path::Path;
 use std::sync::Mutex;
 use url::Url;
 
+pub struct EthBridgeCounterpartSettings {
+    pub contract_address: String,
+}
+
+pub struct EthLightClientSettings {
+    pub contract_address: AccountId,
+}
+
+pub struct EtherscanAPISettings {
+    pub endpoint_url: Url,
+    pub api_key: String,
+}
+
+pub struct LastBlockNumberWorkerSettings {
+    pub request_interval: u64,
+}
+
+pub struct UnlockTokensWorkerSettings {
+    pub request_interval: u64,
+}
+
 #[derive(Clone)]
 pub struct EthSettings {
     pub private_key: String,
@@ -36,7 +57,11 @@ pub struct Settings {
     pub profit_thershold: Mutex<u64>,
     pub vault_addr: Url,
     pub config_path: String,
-    pub worker_interval: u64,
+    pub etherscan_api: EtherscanAPISettings,
+    pub last_block_number_worker: LastBlockNumberWorkerSettings,
+    pub unlock_tokens_worker: UnlockTokensWorkerSettings,
+    pub eth_light_client: EthLightClientSettings,
+    pub eth_bridge_counterpart: EthBridgeCounterpartSettings,
 }
 
 impl Settings {
@@ -101,6 +126,35 @@ impl Settings {
         let vault_addr: String = config.get("vault_addr").unwrap();
 
         let profit_thershold: u64 = config.get("profit_thershold").unwrap();
+
+        let etherscan_api_config = config.get_table("etherscan_api").unwrap();
+        let etherscan_api = EtherscanAPISettings {
+            endpoint_url: Url::parse(etherscan_api_config.get("endpoint_url").unwrap().to_string().as_str()).unwrap(),
+            api_key: etherscan_api_config.get("api_key").unwrap().to_string(),
+        };
+
+        let last_block_number_worker_config = config.get_table("last_block_number_worker").unwrap();
+        let last_block_number_worker = LastBlockNumberWorkerSettings {
+            request_interval: last_block_number_worker_config.get("request_interval").unwrap().to_string().as_str().parse().unwrap(),
+        };
+
+        let unlock_tokens_worker_config = config.get_table("unlock_tokens_worker").unwrap();
+        let unlock_tokens_worker = UnlockTokensWorkerSettings {
+            request_interval: unlock_tokens_worker_config.get("request_interval").unwrap().to_string().as_str().parse().unwrap(),
+        };
+
+        let eth_light_client_config = config.get_table("eth_light_client").unwrap();
+        let eth_light_client = EthLightClientSettings {
+            contract_address: AccountId::new_unchecked(
+                eth_light_client_config.get("contract_address").unwrap().to_string(),
+            ),
+        };
+
+        let eth_bridge_counterpart_config = config.get_table("eth_bridge_counterpart").unwrap();
+        let eth_bridge_counterpart = EthBridgeCounterpartSettings {
+            contract_address: eth_bridge_counterpart_config.get("contract_address").unwrap().to_string(),
+        };
+
         Self {
             eth_settings: eth,
             near_settings: near,
@@ -108,7 +162,11 @@ impl Settings {
             profit_thershold: Mutex::new(profit_thershold),
             vault_addr: Url::parse(&vault_addr).unwrap(),
             config_path: file_path.clone(),
-            worker_interval: 15,
+            etherscan_api,
+            last_block_number_worker,
+            unlock_tokens_worker,
+            eth_light_client,
+            eth_bridge_counterpart,
         }
     }
 

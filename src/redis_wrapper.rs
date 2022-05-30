@@ -126,4 +126,3 @@ mod tests {
         redis.get_all();
     }
 }
-
