@@ -45,16 +45,16 @@ pub enum Error<'a> {
 }
 
 pub async fn get_proof<'a, 'b, T: web3::Transport>(url: &'a str,
-                                           client: &'a api::Eth<T>,
-                                           index_js: &'a str,
-                                           tr_hash: &'a H256)
-    -> Result<spectre_bridge_common::Proof, Error<'b>> {
-    let log_index = get_transaction_log_index(&client, &tr_hash).await?;
+                                                   client: &'a api::Eth<T>,
+                                                   rb_bridge_index_js_url: &'a str,
+                                                   tx_hash: &'a H256)
+                                                   -> Result<spectre_bridge_common::Proof, Error<'b>> {
+    let log_index = get_transaction_log_index(&client, &tx_hash).await?;
 
-    let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tr_hash});
+    let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tx_hash});
 
     let mut command = process::Command::new("node");
-    command.arg(index_js).arg("eth-to-near-find-proof")
+    command.arg(rb_bridge_index_js_url).arg("eth-to-near-find-proof")
         .arg(json_args.to_string())
         .arg("--eth-node-url").arg(url);
 
@@ -68,8 +68,8 @@ pub async fn get_proof<'a, 'b, T: web3::Transport>(url: &'a str,
     Ok(res)
 }
 
-pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(client: &'a api::Eth<T>, tr_hash: &'a H256) -> Result<U256, Error<'b>> {
-    let receipt = client.transaction_receipt(tr_hash.clone())
+pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(client: &'a api::Eth<T>, tx_hash: &'a H256) -> Result<U256, Error<'b>> {
+    let receipt = client.transaction_receipt(tx_hash.clone())
         .await
         .map_err(|e| Error::Web3(e))?
         .ok_or(Error::Other("Unable to unwrap receipt"))?;
@@ -85,7 +85,7 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(client: &'a a
     let log = logs.iter()
         .find(|&log| {
             if let Some(hash) = log.transaction_hash {
-                if hash == *tr_hash {
+                if hash == *tx_hash {
                     return true;
                 }
             };

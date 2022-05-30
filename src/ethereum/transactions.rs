@@ -29,15 +29,15 @@ pub enum TransactionStatus {
     Sucess
 }
 
-pub async fn transaction_status<T: web3::Transport>(client: &api::Eth<T>, tr_hash: web3::types::H256)
+pub async fn transaction_status<T: web3::Transport>(client: &api::Eth<T>, tx_hash: web3::types::H256)
                                                     -> web3::error::Result<TransactionStatus> {
-    let res = client.transaction(TransactionId::from(tr_hash.clone())).await?.ok_or(web3::error::Error::Unreachable)?;
+    let res = client.transaction(TransactionId::from(tx_hash.clone())).await?.ok_or(web3::error::Error::Unreachable)?;
 
     if res.block_number.is_none() {
         return Ok(TransactionStatus::Pengind);
     }
 
-    let res = client.transaction_receipt(tr_hash).await?.ok_or(web3::error::Error::Unreachable)?;
+    let res = client.transaction_receipt(tx_hash).await?.ok_or(web3::error::Error::Unreachable)?;
     if let Some(s) = res.status {
         return Ok(if s==web3::types::U64::from(0) {TransactionStatus::Failure} else {TransactionStatus::Sucess});
     }

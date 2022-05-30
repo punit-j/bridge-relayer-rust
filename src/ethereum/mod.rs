@@ -106,11 +106,11 @@ impl <'a>RainbowBridgeEthereumClient<'a> {
         transactions::transfer_token(&self.contract, &self.key, token, receiver, amount, nonce).await
     }
 
-    pub async fn transaction_status(&self, tr_hash: web3::types::H256) -> web3::error::Result<transactions::TransactionStatus> {
-        transactions::transaction_status(&self.client, tr_hash).await
+    pub async fn transaction_status(&self, tx_hash: web3::types::H256) -> web3::error::Result<transactions::TransactionStatus> {
+        transactions::transaction_status(&self.client, tx_hash).await
     }
 
-    pub async fn get_proof<'b, 'c>(&self, tr_hash: &'b web3::types::H256) -> Result<spectre_bridge_common::Proof, proof::Error<'c>> {
-        proof::get_proof(self.api_url, &self.client, self.rainbow_bridge_index, &tr_hash).await
+    pub async fn get_proof<'b, 'c>(&self, tx_hash: &'b web3::types::H256) -> Result<spectre_bridge_common::Proof, proof::Error<'c>> {
+        proof::get_proof(self.api_url, &self.client, self.rainbow_bridge_index, &tx_hash).await
     }
 }
