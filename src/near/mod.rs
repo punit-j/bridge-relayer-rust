@@ -5,24 +5,44 @@ use near_lake_framework::near_indexer_primitives::views::{
     StateChangeValueView, StateChangeWithCauseView,
 };
 use std::str::FromStr;
+use redis::AsyncCommands;
 use rocket::form::validate::Len;
 //use spectre_bridge_common;
 use spectre_bridge_common::Event;
 use serde_json::json;
 
-pub async fn run_watcher<'a>(contract_name: &'a AccountId) {
+const OPTION_START_BLOCK: &str = "START_BLOCK";
+
+pub async fn run_worker(contract_name: AccountId,
+                        redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+                        start_block: Option<u64>) {
+
     let config = LakeConfigBuilder::default()
         .testnet()
-        .start_block_height(90587572)
+        .start_block_height(
+            // use start_block if it isn't None
+            if let Some(b) = start_block {b}
+            // ...else try to get from redis
+            else {
+                let mut r = redis.lock().unwrap().clone();
+                let v: Option<u64> = r.connection
+                    .hget(crate::async_redis_wrapper::OPTIONS, OPTION_START_BLOCK)
+                    .await.unwrap();
+                if let Some(b) = v {b}
+                else {0}
+            }
+        )
         .build()
         .expect("Failed to build LakeConfig");
+
+    println!("NEAR lake starts from block {}", config.start_block_height);
 
     let mut stream = near_lake_framework::streamer(config);
 
     while let Some(streamer_message) = stream.recv().await {
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
-                if *contract_name == outcome.receipt.receiver_id {
+                if contract_name == outcome.receipt.receiver_id {
                     for log in outcome.execution_outcome.outcome.logs {
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
@@ -39,9 +59,13 @@ pub async fn run_watcher<'a>(contract_name: &'a AccountId) {
                         }
                     }
                 }
-
             }
         }
+        let mut r = redis.lock().unwrap().clone();
+        // store block number to redis
+        let _: () = r.connection
+            .hset(crate::async_redis_wrapper::OPTIONS, OPTION_START_BLOCK, streamer_message.block.header.height as u64 + 1)
+            .await.unwrap();
     }
 }
 
