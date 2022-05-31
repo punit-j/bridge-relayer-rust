@@ -34,13 +34,13 @@ impl AsyncRedisWrapper {
         AsyncRedisWrapper { connection }
     }
 
-    pub async fn option_set(&mut self, name: String, value: &str) -> redis::RedisResult<()> {
+    pub async fn option_set<T: redis::ToRedisArgs + Send + Sync>(&mut self, name: &str, value: T) -> redis::RedisResult<()> {
         self.connection.hset(OPTIONS, name, value).await?;
         Ok(())
     }
 
-    pub async fn option_get(&mut self, name: &str) -> redis::RedisResult<Option<String>> {
-        let val: Option<String> = self.connection.hget(OPTIONS, name).await?;
+    pub async fn option_get<T: redis::ToRedisArgs + Send + Sync + redis::FromRedisValue>(&mut self, name: &str) -> redis::RedisResult<Option<T>> {
+        let val: Option<T> = self.connection.hget(OPTIONS, name).await?;
         Ok(val)
     }
 

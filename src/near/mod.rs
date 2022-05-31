@@ -25,9 +25,7 @@ pub async fn run_worker(contract_name: AccountId,
             // ...else try to get from redis
             else {
                 let mut r = redis.lock().unwrap().clone();
-                let v: Option<u64> = r.connection
-                    .hget(crate::async_redis_wrapper::OPTIONS, OPTION_START_BLOCK)
-                    .await.unwrap();
+                let v = r.option_get::<u64>(OPTION_START_BLOCK).await.unwrap();
                 if let Some(b) = v {b}
                 else {0}
             }
@@ -64,8 +62,7 @@ pub async fn run_worker(contract_name: AccountId,
         }
         let mut r = redis.lock().unwrap().clone();
         // store block number to redis
-        let _: () = r.connection
-            .hset(crate::async_redis_wrapper::OPTIONS, OPTION_START_BLOCK, streamer_message.block.header.height as u64 + 1)
+        let _: () = r.option_set(OPTION_START_BLOCK, streamer_message.block.header.height as u64 + 1)
             .await.unwrap();
     }
 }
