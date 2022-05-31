@@ -71,7 +71,7 @@ extern crate redis;
 async fn main() {
     // Reading arguments that was given to binary
     let args: Vec<String> = env::args().collect();
-    
+
     let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
@@ -84,6 +84,10 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
+    let _ = near::run_worker(&settings.near_settings.contract_address,
+                             async_redis.clone(),
+                             /*Some(90587572)*/None);
+
     last_block::last_block_number_worker(
         "https://rpc.testnet.near.org".to_string(),
         "arseniyrest.testnet".to_string(),
@@ -95,7 +99,7 @@ async fn main() {
         15,
         storage.clone(),
     )
-    .await;
+        .await;
 
     unlock_tokens::unlock_tokens_worker(
         "https://rpc.testnet.near.org".to_string(),
@@ -110,7 +114,7 @@ async fn main() {
         storage.clone(),
         async_redis.clone(),
     )
-    .await;
+        .await;
 
     let _res = rocket::build()
         .mount(

@@ -13,7 +13,7 @@ use serde_json::json;
 
 const OPTION_START_BLOCK: &str = "START_BLOCK";
 
-pub async fn run_worker(contract_name: AccountId,
+pub async fn run_worker(contract_name: &AccountId,
                         redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
                         start_block: Option<u64>) {
 
@@ -40,7 +40,7 @@ pub async fn run_worker(contract_name: AccountId,
     while let Some(streamer_message) = stream.recv().await {
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
-                if contract_name == outcome.receipt.receiver_id {
+                if *contract_name == outcome.receipt.receiver_id {
                     for log in outcome.execution_outcome.outcome.logs {
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
