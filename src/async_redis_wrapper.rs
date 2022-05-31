@@ -23,6 +23,10 @@ pub const TRANSACTION_HASHES: &str = "transaction_hashes";
 // Transaction queue
 pub const EVENTS: &str = "events";
 
+// TODO: review. Moved from the redis_wrapper
+const REDIS_TRANSACTION_HASH: &str = "myhash";
+const REDIS_PROFIT_HASH: &str = "myprofit";
+
 impl AsyncRedisWrapper {
     pub async fn connect(settings: crate::config::RedisSettings) -> Self {
         let client = redis::Client::open(settings.url.clone())
@@ -95,5 +99,36 @@ impl AsyncRedisWrapper {
             true => Ok(None),
             false => Ok(Some(tx_hashes[0].clone())),
         }
+    }
+
+    // TODO: review. Moved from the redis_wrapper
+    pub async fn get_all(&mut self) -> Vec<String> {
+        let result: Vec<String> = self.connection.hvals(REDIS_TRANSACTION_HASH).await.unwrap();
+        result
+    }
+
+    // TODO: review. Moved from the redis_wrapper
+    pub async fn _increase_profit(&mut self, add_to: u64) -> RedisResult<()> {
+        let profit: i32 = self
+            .connection
+            .hget(REDIS_PROFIT_HASH, "profit".to_string()).await
+            .ok()
+            .unwrap_or(0); // In case we don't have initial value in DB
+
+        self.connection.hset(
+            REDIS_PROFIT_HASH,
+            "profit".to_string(),
+            add_to + profit as u64,
+        ).await?;
+
+        Ok(())
+    }
+
+    // TODO: review. Moved from the redis_wrapper
+    pub async fn get_profit(&mut self) -> u64 {
+        self.connection
+            .hget(REDIS_PROFIT_HASH, "profit".to_string()).await
+            .ok()
+            .unwrap()
     }
 }
