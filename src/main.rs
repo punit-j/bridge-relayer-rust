@@ -1,4 +1,5 @@
 mod config;
+mod async_redis_wrapper;
 mod near;
 mod approve;
 mod enqueue_tx;
@@ -70,19 +71,44 @@ extern crate redis;
 async fn main() {
     // Reading arguments that was given to binary
     let args: Vec<String> = env::args().collect();
-    println!("{:#?}", args);
+    
     let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
+
     let redis = RedisWrapper::connect(settings.redis_setting.clone());
+
+    let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
+        async_redis_wrapper::AsyncRedisWrapper::connect(settings.redis_setting.clone()).await,
+    ));
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     last_block::last_block_number_worker(
-        settings.last_block_number_worker.request_interval,
         "https://rpc.testnet.near.org".to_string(),
+        "arseniyrest.testnet".to_string(),
+        near_client::read_private_key::read_private_key_from_file(
+            "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
+        ),
         "client6.goerli.testnet".to_string(),
+        300_000_000_000_000,
+        15,
         storage.clone(),
+    )
+    .await;
+
+    unlock_tokens::unlock_tokens_worker(
+        "https://rpc.testnet.near.org".to_string(),
+        "arseniyrest.testnet".to_string(),
+        near_client::read_private_key::read_private_key_from_file(
+            "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
+        ),
+        "client6.goerli.testnet".to_string(),
+        300_000_000_000_000,
+        5,
+        2,
+        storage.clone(),
+        async_redis.clone(),
     )
     .await;
 
@@ -100,6 +126,7 @@ async fn main() {
         .manage(settings)
         .manage(redis)
         .manage(storage)
+        .manage(async_redis)
         .launch()
         .await;
 }
