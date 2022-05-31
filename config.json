@@ -17,5 +17,21 @@
   "vault_addr": "http://127.0.0.1:8200/v1/kv/",
   "redis":{
     "url":"redis://127.0.0.1/"
+  },
+  "etherscan_api": {
+    "endpoint_url": "https://api-goerli.etherscan.io",
+    "api_key": ""
+  },
+  "last_block_number_worker": {
+    "request_interval": 15
+  },
+  "unlock_tokens_worker": {
+    "request_interval": 15
+  },
+  "eth_light_client": {
+    "contract_address": "transfer.spectrebridge.testnet"
+  },
+  "eth_bridge_counterpart": {
+    "contract_address": "0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84"
   }
 }
