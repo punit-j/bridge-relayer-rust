@@ -1,4 +1,4 @@
-use redis::AsyncCommands;
+use redis::{AsyncCommands, RedisResult};
 
 #[derive(Clone)]
 pub struct AsyncRedisWrapper {
@@ -12,11 +12,16 @@ pub struct TransactionData {
     pub nonce: u128,
 }
 
+pub const OPTIONS: &str = "options";
+
 // Set of pairs <TX_HASH, TX_DATA>
-const TRANSACTIONS: &str = "transactions";
+pub const TRANSACTIONS: &str = "transactions";
 
 // Transaction queue
-const TRANSACTION_HASHES: &str = "transaction_hashes";
+pub const TRANSACTION_HASHES: &str = "transaction_hashes";
+
+// Transaction queue
+pub const EVENTS: &str = "events";
 
 impl AsyncRedisWrapper {
     pub async fn connect(settings: crate::config::RedisSettings) -> Self {
@@ -27,6 +32,26 @@ impl AsyncRedisWrapper {
             .await
             .expect("REDIS: Failed to get connection");
         AsyncRedisWrapper { connection }
+    }
+
+    pub async fn option_set(&mut self, name: String, value: &str) -> redis::RedisResult<()> {
+        self.connection.hset(OPTIONS, name, value).await?;
+        Ok(())
+    }
+
+    pub async fn option_get(&mut self, name: &str) -> redis::RedisResult<Option<String>> {
+        let val: Option<String> = self.connection.hget(OPTIONS, name).await?;
+        Ok(val)
+    }
+
+    pub async fn event_push(&mut self, event: spectre_bridge_common::Event) {
+        let _: () = self.connection.rpush(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
+    }
+
+    pub async fn event_pop(&mut self, event: spectre_bridge_common::Event) -> Result<spectre_bridge_common::Event, String> {
+        let r: String = self.connection.lpop(EVENTS, None).await.map_err(|e| e.to_string())?;
+        let event = serde_json::from_str::<spectre_bridge_common::Event>(&r).map_err(|e| e.to_string())?;
+        Ok(event)
     }
 
     pub async fn hset(

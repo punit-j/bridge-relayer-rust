@@ -47,8 +47,9 @@ pub async fn run_worker(contract_name: AccountId,
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
                                 Ok(r) => {
-                                    println!("Event: {:?}", r);
-                                    // TODO:
+                                    println!("Push event: {:?}", r);
+                                    let mut redis = redis.lock().unwrap().clone();
+                                    redis.event_push(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent){
