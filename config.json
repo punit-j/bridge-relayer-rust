@@ -11,7 +11,8 @@
     ],
     "contract_address":"transfer.spectrebridge.testnet",
     "private_key":"",
-    "rpc_url":"https://rpc.testnet.near.org"
+    "rpc_url":"https://rpc.testnet.near.org",
+    "near_lake_init_block": 90587572
   },
   "profit_thershold":2999,
   "vault_addr": "http://127.0.0.1:8200/v1/kv/",
