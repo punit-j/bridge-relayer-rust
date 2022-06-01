@@ -11,25 +11,15 @@ use rocket::form::validate::Len;
 use spectre_bridge_common::Event;
 use serde_json::json;
 
-const OPTION_START_BLOCK: &str = "START_BLOCK";
+pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
 pub async fn run_worker(contract_name: &AccountId,
                         redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-                        start_block: Option<u64>) {
+                        start_block: u64) {
 
     let config = LakeConfigBuilder::default()
         .testnet()
-        .start_block_height(
-            // use start_block if it isn't None
-            if let Some(b) = start_block {b}
-            // ...else try to get from redis
-            else {
-                let mut r = redis.lock().unwrap().clone();
-                let v = r.option_get::<u64>(OPTION_START_BLOCK).await.unwrap();
-                if let Some(b) = v {b}
-                else {0}
-            }
-        )
+        .start_block_height(start_block)
         .build()
         .expect("Failed to build LakeConfig");
 

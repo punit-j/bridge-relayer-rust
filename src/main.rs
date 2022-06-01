@@ -84,7 +84,12 @@ async fn main() {
 
     let _ = near::run_worker(&settings.near_settings.contract_address,
                              async_redis.clone(),
-                             /*Some(90587572)*/None);
+                             {
+                                 let mut r = async_redis.lock().unwrap().clone();
+                                 if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                                 else {settings.near_settings.near_lake_init_block}
+                             }
+    );
 
     last_block::last_block_number_worker(
         "https://rpc.testnet.near.org".to_string(),
