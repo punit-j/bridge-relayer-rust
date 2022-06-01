@@ -28,3 +28,5 @@ redis = { version = "0.21.5", features = ["tokio-comp"] }
 spectre-bridge-common = { path = "./spectre-bridge-common" }
 assert-json-diff = "2.0.1"
 reqwest = "0.11.10"
+uuid = { version = "0.8.2", features = ["v4"] }
+futures-util = { version = "0.3.15" }

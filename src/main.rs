@@ -1,15 +1,19 @@
-mod config;
-mod async_redis_wrapper;
-mod near;
 mod approve;
+mod async_redis_wrapper;
+mod config;
 mod enqueue_tx;
 mod last_block;
+mod near;
 mod private_key;
 mod profit_estimation;
 mod redis_wrapper;
 mod transfer;
 mod transfer_event;
 mod unlock_tokens;
+mod redis_subscriber;
+mod redis_publisher;
+mod message;
+mod message_handler;
 
 #[macro_use]
 extern crate rocket;
@@ -71,7 +75,7 @@ extern crate redis;
 async fn main() {
     // Reading arguments that was given to binary
     let args: Vec<String> = env::args().collect();
-    
+
     let config_file_path = args.get(1).unwrap().to_string();
 
     let settings = Settings::init(config_file_path);
@@ -111,6 +115,9 @@ async fn main() {
         async_redis.clone(),
     )
     .await;
+
+    redis_subscriber::subscribe("channel1".to_string(), async_redis.clone()).await;
+    redis_publisher::publish("channel1".to_string(), message::Message::default(), async_redis.clone()).await;
 
     let _res = rocket::build()
         .mount(

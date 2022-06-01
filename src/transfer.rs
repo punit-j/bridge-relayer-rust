@@ -92,12 +92,9 @@ pub mod tests {
 
         let contract_addr = "0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84";
 
-        let contract_abi = eth_client::methods::get_contract_abi(
-            ETHERSCAN_RPC_ENDPOINT_URL,
-            contract_addr,
-            "",
-        )
-        .await;
+        let contract_abi =
+            eth_client::methods::get_contract_abi(ETHERSCAN_RPC_ENDPOINT_URL, contract_addr, "")
+                .await;
         assert!(contract_abi.is_ok());
         let contract_abi = contract_abi.unwrap();
         assert!(!contract_abi.is_empty());

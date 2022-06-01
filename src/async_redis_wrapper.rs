@@ -1,7 +1,9 @@
 use redis::AsyncCommands;
+use futures_util::StreamExt;
 
 #[derive(Clone)]
 pub struct AsyncRedisWrapper {
+    pub client: redis::Client,
     pub connection: redis::aio::MultiplexedConnection,
 }
 
@@ -26,7 +28,7 @@ impl AsyncRedisWrapper {
             .get_multiplexed_tokio_connection()
             .await
             .expect("REDIS: Failed to get connection");
-        AsyncRedisWrapper { connection }
+        AsyncRedisWrapper { client, connection }
     }
 
     pub async fn hset(
