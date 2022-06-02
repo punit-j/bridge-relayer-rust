@@ -1,4 +1,3 @@
-use redis::AsyncCommands;
 use futures_util::StreamExt;
 use redis::{AsyncCommands, RedisResult};
 
@@ -55,17 +54,35 @@ impl AsyncRedisWrapper {
         let _: () = self.connection.rpush(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
     }
 
-    pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
-        //let _: () = self.connection.rpush(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
-        let _: () = self.connection.publish(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
-    }
-
-    pub async fn event_pop(&mut self, event: spectre_bridge_common::Event) -> Result<spectre_bridge_common::Event, String> {
+    pub async fn event_pop(&mut self) -> Result<spectre_bridge_common::Event, String> {
         let r: String = self.connection.lpop(EVENTS, None).await.map_err(|e| e.to_string())?;
         let event = serde_json::from_str::<spectre_bridge_common::Event>(&r).map_err(|e| e.to_string())?;
         Ok(event)
     }
 
+    pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
+        //let _: () = self.connection.rpush(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
+        let _: () = self.connection.publish(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
+    }
+    /*
+        pub async fn event_sub(&mut self, f: fn(spectre_bridge_common::Event)) {
+            let client = self.client.clone();
+            let mut pubsub_connection = client.get_async_connection().await.expect("REDIS: Failed to get connection").into_pubsub();
+            pubsub_connection.subscribe(EVENTS).await.expect("Failed to subscribe to the channel");
+            let mut pubsub_stream = pubsub_connection.on_message();
+    println!("dddddddddddddddddddddd");
+            loop {
+                let pubsub_msg: String = pubsub_stream.next().await.unwrap().get_payload().expect("Failed to fetch the message");
+
+                let event = serde_json::from_str::<spectre_bridge_common::Event>(&pubsub_msg);
+                println!("ddddddddddddddddddd3333 {:?}", event);
+                if let Ok(e) = event {
+                    f(e);
+                }
+
+            }
+        }
+    */
     pub async fn hset(
         &mut self,
         tx_hash: String,

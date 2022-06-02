@@ -7,8 +7,6 @@ use std::str::FromStr;
 use redis::AsyncCommands;
 use rocket::form::validate::Len;
 use std::io::Write;
-use std::str::FromStr;
-//use spectre_bridge_common;
 use serde_json::json;
 use spectre_bridge_common::Event;
 
