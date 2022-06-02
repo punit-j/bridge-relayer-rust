@@ -89,15 +89,21 @@ async fn main() {
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     let near_worker = near::run_worker(&settings.near_settings.contract_address,
-                             async_redis.clone(),
-                             {
-                                 let mut r = async_redis.lock().unwrap().clone();
-                                 if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                                 else {settings.near_settings.near_lake_init_block}
-                             }
+                                       async_redis.clone(),
+                                       {
+                                           /*let mut r = async_redis.lock().unwrap().clone();
+                                           if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                                           else {settings.near_settings.near_lake_init_block}*/
+                                           settings.near_settings.near_lake_init_block
+                                       }
     );
 
-    let subscriber = redis_subscriber::subscribe(async_redis_wrapper::EVENTS.to_string(), async_redis.clone());
+    let subscriber = async_redis_wrapper::subscribe::<String>(
+        async_redis_wrapper::EVENTS.to_string(), async_redis.clone(),
+        |msg| {
+            println!("fdddddddd {}", msg);
+        }
+    );
 
     tokio::join!(near_worker, subscriber);  // tests...
 

@@ -9,7 +9,7 @@
       "token8.spectrebridge.testnet",
       "token16.spectrebridge.testnet"
     ],
-    "contract_address":"transfer.spectrebridge.testnet",
+    "contract_address":"transfer.spectrebridge2.testnet",
     "private_key":"",
     "rpc_url":"https://rpc.testnet.near.org",
     "near_lake_init_block": 90587572

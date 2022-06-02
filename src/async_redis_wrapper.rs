@@ -61,28 +61,9 @@ impl AsyncRedisWrapper {
     }
 
     pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
-        //let _: () = self.connection.rpush(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
         let _: () = self.connection.publish(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
     }
-    /*
-        pub async fn event_sub(&mut self, f: fn(spectre_bridge_common::Event)) {
-            let client = self.client.clone();
-            let mut pubsub_connection = client.get_async_connection().await.expect("REDIS: Failed to get connection").into_pubsub();
-            pubsub_connection.subscribe(EVENTS).await.expect("Failed to subscribe to the channel");
-            let mut pubsub_stream = pubsub_connection.on_message();
-    println!("dddddddddddddddddddddd");
-            loop {
-                let pubsub_msg: String = pubsub_stream.next().await.unwrap().get_payload().expect("Failed to fetch the message");
 
-                let event = serde_json::from_str::<spectre_bridge_common::Event>(&pubsub_msg);
-                println!("ddddddddddddddddddd3333 {:?}", event);
-                if let Ok(e) = event {
-                    f(e);
-                }
-
-            }
-        }
-    */
     pub async fn hset(
         &mut self,
         tx_hash: String,
@@ -156,4 +137,27 @@ impl AsyncRedisWrapper {
             .ok()
             .unwrap()
     }
+}
+
+pub async fn subscribe<'a, T: 'static + redis::FromRedisValue>(channel: String,
+                                                 redis: std::sync::Arc<std::sync::Mutex<AsyncRedisWrapper>>,
+                                                 callback: fn(T)//std::sync::Arc<fn(T)>
+
+) -> RedisResult<()> {
+    //let callback = callback.clone();
+    tokio::spawn({
+        //let callback = callback.clone();
+        async move {
+            let client = redis.lock().unwrap().client.clone();
+            let mut pubsub_connection = client.get_async_connection().await.expect("REDIS: Failed to get connection").into_pubsub();
+            pubsub_connection.subscribe(channel.clone()).await.expect("Failed to subscribe to the channel");
+            let mut pubsub_stream = pubsub_connection.on_message();
+            loop {
+                let pubsub_msg: T = pubsub_stream.next().await.unwrap().get_payload().expect("Failed to fetch the message");
+                callback(pubsub_msg);
+                //crate::message_handler::handle(channel.clone(), pubsub_msg);
+            }
+        }
+    });
+    Ok(())
 }
