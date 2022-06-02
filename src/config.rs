@@ -1,12 +1,13 @@
 use config::{Config, File};
 use near_sdk::AccountId;
 use redis::Value;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use std::borrow::{Borrow, BorrowMut};
 use std::fs;
 use std::ops::DerefMut;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Mutex;
 use url::Url;
 
@@ -41,8 +42,9 @@ pub struct EthSettings {
 pub struct NearSettings {
     pub private_key: String,
     pub rpc_url: Url,
-    pub contract_address: AccountId,
+    pub contract_address: near_lake_framework::near_indexer_primitives::types::AccountId,
     pub allowed_tokens: Mutex<Vec<AccountId>>,
+    pub near_lake_init_block: u64
 }
 
 #[derive(Clone)]
@@ -101,10 +103,10 @@ impl Settings {
             private_key: near_config.get("private_key").unwrap().to_string(),
             rpc_url: Url::parse(near_config.get("rpc_url").unwrap().to_string().as_str()).unwrap(),
 
-            contract_address: AccountId::new_unchecked(
-                near_config.get("contract_address").unwrap().to_string(),
-            ),
+            contract_address: near_lake_framework::near_indexer_primitives::types::AccountId::from_str(
+                &near_config.get("contract_address").unwrap().to_string()).unwrap(),
             allowed_tokens: Mutex::new(token_accounts),
+            near_lake_init_block: u64::from_str(near_config.get("near_lake_init_block").unwrap().to_string().as_str()).unwrap()
         };
 
         let redis = RedisSettings {

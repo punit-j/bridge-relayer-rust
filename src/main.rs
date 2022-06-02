@@ -6,7 +6,6 @@ mod last_block;
 mod near;
 mod private_key;
 mod profit_estimation;
-mod redis_wrapper;
 mod transfer;
 mod transfer_event;
 mod unlock_tokens;
@@ -19,7 +18,6 @@ mod message_handler;
 extern crate rocket;
 
 use crate::config::Settings;
-use crate::redis_wrapper::RedisWrapper;
 use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
@@ -31,8 +29,9 @@ fn health() -> String {
 }
 
 #[get("/transactions")]
-fn transactions(redis: &State<RedisWrapper>) -> String {
-    json!(redis.get_all()).to_string()
+async fn transactions(redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>) -> String {
+    let mut r = redis.lock().unwrap().clone();
+    json!(r.get_all().await).to_string()
 }
 
 #[post("/set_threshold", data = "<input>")]
@@ -65,8 +64,9 @@ fn set_allowed_tokens(input: String, settings: &State<Settings>) {
 }
 
 #[get("/profit")]
-fn profit(redis: &State<RedisWrapper>) -> String {
-    json!(redis.get_profit()).to_string()
+async fn profit(redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>) -> String {
+    let mut r = redis.lock().unwrap().clone();
+    json!(r.get_profit().await).to_string()
 }
 
 extern crate redis;
@@ -80,13 +80,20 @@ async fn main() {
 
     let settings = Settings::init(config_file_path);
 
-    let redis = RedisWrapper::connect(settings.redis_setting.clone());
-
     let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
         async_redis_wrapper::AsyncRedisWrapper::connect(settings.redis_setting.clone()).await,
     ));
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
+
+    let _ = near::run_worker(&settings.near_settings.contract_address,
+                             async_redis.clone(),
+                             {
+                                 let mut r = async_redis.lock().unwrap().clone();
+                                 if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                                 else {settings.near_settings.near_lake_init_block}
+                             }
+    );
 
     last_block::last_block_number_worker(
         "https://rpc.testnet.near.org".to_string(),
@@ -99,7 +106,7 @@ async fn main() {
         15,
         storage.clone(),
     )
-    .await;
+        .await;
 
     unlock_tokens::unlock_tokens_worker(
         "https://rpc.testnet.near.org".to_string(),
@@ -114,7 +121,7 @@ async fn main() {
         storage.clone(),
         async_redis.clone(),
     )
-    .await;
+        .await;
 
     redis_subscriber::subscribe("channel1".to_string(), async_redis.clone()).await;
     redis_publisher::publish("channel1".to_string(), message::Message::default(), async_redis.clone()).await;
@@ -131,7 +138,6 @@ async fn main() {
             ],
         )
         .manage(settings)
-        .manage(redis)
         .manage(storage)
         .manage(async_redis)
         .launch()

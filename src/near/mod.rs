@@ -3,6 +3,8 @@ use near_lake_framework::near_indexer_primitives::views::{
     StateChangeValueView, StateChangeWithCauseView,
 };
 use near_lake_framework::{LakeConfig, LakeConfigBuilder};
+use std::str::FromStr;
+use redis::AsyncCommands;
 use rocket::form::validate::Len;
 use std::io::Write;
 use std::str::FromStr;
@@ -10,12 +12,19 @@ use std::str::FromStr;
 use serde_json::json;
 use spectre_bridge_common::Event;
 
-pub async fn run_watcher<'a>(contract_name: &'a AccountId) {
+pub const OPTION_START_BLOCK: &str = "START_BLOCK";
+
+pub async fn run_worker(contract_name: &AccountId,
+                        redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+                        start_block: u64) {
+
     let config = LakeConfigBuilder::default()
         .testnet()
-        .start_block_height(90587572)
+        .start_block_height(start_block)
         .build()
         .expect("Failed to build LakeConfig");
+
+    println!("NEAR lake starts from block {}", config.start_block_height);
 
     let mut stream = near_lake_framework::streamer(config);
 
@@ -27,8 +36,9 @@ pub async fn run_watcher<'a>(contract_name: &'a AccountId) {
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
                                 Ok(r) => {
-                                    println!("Event: {:?}", r);
-                                    // TODO:
+                                    println!("Push event: {:?}", r);
+                                    let mut redis = redis.lock().unwrap().clone();
+                                    redis.event_push(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {
@@ -41,6 +51,10 @@ pub async fn run_watcher<'a>(contract_name: &'a AccountId) {
                 }
             }
         }
+        let mut r = redis.lock().unwrap().clone();
+        // store block number to redis
+        let _: () = r.option_set(OPTION_START_BLOCK, streamer_message.block.header.height as u64 + 1)
+            .await.unwrap();
     }
 }
 
