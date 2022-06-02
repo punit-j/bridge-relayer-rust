@@ -1,15 +1,16 @@
-use std::io::Write;
-use near_lake_framework::{LakeConfig, LakeConfigBuilder};
 use near_lake_framework::near_indexer_primitives::types::{AccountId, BlockHeight};
 use near_lake_framework::near_indexer_primitives::views::{
     StateChangeValueView, StateChangeWithCauseView,
 };
+use near_lake_framework::{LakeConfig, LakeConfigBuilder};
 use std::str::FromStr;
 use redis::AsyncCommands;
 use rocket::form::validate::Len;
+use std::io::Write;
+use std::str::FromStr;
 //use spectre_bridge_common;
-use spectre_bridge_common::Event;
 use serde_json::json;
+use spectre_bridge_common::Event;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
@@ -40,7 +41,7 @@ pub async fn run_worker(contract_name: &AccountId,
                                     redis.event_push(r).await;
                                 }
                                 Err(e) => {
-                                    if !matches!(e, ParceError::NotEvent){
+                                    if !matches!(e, ParceError::NotEvent) {
                                         eprintln!("Log error: {:?}", e);
                                     }
                                 }
@@ -64,13 +65,13 @@ pub enum ParceError {
     Json(serde_json::Error),
     WrongVersion(String),
     NotEvent,
-    Other
+    Other,
 }
 
 /// In case if the "data" is array (with 1 item) it converts to object
 pub fn fix_json(mut json: serde_json::Value) -> serde_json::Value {
     if let Some(data) = json.get_mut("data") {
-        if let Some (arr) = data.as_array_mut() {
+        if let Some(arr) = data.as_array_mut() {
             if let Some(item) = arr.get_mut(0) {
                 *data = item.take();
             }
@@ -103,18 +104,18 @@ pub fn get_event(mut json: serde_json::Value) -> Result<spectre_bridge_common::E
 
 #[cfg(test)]
 pub mod tests {
-    use std::str::FromStr;
-    use serde_json::json;
     use crate::near::{fix_json, get_event};
     use assert_json_diff::assert_json_eq;
-    use near_sdk::AccountId;
     use near_sdk::json_types::U128;
+    use near_sdk::AccountId;
+    use serde_json::json;
+    use std::str::FromStr;
 
     #[test]
     fn fix_json_test() {
         let json_valid = json!({"data": 1});
 
-        let json = json!({"data": 1});;
+        let json = json!({"data": 1});
         assert_json_eq!(fix_json(json), json_valid.clone());
 
         let json = json!({"data": [1]});
@@ -132,6 +133,7 @@ pub mod tests {
             spectre_bridge_common::Event::SpectreBridgeTransferFailedEvent {
                 nonce: U128(238),
                 account: AccountId::new_unchecked("alice".to_string()),
-            })
+            }
+        )
     }
 }

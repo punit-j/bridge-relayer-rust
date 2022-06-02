@@ -131,30 +131,55 @@ impl Settings {
 
         let etherscan_api_config = config.get_table("etherscan_api").unwrap();
         let etherscan_api = EtherscanAPISettings {
-            endpoint_url: Url::parse(etherscan_api_config.get("endpoint_url").unwrap().to_string().as_str()).unwrap(),
+            endpoint_url: Url::parse(
+                etherscan_api_config
+                    .get("endpoint_url")
+                    .unwrap()
+                    .to_string()
+                    .as_str(),
+            )
+            .unwrap(),
             api_key: etherscan_api_config.get("api_key").unwrap().to_string(),
         };
 
         let last_block_number_worker_config = config.get_table("last_block_number_worker").unwrap();
         let last_block_number_worker = LastBlockNumberWorkerSettings {
-            request_interval: last_block_number_worker_config.get("request_interval").unwrap().to_string().as_str().parse().unwrap(),
+            request_interval: last_block_number_worker_config
+                .get("request_interval")
+                .unwrap()
+                .to_string()
+                .as_str()
+                .parse()
+                .unwrap(),
         };
 
         let unlock_tokens_worker_config = config.get_table("unlock_tokens_worker").unwrap();
         let unlock_tokens_worker = UnlockTokensWorkerSettings {
-            request_interval: unlock_tokens_worker_config.get("request_interval").unwrap().to_string().as_str().parse().unwrap(),
+            request_interval: unlock_tokens_worker_config
+                .get("request_interval")
+                .unwrap()
+                .to_string()
+                .as_str()
+                .parse()
+                .unwrap(),
         };
 
         let eth_light_client_config = config.get_table("eth_light_client").unwrap();
         let eth_light_client = EthLightClientSettings {
             contract_address: AccountId::new_unchecked(
-                eth_light_client_config.get("contract_address").unwrap().to_string(),
+                eth_light_client_config
+                    .get("contract_address")
+                    .unwrap()
+                    .to_string(),
             ),
         };
 
         let eth_bridge_counterpart_config = config.get_table("eth_bridge_counterpart").unwrap();
         let eth_bridge_counterpart = EthBridgeCounterpartSettings {
-            contract_address: eth_bridge_counterpart_config.get("contract_address").unwrap().to_string(),
+            contract_address: eth_bridge_counterpart_config
+                .get("contract_address")
+                .unwrap()
+                .to_string(),
         };
 
         Self {
