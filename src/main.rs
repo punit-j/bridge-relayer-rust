@@ -10,7 +10,6 @@ mod profit_estimation;
 mod redis_publisher;
 mod redis_subscriber;
 mod transfer;
-mod transfer_event;
 mod unlock_tokens;
 
 #[macro_use]
