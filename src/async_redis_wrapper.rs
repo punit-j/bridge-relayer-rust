@@ -51,16 +51,6 @@ impl AsyncRedisWrapper {
         Ok(val)
     }
 
-    pub async fn event_push(&mut self, event: spectre_bridge_common::Event) {
-        let _: () = self.connection.rpush(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
-    }
-
-    pub async fn event_pop(&mut self) -> Result<spectre_bridge_common::Event, String> {
-        let r: String = self.connection.lpop(EVENTS, None).await.map_err(|e| e.to_string())?;
-        let event = serde_json::from_str::<spectre_bridge_common::Event>(&r).map_err(|e| e.to_string())?;
-        Ok(event)
-    }
-
     pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
         let _: () = self.connection.publish(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
     }
