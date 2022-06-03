@@ -65,26 +65,6 @@ impl AsyncRedisWrapper {
         let _: () = self.connection.publish(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
     }
 
-    pub async fn event_sub(redis: std::sync::Arc<std::sync::Mutex<AsyncRedisWrapper>>,
-                           callback: &fn(spectre_bridge_common::Event)) {
-        /*subscribe::<String>(EVENTS.to_string(), redis.clone(), |msg| {
-            if let Ok(e) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
-                println!("ss {:?}", e);
-                callback(e);
-            }
-        });*/
-
-        let pp = |msg: String| {
-            if let Ok(e) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
-                println!("ss {:?}", e);
-                callback(e);
-            }
-        };
-
-        //subscribe::<String>(EVENTS.to_string(), redis.clone(), pp);
-
-    }
-
     pub async fn hset(
         &mut self,
         tx_hash: String,

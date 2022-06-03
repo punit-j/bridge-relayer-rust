@@ -97,30 +97,15 @@ async fn main() {
                                            settings.near_settings.near_lake_init_block
                                        }
     );
-/*
-    let subscriber = async_redis_wrapper::subscribe::<String>(
-        async_redis_wrapper::EVENTS.to_string(), async_redis.clone(),
-        Box::new(
-            {
-                let async_redis = async_redis.clone();
-                |msg| async {
-                    println!("fdddddddd {}", msg);
-                    //println!("fdddddddd22 {:?}", async_redis.lock().unwrap().option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap());
-                }
-            })
-    );
-*/
-    /*let subscriber = async_redis_wrapper::AsyncRedisWrapper::event_sub(async_redis.clone(), |e|{
-
-    });*/
 
     let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
     let subscriber = async move {
-        while let Some(rr) = stream.recv().await {
-            println!("ttt {:?}", rr);
+        while let Some(msg) = stream.recv().await {
+            if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+                println!("event {:?}", event);
+            }
         }
     };
-
 
     tokio::join!(near_worker, subscriber);  // tests...
 
