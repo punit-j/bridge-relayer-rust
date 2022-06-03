@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use redis::{AsyncCommands, RedisResult};
+use std::sync;
 
 #[derive(Clone)]
 pub struct AsyncRedisWrapper {
@@ -40,43 +41,18 @@ impl AsyncRedisWrapper {
         AsyncRedisWrapper { client, connection }
     }
 
-    pub async fn option_set<T: redis::ToRedisArgs + Send + Sync>(
-        &mut self,
-        name: &str,
-        value: T,
-    ) -> redis::RedisResult<()> {
+    pub async fn option_set<T: redis::ToRedisArgs + Send + Sync>(&mut self, name: &str, value: T) -> redis::RedisResult<()> {
         self.connection.hset(OPTIONS, name, value).await?;
         Ok(())
     }
 
-    pub async fn option_get<T: redis::ToRedisArgs + Send + Sync + redis::FromRedisValue>(
-        &mut self,
-        name: &str,
-    ) -> redis::RedisResult<Option<T>> {
+    pub async fn option_get<T: redis::ToRedisArgs + Send + Sync + redis::FromRedisValue>(&mut self, name: &str) -> redis::RedisResult<Option<T>> {
         let val: Option<T> = self.connection.hget(OPTIONS, name).await?;
         Ok(val)
     }
 
-    pub async fn event_push(&mut self, event: spectre_bridge_common::Event) {
-        let _: () = self
-            .connection
-            .rpush(EVENTS, serde_json::to_string(&event).unwrap())
-            .await
-            .unwrap();
-    }
-
-    pub async fn event_pop(
-        &mut self,
-        event: spectre_bridge_common::Event,
-    ) -> Result<spectre_bridge_common::Event, String> {
-        let r: String = self
-            .connection
-            .lpop(EVENTS, None)
-            .await
-            .map_err(|e| e.to_string())?;
-        let event =
-            serde_json::from_str::<spectre_bridge_common::Event>(&r).map_err(|e| e.to_string())?;
-        Ok(event)
+    pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
+        let _: () = self.connection.publish(EVENTS, serde_json::to_string(&event).unwrap()).await.unwrap();
     }
 
     pub async fn hset(
@@ -132,18 +108,15 @@ impl AsyncRedisWrapper {
     pub async fn _increase_profit(&mut self, add_to: u64) -> RedisResult<()> {
         let profit: i32 = self
             .connection
-            .hget(REDIS_PROFIT_HASH, "profit".to_string())
-            .await
+            .hget(REDIS_PROFIT_HASH, "profit".to_string()).await
             .ok()
             .unwrap_or(0); // In case we don't have initial value in DB
 
-        self.connection
-            .hset(
-                REDIS_PROFIT_HASH,
-                "profit".to_string(),
-                add_to + profit as u64,
-            )
-            .await?;
+        self.connection.hset(
+            REDIS_PROFIT_HASH,
+            "profit".to_string(),
+            add_to + profit as u64,
+        ).await?;
 
         Ok(())
     }
@@ -151,9 +124,31 @@ impl AsyncRedisWrapper {
     // TODO: review. Moved from the redis_wrapper
     pub async fn get_profit(&mut self) -> u64 {
         self.connection
-            .hget(REDIS_PROFIT_HASH, "profit".to_string())
-            .await
+            .hget(REDIS_PROFIT_HASH, "profit".to_string()).await
             .ok()
             .unwrap()
     }
+}
+
+pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(channel: String,
+                                                           redis: std::sync::Arc<std::sync::Mutex<AsyncRedisWrapper>>)
+    -> RedisResult<tokio::sync::mpsc::Receiver<T>>
+{
+    let (sender, receiver) = tokio::sync::mpsc::channel::<T>(100);
+    tokio::spawn(
+        async move {
+            let client = redis.lock().unwrap().client.clone();
+            let mut pubsub_connection = client.get_async_connection().await.expect("REDIS: Failed to get connection").into_pubsub();
+            pubsub_connection.subscribe(channel).await.expect("Failed to subscribe to the channel");
+            let mut pubsub_stream = pubsub_connection.on_message();
+
+            while let Some(s) = pubsub_stream.next().await {
+                let pubsub_msg: T = s.get_payload().expect("Failed to fetch the message");
+                if let Err(e) = sender.send(pubsub_msg).await {
+                    break;
+                }
+            }
+        }
+    );
+    Ok(receiver)
 }

@@ -2,15 +2,13 @@ mod approve;
 mod async_redis_wrapper;
 mod config;
 mod last_block;
-mod message;
-mod message_handler;
 mod near;
 mod private_key;
 mod profit_estimation;
-mod redis_publisher;
-mod redis_subscriber;
 mod transfer;
 mod unlock_tokens;
+mod message;
+mod message_handler;
 
 #[macro_use]
 extern crate rocket;
@@ -20,6 +18,8 @@ use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[get("/health")]
 fn health() -> String {
@@ -27,9 +27,7 @@ fn health() -> String {
 }
 
 #[get("/transactions")]
-async fn transactions(
-    redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>,
-) -> String {
+async fn transactions(redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>) -> String {
     let mut r = redis.lock().unwrap().clone();
     json!(r.get_all().await).to_string()
 }
@@ -64,16 +62,12 @@ fn set_allowed_tokens(input: String, settings: &State<Settings>) {
 }
 
 #[get("/profit")]
-async fn profit(
-    redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>,
-) -> String {
+async fn profit(redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>) -> String {
     let mut r = redis.lock().unwrap().clone();
     json!(r.get_profit().await).to_string()
 }
 
 extern crate redis;
-
-pub fn alo(a: spectre_bridge_common::Event) {}
 
 #[rocket::main]
 async fn main() {
@@ -90,18 +84,26 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
-    let _ = near::run_worker(
-        &settings.near_settings.contract_address,
-        async_redis.clone(),
-        {
-            let mut r = async_redis.lock().unwrap().clone();
-            if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {
-                b
-            } else {
-                settings.near_settings.near_lake_init_block
-            }
-        },
+    let near_worker = near::run_worker(&settings.near_settings.contract_address,
+                                       async_redis.clone(),
+                                       {
+                                           /*let mut r = async_redis.lock().unwrap().clone();
+                                           if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                                           else {settings.near_settings.near_lake_init_block}*/
+                                           settings.near_settings.near_lake_init_block
+                                       }
     );
+
+    let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
+    let subscriber = async move {
+        while let Some(msg) = stream.recv().await {
+            if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+                println!("event {:?}", event);
+            }
+        }
+    };
+
+    tokio::join!(near_worker, subscriber);  // tests...
 
     last_block::last_block_number_worker(
         "https://rpc.testnet.near.org".to_string(),
@@ -114,7 +116,7 @@ async fn main() {
         15,
         storage.clone(),
     )
-    .await;
+        .await;
 
     unlock_tokens::unlock_tokens_worker(
         "https://rpc.testnet.near.org".to_string(),
@@ -129,17 +131,9 @@ async fn main() {
         storage.clone(),
         async_redis.clone(),
     )
-    .await;
+        .await;
 
-    redis_subscriber::subscribe("channel1".to_string(), async_redis.clone()).await;
-    redis_publisher::publish(
-        "channel1".to_string(),
-        message::Message::default(),
-        async_redis.clone(),
-    )
-    .await;
-
-    let _res = rocket::build()
+    let rocket = rocket::build()
         .mount(
             "/v1",
             routes![
@@ -153,8 +147,7 @@ async fn main() {
         .manage(settings)
         .manage(storage)
         .manage(async_redis)
-        .launch()
-        .await;
+        .launch();
 }
 
 #[cfg(test)]

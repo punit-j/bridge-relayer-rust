@@ -3,21 +3,19 @@ use near_lake_framework::near_indexer_primitives::views::{
     StateChangeValueView, StateChangeWithCauseView,
 };
 use near_lake_framework::{LakeConfig, LakeConfigBuilder};
+use std::str::FromStr;
 use redis::AsyncCommands;
 use rocket::form::validate::Len;
 use std::io::Write;
-use std::str::FromStr;
-//use spectre_bridge_common;
 use serde_json::json;
 use spectre_bridge_common::Event;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
-pub async fn run_worker(
-    contract_name: &AccountId,
-    redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-    start_block: u64,
-) {
+pub async fn run_worker(contract_name: &AccountId,
+                        redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+                        start_block: u64) {
+
     let config = LakeConfigBuilder::default()
         .testnet()
         .start_block_height(start_block)
@@ -38,7 +36,7 @@ pub async fn run_worker(
                                 Ok(r) => {
                                     println!("Push event: {:?}", r);
                                     let mut redis = redis.lock().unwrap().clone();
-                                    redis.event_push(r).await;
+                                    redis.event_pub(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {
@@ -53,13 +51,8 @@ pub async fn run_worker(
         }
         let mut r = redis.lock().unwrap().clone();
         // store block number to redis
-        let _: () = r
-            .option_set(
-                OPTION_START_BLOCK,
-                streamer_message.block.header.height as u64 + 1,
-            )
-            .await
-            .unwrap();
+        let _: () = r.option_set(OPTION_START_BLOCK, streamer_message.block.header.height as u64 + 1)
+            .await.unwrap();
     }
 }
 
