@@ -7,8 +7,6 @@ use std::str::FromStr;
 use redis::AsyncCommands;
 use rocket::form::validate::Len;
 use std::io::Write;
-use std::str::FromStr;
-//use spectre_bridge_common;
 use serde_json::json;
 use spectre_bridge_common::Event;
 
@@ -38,7 +36,7 @@ pub async fn run_worker(contract_name: &AccountId,
                                 Ok(r) => {
                                     println!("Push event: {:?}", r);
                                     let mut redis = redis.lock().unwrap().clone();
-                                    redis.event_push(r).await;
+                                    redis.event_pub(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {

@@ -9,8 +9,6 @@ mod profit_estimation;
 mod transfer;
 mod transfer_event;
 mod unlock_tokens;
-mod redis_subscriber;
-mod redis_publisher;
 mod message;
 mod message_handler;
 
@@ -22,6 +20,8 @@ use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[get("/health")]
 fn health() -> String {
@@ -86,14 +86,26 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
-    let _ = near::run_worker(&settings.near_settings.contract_address,
-                             async_redis.clone(),
-                             {
-                                 let mut r = async_redis.lock().unwrap().clone();
-                                 if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                                 else {settings.near_settings.near_lake_init_block}
-                             }
+    let near_worker = near::run_worker(&settings.near_settings.contract_address,
+                                       async_redis.clone(),
+                                       {
+                                           /*let mut r = async_redis.lock().unwrap().clone();
+                                           if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                                           else {settings.near_settings.near_lake_init_block}*/
+                                           settings.near_settings.near_lake_init_block
+                                       }
     );
+
+    let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
+    let subscriber = async move {
+        while let Some(msg) = stream.recv().await {
+            if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+                println!("event {:?}", event);
+            }
+        }
+    };
+
+    tokio::join!(near_worker, subscriber);  // tests...
 
     last_block::last_block_number_worker(
         "https://rpc.testnet.near.org".to_string(),
@@ -123,10 +135,7 @@ async fn main() {
     )
         .await;
 
-    redis_subscriber::subscribe("channel1".to_string(), async_redis.clone()).await;
-    redis_publisher::publish("channel1".to_string(), message::Message::default(), async_redis.clone()).await;
-
-    let _res = rocket::build()
+    let rocket = rocket::build()
         .mount(
             "/v1",
             routes![
@@ -140,8 +149,7 @@ async fn main() {
         .manage(settings)
         .manage(storage)
         .manage(async_redis)
-        .launch()
-        .await;
+        .launch();
 }
 
 #[cfg(test)]
