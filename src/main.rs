@@ -9,8 +9,6 @@ mod profit_estimation;
 mod transfer;
 mod transfer_event;
 mod unlock_tokens;
-mod redis_subscriber;
-mod redis_publisher;
 mod message;
 mod message_handler;
 
