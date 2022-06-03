@@ -19,7 +19,7 @@ pub async fn execute_transfer(
     } else {
         panic!("Incorrect event passed")
     };
-    let token = web3::types::Address::from(transfer_message.2.token);
+    let token = web3::types::Address::from(transfer_message.2.token_eth);
     let recipient = web3::types::Address::from(transfer_message.3);
     let nonce = web3::types::U256::from(transfer_message.0 .0);
     let amount = web3::types::U256::from(transfer_message.2.amount.0);
