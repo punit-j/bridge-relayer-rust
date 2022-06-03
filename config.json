@@ -1,6 +1,6 @@
 {
   "eth":{
-    "contract_address":"0x4F04E2dbEB74016CE52F5A6D136C65AE0C61e236",
+    "contract_address":"0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
     "private_key":"",
     "rpc_url":"https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a"
   },

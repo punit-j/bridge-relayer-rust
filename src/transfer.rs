@@ -3,10 +3,12 @@ pub async fn execute_transfer(
     private_key: &str,
     transfer_message: spectre_bridge_common::Event,
     contract_abi: &[u8],
-    config: crate::config::Settings,
-) -> String {
-    let server_addr = config.eth_settings.rpc_url.as_str();
-    let contract_addr = config.eth_settings.contract_address.as_str();
+    rpc_url: &str,
+    contract_addr: &str,
+    profit_threshold: f64
+) -> Result<web3::types::H256, String> {
+    //let server_addr = config.eth_settings.rpc_url.as_str();
+    //let contract_addr = config.eth_settings.contract_address.as_str();
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeNonceEvent {
         nonce,
@@ -25,15 +27,15 @@ pub async fn execute_transfer(
     let amount = web3::types::U256::from(transfer_message.2.amount.0);
     let method_args = (token, recipient, nonce, amount);
     let estimated_gas_in_wei = eth_client::methods::estimate_gas(
-        server_addr,
+        rpc_url,
         from,
         contract_abi,
         method_name,
         method_args,
     )
-    .await
-    .expect("Failed to estimate gas in WEI");
-    let gas_price_in_wei = eth_client::methods::gas_price(server_addr)
+        .await
+        .expect("Failed to estimate gas in WEI");
+    let gas_price_in_wei = eth_client::methods::gas_price(rpc_url)
         .await
         .expect("Failed to fetch gas price in WEI");
     let eth_price_in_usd = eth_client::methods::eth_price()
@@ -44,29 +46,27 @@ pub async fn execute_transfer(
         gas_price_in_wei,
         eth_price_in_usd,
     );
-    let profit_threshold = config.profit_thershold.lock().unwrap().to_owned() as f64;
+    //let profit_threshold = config.profit_thershold.lock().unwrap().to_owned() as f64;
     let is_profitable_tx = crate::profit_estimation::is_profitable(
         token,
         amount,
         estimated_transfer_execution_price,
         profit_threshold,
     )
-    .await;
+        .await;
     match is_profitable_tx {
         true => {
             let tx_hash = eth_client::methods::change(
-                server_addr,
+                rpc_url,
                 contract_addr,
                 contract_abi,
                 method_name,
                 method_args,
                 private_key,
-            )
-            .await
-            .expect("Failed to execute tokens transfer");
-            format!("{:#?}", tx_hash)
+            ).await.map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
+            Ok(tx_hash)
         }
-        false => "".to_string(),
+        false => Err("is_profitable_tx is false".to_string()),
     }
 }
 
@@ -133,8 +133,8 @@ pub mod tests {
             method_name,
             method_args,
         )
-        .await
-        .expect("Failed to estimate gas in WEI");
+            .await
+            .expect("Failed to estimate gas in WEI");
         assert_ne!(estimated_gas_in_wei, web3::types::U256::from(0));
 
         let gas_price_in_wei = eth_client::methods::gas_price(ETH_RPC_ENDPOINT_URL)
@@ -163,7 +163,7 @@ pub mod tests {
             estimated_transfer_execution_price,
             profit_threshold,
         )
-        .await;
+            .await;
         let result = match is_profitable_tx {
             true => {
                 let tx_hash = eth_client::methods::change(
@@ -174,7 +174,7 @@ pub mod tests {
                     method_args,
                     private_key,
                 )
-                .await;
+                    .await;
                 assert!(tx_hash.is_ok());
                 format!("{:#?}", tx_hash)
             }
