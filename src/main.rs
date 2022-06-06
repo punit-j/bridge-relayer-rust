@@ -18,8 +18,10 @@ use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
+use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
+use secp256k1::ffi::PublicKey;
 
 #[get("/health")]
 fn health() -> String {
@@ -99,6 +101,32 @@ async fn main() {
         while let Some(msg) = stream.recv().await {
             if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
                 println!("event {:?}", event);
+
+                let abi = std::fs::read("/home/misha/trash/abi.json").unwrap();
+                let priv_key = (&(std::fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).to_string();
+                let contract_addr = web3::types::Address::from_str("bC685C003884c394eBB5F9235a1DBe9cbdc6c9d6").unwrap();
+                let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
+
+                let secp = secp256k1::Secp256k1::new();
+                //let pubkey = secp256k1::PublicKey::from_secret_key(&secp, &priv_key);
+                let pubkey: &'static str  = "2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633";
+
+
+
+                match event {
+                    spectre_bridge_common::Event::SpectreBridgeTransferEvent{nonce, chain_id, valid_till, transfer, fee, recipient} => {
+                        println!("{:?} {:?}", priv_key, pubkey);
+
+                        //transfer::execute_transfer(pubkey, priv_key.as_str(), event, &[], "", "", 0.0)
+                    },
+                    spectre_bridge_common::Event::SpectreBridgeNonceEvent { nonce, account, transfer, recipient } => {
+
+                    },
+                    _ => {}
+                }
+
+
+
             }
         }
     };
