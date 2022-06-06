@@ -10,21 +10,23 @@ pub async fn execute_transfer(
     //let server_addr = config.eth_settings.rpc_url.as_str();
     //let contract_addr = config.eth_settings.contract_address.as_str();
     let method_name = "transferTokens";
-    let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeNonceEvent {
+    let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
         nonce,
-        account,
+        chain_id,
+        valid_till,
         transfer,
+        fee,
         recipient,
     } = transfer_message
     {
-        (nonce, account, transfer, recipient)
+        (nonce, chain_id, valid_till, transfer, fee, recipient)
     } else {
         panic!("Incorrect event passed")
     };
-    let token = web3::types::Address::from(transfer_message.2.token_eth);
-    let recipient = web3::types::Address::from(transfer_message.3);
+    let token = web3::types::Address::from(transfer_message.3.token_eth);
+    let recipient = web3::types::Address::from(transfer_message.5);
     let nonce = web3::types::U256::from(transfer_message.0 .0);
-    let amount = web3::types::U256::from(transfer_message.2.amount.0);
+    let amount = web3::types::U256::from(transfer_message.3.amount.0);
     let method_args = (token, recipient, nonce, amount);
     let estimated_gas_in_wei = eth_client::methods::estimate_gas(
         rpc_url,
@@ -84,35 +86,43 @@ pub mod tests {
         let from = "0x87b1fF03B64Fe4Bd063d8c6F7A01357FBEEdD51b";
         let private_key = "ebefaa0570e26ce96cf0876ff68648027de39b30119b16953aa93e73d35064c1";
 
-        let transfer_message = spectre_bridge_common::Event::SpectreBridgeNonceEvent {
+        let transfer_message = spectre_bridge_common::Event::SpectreBridgeTransferEvent {
             nonce: near_sdk::json_types::U128(979797),
-            account: near_sdk::AccountId::from_str(&"alisa".to_string()).unwrap(),
+            chain_id: 0,
+            valid_till: 0,
             transfer: spectre_bridge_common::TransferDataEthereum {
-                token: web3::types::H160::from_str("0xb2d75C5a142A68BDA438e6a318C7FBB2242f9693")
+                token_near: near_sdk::AccountId::from_str(&"token".to_string()).unwrap(),
+                token_eth: web3::types::H160::from_str("0xb2d75C5a142A68BDA438e6a318C7FBB2242f9693")
                     .unwrap()
                     .0,
                 amount: near_sdk::json_types::U128(1),
+            },
+            fee: spectre_bridge_common::TransferDataNear {
+                token: near_sdk::AccountId::from_str(&"token".to_string()).unwrap(),
+                amount: 0.into(),
             },
             recipient: web3::types::H160::from_str("0x87b1fF03B64Fe4Bd063d8c6F7A01357FBEEdD51b")
                 .unwrap()
                 .0,
         };
 
-        let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeNonceEvent {
+        let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
             nonce,
-            account,
+            chain_id,
+            valid_till,
             transfer,
+            fee,
             recipient,
         } = transfer_message
         {
-            (nonce, account, transfer, recipient)
+            (nonce, chain_id, valid_till, transfer, fee, recipient)
         } else {
             panic!("Incorrect event passed")
         };
-        let token = web3::types::Address::from(transfer_message.2.token);
-        let recipient = web3::types::Address::from(transfer_message.3);
+        let token = web3::types::Address::from(transfer_message.3.token_eth);
+        let recipient = web3::types::Address::from(transfer_message.5);
         let nonce = web3::types::U256::from(transfer_message.0 .0);
-        let amount = web3::types::U256::from(transfer_message.2.amount.0);
+        let amount = web3::types::U256::from(transfer_message.3.amount.0);
 
         let contract_addr = "0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84";
 

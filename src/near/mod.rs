@@ -3,22 +3,23 @@ use near_lake_framework::near_indexer_primitives::views::{
     StateChangeValueView, StateChangeWithCauseView,
 };
 use near_lake_framework::{LakeConfig, LakeConfigBuilder};
-use std::str::FromStr;
 use redis::AsyncCommands;
 use rocket::form::validate::Len;
-use std::io::Write;
 use serde_json::json;
 use spectre_bridge_common::Event;
+use std::io::Write;
+use std::str::FromStr;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
-pub async fn run_worker(contract_name: &AccountId,
-                        redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-                        start_block: u64) {
-
+pub async fn run_worker(
+    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
+    redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+) {
+    let near_settings = settings.lock().unwrap().near.clone();
     let config = LakeConfigBuilder::default()
         .testnet()
-        .start_block_height(start_block)
+        .start_block_height(near_settings.near_lake_init_block)
         .build()
         .expect("Failed to build LakeConfig");
 
@@ -29,7 +30,7 @@ pub async fn run_worker(contract_name: &AccountId,
     while let Some(streamer_message) = stream.recv().await {
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
-                if *contract_name == outcome.receipt.receiver_id {
+                if near_settings.contract_address == outcome.receipt.receiver_id {
                     for log in outcome.execution_outcome.outcome.logs {
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
@@ -51,8 +52,13 @@ pub async fn run_worker(contract_name: &AccountId,
         }
         let mut r = redis.lock().unwrap().clone();
         // store block number to redis
-        let _: () = r.option_set(OPTION_START_BLOCK, streamer_message.block.header.height as u64 + 1)
-            .await.unwrap();
+        let _: () = r
+            .option_set(
+                OPTION_START_BLOCK,
+                streamer_message.block.header.height as u64 + 1,
+            )
+            .await
+            .unwrap();
     }
 }
 
