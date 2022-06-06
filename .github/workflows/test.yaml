@@ -15,12 +15,17 @@ jobs:
         with:
           submodules: recursive
           ssh-key: ${{ secrets.submodulessh }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
       - uses: actions-rs/cargo@v1
         with:
-          command: fmt check
+          command: fmt
+          args: check
       - uses: actions-rs/cargo@v1
         with:
-          command: clippy check
+          command: clippy
+          args: check
       - uses: actions-rs/cargo@v1
         with:
           command: build
