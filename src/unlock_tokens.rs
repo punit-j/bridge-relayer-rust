@@ -1,8 +1,8 @@
-pub async fn unlock_tokens(
-    server_addr: String,
+async fn unlock_tokens(
+    server_addr: url::Url,
     signer_account_id: String,
     signer_secret_key: String,
-    contract_address: String,
+    contract_account_id: String,
     proof: spectre_bridge_common::Proof,
     nonce: u128,
     gas: u64,
@@ -11,11 +11,11 @@ pub async fn unlock_tokens(
         server_addr,
         signer_account_id,
         signer_secret_key,
-        contract_address,
+        contract_account_id,
         "lp_unlock".to_string(),
         near_sdk::serde_json::json!({
-            "proof": proof,
             "nonce": near_sdk::json_types::U128(nonce),
+            "proof": proof,
         }),
         gas,
         0,
@@ -26,21 +26,22 @@ pub async fn unlock_tokens(
 }
 
 pub async fn unlock_tokens_worker(
-    server_addr: String,
     signer_account_id: String,
     signer_secret_key: String,
-    contract_address: String,
     gas: u64,
-    request_interval_sec: u64,
-    some_number: u64,
+    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
     storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
 ) -> redis::RedisResult<()> {
     tokio::spawn(async move {
-        let mut interval =
-            tokio::time::interval(tokio::time::Duration::from_secs(request_interval_sec));
         let mut connection = redis.lock().unwrap().clone();
         loop {
+            let unlock_tokens_worker_settings =
+                settings.lock().unwrap().unlock_tokens_worker.clone();
+            crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
+                .await
+                .tick()
+                .await;
             match connection
                 .lpop()
                 .await
@@ -56,13 +57,15 @@ pub async fn unlock_tokens_worker(
                         .hget(tx_hash.clone())
                         .await
                         .expect("REDIS: Failed to get TransactionData by tx_hash from set");
-                    match tx_data.block + some_number <= last_block_number {
+                    match tx_data.block + unlock_tokens_worker_settings.some_blocks_number
+                        <= last_block_number
+                    {
                         true => {
                             crate::unlock_tokens::unlock_tokens(
-                                server_addr.clone(),
+                                unlock_tokens_worker_settings.server_addr,
                                 signer_account_id.clone(),
                                 signer_secret_key.clone(),
-                                contract_address.clone(),
+                                unlock_tokens_worker_settings.contract_account_id,
                                 tx_data.proof,
                                 tx_data.nonce,
                                 gas,
@@ -81,7 +84,6 @@ pub async fn unlock_tokens_worker(
                 }
                 None => (),
             }
-            interval.tick().await;
         }
     });
     Ok(())
@@ -93,7 +95,7 @@ pub mod tests {
     #[tokio::test]
     pub async fn unlock_tokens() {
         let response = super::unlock_tokens(
-            "https://rpc.testnet.near.org".to_string(),
+            url::Url::parse("https://rpc.testnet.near.org").unwrap(),
             "arseniyrest.testnet".to_string(),
             near_client::read_private_key::read_private_key_from_file(
                 "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",

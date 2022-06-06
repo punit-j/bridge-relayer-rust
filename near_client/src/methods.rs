@@ -7,7 +7,7 @@ use near_primitives::views::{FinalExecutionOutcomeView, QueryRequest};
 use tokio::time;
 
 pub async fn view(
-    server_addr: String,
+    server_addr: url::Url,
     contract_account_id: String,
     method_name: String,
     args: serde_json::Value,
@@ -25,7 +25,7 @@ pub async fn view(
 }
 
 pub async fn change(
-    server_addr: String,
+    server_addr: url::Url,
     signer_account_id: String,
     signer_secret_key: String,
     receiver_id: String,
