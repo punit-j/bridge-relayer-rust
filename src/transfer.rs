@@ -6,8 +6,8 @@ pub async fn execute_transfer(
     contract_abi: &[u8],
     config: crate::config::Settings,
 ) -> String {
-    let server_addr = config.eth_settings.rpc_url.as_str();
-    let contract_addr = config.eth_settings.contract_address.as_str();
+    let server_addr = config.eth.rpc_url.as_str();
+    let contract_addr = config.eth.contract_address.as_str();
     let method_name = "transferTokens";
     let method_args = (
         transfer_message.transfer.token,
@@ -35,7 +35,7 @@ pub async fn execute_transfer(
         gas_price_in_wei,
         eth_price_in_usd,
     );
-    let profit_threshold = config.profit_thershold.lock().unwrap().to_owned() as f64;
+    let profit_threshold = config.profit_thershold.to_owned() as f64;
     let is_profitable_tx = crate::profit_estimation::is_profitable(
         transfer_message.fee,
         estimated_transfer_execution_price,

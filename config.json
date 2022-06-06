@@ -4,35 +4,40 @@
     "private_key":"",
     "rpc_url":"https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a"
   },
+  "eth_bridge_counterpart":{
+    "contract_address":"0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84"
+  },
+  "eth_light_client":{
+    "contract_address":"transfer.spectrebridge.testnet"
+  },
+  "etherscan_api":{
+    "api_key":"",
+    "endpoint_url":"https://api-goerli.etherscan.io"
+  },
+  "last_block_number_worker":{
+    "contract_account_id":"client6.goerli.testnet",
+    "request_interval_secs":15,
+    "server_addr":"https://rpc.testnet.near.org"
+  },
   "near":{
     "allowed_tokens":[
       "token8.spectrebridge.testnet",
       "token16.spectrebridge.testnet"
     ],
     "contract_address":"transfer.spectrebridge2.testnet",
+    "near_lake_init_block":90587572,
     "private_key":"",
-    "rpc_url":"https://rpc.testnet.near.org",
-    "near_lake_init_block": 90587572
+    "rpc_url":"https://rpc.testnet.near.org"
   },
-  "profit_thershold":2999,
-  "vault_addr": "http://127.0.0.1:8200/v1/kv/",
+  "profit_thershold":999,
   "redis":{
     "url":"redis://127.0.0.1/"
   },
-  "etherscan_api": {
-    "endpoint_url": "https://api-goerli.etherscan.io",
-    "api_key": ""
+  "unlock_tokens_worker":{
+    "contract_account_id":"transfer.spectrebridge2.testnet",
+    "request_interval_secs":15,
+    "server_addr":"https://rpc.testnet.near.org",
+    "some_blocks_number":5
   },
-  "last_block_number_worker": {
-    "request_interval": 15
-  },
-  "unlock_tokens_worker": {
-    "request_interval": 15
-  },
-  "eth_light_client": {
-    "contract_address": "transfer.spectrebridge.testnet"
-  },
-  "eth_bridge_counterpart": {
-    "contract_address": "0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84"
-  }
+  "vault_addr":"http://127.0.0.1:8200/v1/kv/"
 }

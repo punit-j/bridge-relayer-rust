@@ -5,6 +5,8 @@ pub struct Message {
 
 impl Message {
     pub fn default() -> Self {
-        Message { field: "Hello, World!".to_string() }
+        Message {
+            field: "Hello, World!".to_string(),
+        }
     }
 }
