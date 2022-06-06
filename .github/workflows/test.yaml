@@ -1,0 +1,24 @@
+name: spectre-bridge-service test automatically
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["!main"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.submodulessh }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo fmt --check
+      - run: cargo clippy check
+      - run: cargo build
+      - run: cargo test
