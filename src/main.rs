@@ -97,26 +97,30 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
-    let near_worker = near::run_worker(settings.clone(),
+    let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
+    let near_lake_init_block = settings.lock().unwrap().near.near_lake_init_block;
+    let near_worker = near::run_worker(near_contract_address,
                                        async_redis.clone(),
-                                    //    {
-                                    //        /*let mut r = async_redis.lock().unwrap().clone();
-                                    //        if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                                    //        else {settings.near_settings.near_lake_init_block}*/
-                                    //        0//settings.lock().unwrap().near.near_lake_init_block
-                                    //    }
+                                       {
+                                           /*let mut r = async_redis.lock().unwrap().clone();
+                                           if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                                           else {settings.near_settings.near_lake_init_block}*/
+                                           near_lake_init_block
+                                       }
     );
-    near_worker.await;
 
     let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
     let subscriber = async move {
+        let settings = settings.clone();
+        let contract_addr = settings.lock().unwrap().eth.contract_address.clone();
+        let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
         while let Some(msg) = stream.recv().await {
             if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
                 println!("event {:?}", event);
 
                 let abi = std::fs::read("/home/misha/trash/abi.json").unwrap();
                 let priv_key = (&(std::fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).to_string();
-                let contract_addr = web3::types::Address::from_str("bC685C003884c394eBB5F9235a1DBe9cbdc6c9d6").unwrap();
+                //let contract_addr = web3::types::Address::from_str("bC685C003884c394eBB5F9235a1DBe9cbdc6c9d6").unwrap();
                 let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
 
                 let secp = secp256k1::Secp256k1::new();
@@ -128,45 +132,46 @@ async fn main() {
                     spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient } => {
                         println!("{:?} {:?}", priv_key, pubkey);
 
-                        //transfer::execute_transfer(pubkey, priv_key.as_str(), event, &[], "", "", 0.0)
+                        transfer::execute_transfer(pubkey, priv_key.as_str(),
+                                                   spectre_bridge_common::Event::SpectreBridgeTransferEvent{nonce, chain_id, valid_till, transfer, fee, recipient},
+                                                   &abi, rpc_url.as_str(), contract_addr.as_str(), 0.0);
                     },
-                    spectre_bridge_common::Event::SpectreBridgeNonceEvent { nonce, account, transfer, recipient } => {},
                     _ => {}
                 }
             }
         }
     };
-    /*
-        let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
 
-        let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
-            "arseniyrest.testnet".to_string(),
-            near_client::read_private_key::read_private_key_from_file(
-                "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
-            ),
-            300_000_000_000_000,
-            settings.clone(),
-            storage.clone,
-            async_redis.clone(),
-        );
+    //let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
+/*
+    let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
+        "arseniyrest.testnet".to_string(),
+        near_client::read_private_key::read_private_key_from_file(
+            "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
+        ),
+        300_000_000_000_000,
+        settings.clone(),
+        storage.clone,
+        async_redis.clone(),
+    );
 
-        let rocket = rocket::build()
-            .mount(
-                "/v1",
-                routes![
+    let rocket = rocket::build()
+        .mount(
+            "/v1",
+            routes![
                     health,
                     transactions,
                     set_threshold,
                     set_allowed_tokens,
                     profit
                 ],
-            )
-            .manage(settings)
-            .manage(storage)
-            .manage(async_redis)
-            .launch();
+        )
+        .manage(settings)
+        .manage(storage)
+        .manage(async_redis)
+        .launch();
     */
-    //tokio::join!(near_worker, subscriber/*, rocket*/); // tests...
+    tokio::join!(near_worker, subscriber, /*rocket*/); // tests...
 }
 
 #[cfg(test)]
