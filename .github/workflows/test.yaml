@@ -18,7 +18,13 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - run: cargo fmt --check
-      - run: cargo clippy check
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args:  --manifest-path ./Cargo.toml --all -- --check
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args:  --manifest-path ./Cargo.toml -- -A clippy::too-many-arguments -D warnings
       - run: cargo build
       - run: cargo test
