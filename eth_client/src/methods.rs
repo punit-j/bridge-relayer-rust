@@ -131,9 +131,16 @@ pub async fn token_price(contract_address: web3::types::Address) -> Result<f64, 
     }
 }
 
-pub async fn block(server_addr: &str, block_number: web3::types::BlockNumber) -> web3::contract::Result<web3::types::Block<web3::types::H256>> {
+pub async fn block(
+    server_addr: &str,
+    block_number: web3::types::BlockNumber,
+) -> web3::contract::Result<web3::types::Block<web3::types::H256>> {
     let transport = web3::transports::Http::new(server_addr)?;
     let client = web3::Web3::new(transport);
-    let block = client.eth().block(web3::types::BlockId::Number(block_number)).await.expect("Failed to get block");
+    let block = client
+        .eth()
+        .block(web3::types::BlockId::Number(block_number))
+        .await
+        .expect("Failed to get block");
     Ok(block.unwrap())
 }
