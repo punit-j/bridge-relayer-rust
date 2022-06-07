@@ -7,8 +7,6 @@ pub async fn execute_transfer(
     contract_addr: &str,
     profit_threshold: f64
 ) -> Result<web3::types::H256, String> {
-    //let server_addr = config.eth_settings.rpc_url.as_str();
-    //let contract_addr = config.eth_settings.contract_address.as_str();
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
         nonce,
@@ -21,7 +19,7 @@ pub async fn execute_transfer(
     {
         (nonce, chain_id, valid_till, transfer, fee, recipient)
     } else {
-        panic!("Incorrect event passed")
+        return Err("Incorrect event passed".to_string());
     };
     let token = web3::types::Address::from(transfer_message.3.token_eth);
     let recipient = web3::types::Address::from(transfer_message.5);

@@ -110,33 +110,37 @@ async fn main() {
     );
 
     let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
-    let subscriber = async move {
+    let subscriber = {
         let settings = settings.clone();
         let contract_addr = settings.lock().unwrap().eth.contract_address.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-        while let Some(msg) = stream.recv().await {
-            if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
-                println!("event {:?}", event);
+        async move {
+            while let Some(msg) = stream.recv().await {
+                if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+                    println!("event {:?}", event);
 
-                let abi = std::fs::read("/home/misha/trash/abi.json").unwrap();
-                let priv_key = (&(std::fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).to_string();
-                //let contract_addr = web3::types::Address::from_str("bC685C003884c394eBB5F9235a1DBe9cbdc6c9d6").unwrap();
-                let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
+                    let abi = std::fs::read("/home/misha/trash/abi.json").unwrap();
+                    let priv_key = (&(std::fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).to_string();
+                    //let contract_addr = web3::types::Address::from_str("bC685C003884c394eBB5F9235a1DBe9cbdc6c9d6").unwrap();
+                    let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
 
-                let secp = secp256k1::Secp256k1::new();
-                //let pubkey = secp256k1::PublicKey::from_secret_key(&secp, &priv_key);
-                let pubkey: &'static str = "2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633";
+                    let secp = secp256k1::Secp256k1::new();
+                    //let pubkey = secp256k1::PublicKey::from_secret_key(&secp, &priv_key);
+                    let pubkey: &'static str = "2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633";
 
+                    match event {
+                        spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
+                            println!("{:?} {:?}", priv_key, pubkey);
 
-                match event {
-                    spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient } => {
-                        println!("{:?} {:?}", priv_key, pubkey);
+                            // TODO: Haddcoded token
+                            transfer.token_eth = spectre_bridge_common::EthAddress::from(token_addr);
 
-                        transfer::execute_transfer(pubkey, priv_key.as_str(),
-                                                   spectre_bridge_common::Event::SpectreBridgeTransferEvent{nonce, chain_id, valid_till, transfer, fee, recipient},
-                                                   &abi, rpc_url.as_str(), contract_addr.as_str(), 0.0);
-                    },
-                    _ => {}
+                            transfer::execute_transfer(pubkey, priv_key.as_str(),
+                                                       spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
+                                                       &abi, rpc_url.as_str(), contract_addr.as_str(), 0.0);
+                        },
+                        _ => {}
+                    }
                 }
             }
         }
@@ -151,7 +155,7 @@ async fn main() {
         ),
         300_000_000_000_000,
         settings.clone(),
-        storage.clone,
+        storage.clone(),
         async_redis.clone(),
     );
 
@@ -159,19 +163,19 @@ async fn main() {
         .mount(
             "/v1",
             routes![
-                    health,
-                    transactions,
-                    set_threshold,
-                    set_allowed_tokens,
-                    profit
-                ],
+                               health,
+                               transactions,
+                               set_threshold,
+                               set_allowed_tokens,
+                               profit
+                           ],
         )
         .manage(settings)
         .manage(storage)
         .manage(async_redis)
         .launch();
-    */
-    tokio::join!(near_worker, subscriber, /*rocket*/); // tests...
+*/
+    tokio::join!(near_worker, subscriber, /*rocket, unlock_tokens_worker*/); // tests...
 }
 
 #[cfg(test)]
