@@ -99,7 +99,7 @@ struct Args {
     near_credentials: Option<String>
 }
 
-#[rocket::main]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
 
@@ -144,7 +144,7 @@ async fn main() {
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
-    let near_lake_init_block = settings.lock().unwrap().near.near_lake_init_block;
+
     let near_worker = near::run_worker(near_contract_address,
                                        async_redis.clone(),
                                        {
@@ -192,6 +192,7 @@ async fn main() {
         async_redis.clone(),
     );
 
+/*
     let rocket = rocket::build()
         .mount(
             "/v1",
@@ -205,10 +206,9 @@ async fn main() {
         )
         .manage(settings)
         .manage(storage)
-        .manage(async_redis)
-        .launch();
-    /* */
-    tokio::join!(near_worker, subscriber, /*rocket, unlock_tokens_worker*/); // tests...
+        .manage(async_redis);
+*/
+    tokio::join!(near_worker, subscriber, unlock_tokens_worker, /*rocket.launch()*/);
 }
 
 #[cfg(test)]
