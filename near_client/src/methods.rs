@@ -26,8 +26,7 @@ pub async fn view(
 
 pub async fn change(
     server_addr: url::Url,
-    signer_account_id: String,
-    signer_secret_key: String,
+    signer: near_crypto::InMemorySigner,
     receiver_id: String,
     method_name: String,
     args: serde_json::Value,
@@ -35,9 +34,6 @@ pub async fn change(
     deposit: u128,
 ) -> Result<FinalExecutionOutcomeView, Box<dyn std::error::Error>> {
     let client = JsonRpcClient::connect(server_addr);
-    let signer_account_id = signer_account_id.parse()?;
-    let signer_secret_key = signer_secret_key.parse()?;
-    let signer = near_crypto::InMemorySigner::from_secret_key(signer_account_id, signer_secret_key);
     let access_key_query_response = client
         .call(methods::query::RpcQueryRequest {
             block_reference: BlockReference::latest(),

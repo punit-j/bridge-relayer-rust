@@ -25,6 +25,8 @@ use std::time::Duration;
 use borsh::BorshSerialize;
 use secp256k1::ffi::PublicKey;
 use clap::Parser;
+use near_crypto;
+use redis::Value;
 
 #[get("/health")]
 fn health() -> String {
@@ -91,6 +93,10 @@ struct Args {
     /// eth secret key
     #[clap(long)]
     eth_secret: Option<String>,
+
+    /// path to json file
+    #[clap(long)]
+    near_credentials: Option<String>
 }
 
 #[rocket::main]
@@ -109,7 +115,7 @@ async fn main() {
             secp256k1::KeyPair::from_seckey_str(&secp,&path.as_str())
         } else {
             secp256k1::KeyPair::from_seckey_str(&secp,&settings.lock().unwrap().eth.private_key)
-        }.expect("Unable to get the Eth key")
+        }.expect("Unable to get an Eth key")
     };
 
     let eth_contract_address = settings.lock().unwrap().eth.contract_address.clone();
@@ -122,6 +128,15 @@ async fn main() {
         .await
         .expect("Failed to get contract abi");
 
+    let near_account =
+        if let Some(path) = args.near_credentials {
+            near_client::read_private_key::read_private_key_from_file(path.as_str())
+        }
+        else {
+            near_client::read_private_key::read_private_key_from_file(settings.lock().unwrap().near.near_credentials_path.as_str())
+        }
+            .unwrap();
+
     let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
         async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await,
     ));
@@ -133,10 +148,9 @@ async fn main() {
     let near_worker = near::run_worker(near_contract_address,
                                        async_redis.clone(),
                                        {
-                                           /*let mut r = async_redis.lock().unwrap().clone();
+                                           let mut r = async_redis.lock().unwrap().clone();
                                            if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                                           else {settings.near_settings.near_lake_init_block}*/
-                                           near_lake_init_block
+                                           else {settings.lock().unwrap().near.near_lake_init_block}
                                        }
     );
 
@@ -169,34 +183,31 @@ async fn main() {
     };
 
     let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
-    /*
-        let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
-            "arseniyrest.testnet".to_string(),
-            near_client::read_private_key::read_private_key_from_file(
-                "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
-            ),
-            300_000_000_000_000,
-            settings.clone(),
-            storage.clone(),
-            async_redis.clone(),
-        );
 
-        let rocket = rocket::build()
-            .mount(
-                "/v1",
-                routes![
+    let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
+        near_account,
+        300_000_000_000_000,
+        settings.clone(),
+        storage.clone(),
+        async_redis.clone(),
+    );
+
+    let rocket = rocket::build()
+        .mount(
+            "/v1",
+            routes![
                                    health,
                                    transactions,
                                    set_threshold,
                                    set_allowed_tokens,
                                    profit
                                ],
-            )
-            .manage(settings)
-            .manage(storage)
-            .manage(async_redis)
-            .launch();
-    */
+        )
+        .manage(settings)
+        .manage(storage)
+        .manage(async_redis)
+        .launch();
+    /* */
     tokio::join!(near_worker, subscriber, /*rocket, unlock_tokens_worker*/); // tests...
 }
 

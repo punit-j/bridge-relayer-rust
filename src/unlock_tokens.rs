@@ -1,7 +1,6 @@
 async fn unlock_tokens(
     server_addr: url::Url,
-    signer_account_id: String,
-    signer_secret_key: String,
+    account: near_crypto::InMemorySigner,
     contract_account_id: String,
     proof: spectre_bridge_common::Proof,
     nonce: u128,
@@ -9,8 +8,7 @@ async fn unlock_tokens(
 ) -> near_primitives::views::FinalExecutionStatus {
     let response = near_client::methods::change(
         server_addr,
-        signer_account_id,
-        signer_secret_key,
+        account,
         contract_account_id,
         "lp_unlock".to_string(),
         near_sdk::serde_json::json!({
@@ -20,14 +18,13 @@ async fn unlock_tokens(
         gas,
         0,
     )
-    .await
-    .expect("Failed to fetch response by calling lp_unlock contract method");
+        .await
+        .expect("Failed to fetch response by calling lp_unlock contract method");
     response.status
 }
 
 pub async fn unlock_tokens_worker(
-    signer_account_id: String,
-    signer_secret_key: String,
+    account: near_crypto::InMemorySigner,
     gas: u64,
     settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
     storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
@@ -63,14 +60,13 @@ pub async fn unlock_tokens_worker(
                         true => {
                             crate::unlock_tokens::unlock_tokens(
                                 unlock_tokens_worker_settings.server_addr,
-                                signer_account_id.clone(),
-                                signer_secret_key.clone(),
+                                account.clone(),
                                 unlock_tokens_worker_settings.contract_account_id,
                                 tx_data.proof,
                                 tx_data.nonce,
                                 gas,
                             )
-                            .await;
+                                .await;
                             connection
                                 .hdel(tx_hash.clone())
                                 .await
@@ -105,7 +101,7 @@ pub mod tests {
             909090,
             300_000_000_000_000,
         )
-        .await;
+            .await;
         assert_eq!(response.as_success().is_some(), true);
     }
 }

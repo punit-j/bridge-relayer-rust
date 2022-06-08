@@ -26,7 +26,7 @@
     ],
     "contract_address":"transfer.spectrebridge2.testnet",
     "near_lake_init_block":90753143,
-    "private_key":"",
+    "near_credentials_path":"",
     "rpc_url":"https://rpc.testnet.near.org"
   },
   "profit_thershold":999,
