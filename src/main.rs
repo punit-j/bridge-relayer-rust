@@ -22,7 +22,9 @@ use std::env;
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
+use borsh::BorshSerialize;
 use secp256k1::ffi::PublicKey;
+use clap::Parser;
 
 #[get("/health")]
 fn health() -> String {
@@ -79,17 +81,46 @@ async fn profit(
 
 extern crate redis;
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// config file
+    #[clap(short, long)]
+    config: String,
+
+    /// eth secret key
+    #[clap(long)]
+    eth_secret: Option<String>,
+}
+
 #[rocket::main]
 async fn main() {
-    // Reading arguments that was given to binary
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
 
-    let config_file_path = args.get(1).unwrap().to_string();
-
-    let settings = match Settings::init(config_file_path) {
+    let settings = match Settings::init(args.config) {
         Ok(s) => std::sync::Arc::new(std::sync::Mutex::new(s)),
         Err(msg) => panic!("{}", msg),
     };
+
+    // If args.eth_secret is valid then get key from it else from settings
+    let eth_keypair = {
+        let secp = secp256k1::Secp256k1::new();
+        if let Some(path) = args.eth_secret {
+            secp256k1::KeyPair::from_seckey_str(&secp,&path.as_str())
+        } else {
+            secp256k1::KeyPair::from_seckey_str(&secp,&settings.lock().unwrap().eth.private_key)
+        }.expect("Unable to get the Eth key")
+    };
+
+    let eth_contract_address = settings.lock().unwrap().eth.contract_address.clone();
+
+    let eth_contract_abi = eth_client::methods::get_contract_abi(
+        "https://api-rinkeby.etherscan.io",
+        eth_contract_address.as_str(),
+        "",
+    )
+        .await
+        .expect("Failed to get contract abi");
 
     let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
         async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await,
@@ -112,32 +143,23 @@ async fn main() {
     let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
     let subscriber = {
         let settings = settings.clone();
-        let contract_addr = settings.lock().unwrap().eth.contract_address.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
                     println!("event {:?}", event);
 
-                    let abi = std::fs::read("/home/misha/trash/abi.json").unwrap();
-                    let priv_key = (&(std::fs::read_to_string("/home/misha/trash/acc2prk").unwrap().as_str())[..64]).to_string();
-                    //let contract_addr = web3::types::Address::from_str("bC685C003884c394eBB5F9235a1DBe9cbdc6c9d6").unwrap();
                     let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
-
-                    let secp = secp256k1::Secp256k1::new();
-                    //let pubkey = secp256k1::PublicKey::from_secret_key(&secp, &priv_key);
-                    let pubkey: &'static str = "2a23E0Fa3Afe77AFf5dc6c6a007E3A10c1450633";
 
                     match event {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
-                            println!("{:?} {:?}", priv_key, pubkey);
 
                             // TODO: Haddcoded token
                             transfer.token_eth = spectre_bridge_common::EthAddress::from(token_addr);
 
-                            transfer::execute_transfer(pubkey, priv_key.as_str(),
+                            transfer::execute_transfer(eth_keypair.public_key().to_string().as_str(), eth_keypair.display_secret().to_string().as_str(), // TODO: don't sure
                                                        spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
-                                                       &abi, rpc_url.as_str(), contract_addr.as_str(), 0.0);
+                                                       &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.as_str(), 0.0);
                         },
                         _ => {}
                     }
@@ -146,35 +168,35 @@ async fn main() {
         }
     };
 
-    //let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
-/*
-    let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
-        "arseniyrest.testnet".to_string(),
-        near_client::read_private_key::read_private_key_from_file(
-            "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
-        ),
-        300_000_000_000_000,
-        settings.clone(),
-        storage.clone(),
-        async_redis.clone(),
-    );
+    let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
+    /*
+        let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
+            "arseniyrest.testnet".to_string(),
+            near_client::read_private_key::read_private_key_from_file(
+                "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
+            ),
+            300_000_000_000_000,
+            settings.clone(),
+            storage.clone(),
+            async_redis.clone(),
+        );
 
-    let rocket = rocket::build()
-        .mount(
-            "/v1",
-            routes![
-                               health,
-                               transactions,
-                               set_threshold,
-                               set_allowed_tokens,
-                               profit
-                           ],
-        )
-        .manage(settings)
-        .manage(storage)
-        .manage(async_redis)
-        .launch();
-*/
+        let rocket = rocket::build()
+            .mount(
+                "/v1",
+                routes![
+                                   health,
+                                   transactions,
+                                   set_threshold,
+                                   set_allowed_tokens,
+                                   profit
+                               ],
+            )
+            .manage(settings)
+            .manage(storage)
+            .manage(async_redis)
+            .launch();
+    */
     tokio::join!(near_worker, subscriber, /*rocket, unlock_tokens_worker*/); // tests...
 }
 
