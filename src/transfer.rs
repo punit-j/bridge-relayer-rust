@@ -46,7 +46,7 @@ pub async fn execute_transfer(
         gas_price_in_wei,
         eth_price_in_usd,
     );
-    //let profit_threshold = config.profit_thershold.lock().unwrap().to_owned() as f64;
+
     let is_profitable_tx = crate::profit_estimation::is_profitable(
         token,
         amount,
@@ -54,20 +54,20 @@ pub async fn execute_transfer(
         profit_threshold,
     )
         .await;
-    match is_profitable_tx {
-        true => {
-            let tx_hash = eth_client::methods::change(
-                rpc_url,
-                contract_addr,
-                contract_abi,
-                method_name,
-                method_args,
-                private_key,
-            ).await.map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
-            Ok(tx_hash)
-        }
-        false => Err("is_profitable_tx is false".to_string()),
+
+    if !is_profitable_tx {
+        return Err("transaction is not profitable".to_string());
     }
+
+    let tx_hash = eth_client::methods::change(
+        rpc_url,
+        contract_addr,
+        contract_abi,
+        method_name,
+        method_args,
+        private_key,
+    ).await.map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
+    Ok(tx_hash)
 }
 
 #[cfg(test)]

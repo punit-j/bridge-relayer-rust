@@ -192,7 +192,7 @@ async fn main() {
         async_redis.clone(),
     );
 
-/*
+
     let rocket = rocket::build()
         .mount(
             "/v1",
@@ -207,8 +207,8 @@ async fn main() {
         .manage(settings)
         .manage(storage)
         .manage(async_redis);
-*/
-    tokio::join!(near_worker, subscriber, unlock_tokens_worker, /*rocket.launch()*/);
+
+    tokio::join!(near_worker, subscriber, unlock_tokens_worker, rocket.launch());
 }
 
 #[cfg(test)]
