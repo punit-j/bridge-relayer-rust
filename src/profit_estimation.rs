@@ -1,20 +1,22 @@
 pub async fn is_profitable(
-    fee: crate::transfer_event::Transfer,
+    fee_token: web3::types::H160,
+    fee_amount: web3::types::U256,
     estimated_transfer_execution_price: f64,
     profit_threshold: f64,
 ) -> bool {
     let precision = f64::powf(10.0, 4.0);
-    let token_price = eth_client::methods::token_price(fee.token)
+    let token_price = eth_client::methods::token_price(fee_token)
         .await
         .expect("Failed to get token price");
     let token_price = web3::types::U256::from((token_price * precision) as u64);
-    let fee_amount = web3::types::U256::from(fee.amount);
     let fee_amount_usd = token_price.checked_mul(fee_amount).unwrap().as_u64() as f64 / precision;
     fee_amount_usd - estimated_transfer_execution_price > profit_threshold
 }
 
 #[cfg(test)]
 pub mod tests {
+
+    use std::str::FromStr;
 
     #[tokio::test]
     pub async fn is_profitable() {
@@ -49,12 +51,8 @@ pub mod tests {
         assert_eq!(
             true,
             super::is_profitable(
-                crate::transfer_event::Transfer {
-                    token: "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
-                        .parse()
-                        .unwrap(),
-                    amount: 1000
-                },
+                web3::types::Address::from_str("0xb2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap(),
+                web3::types::U256::from(1),
                 eth_client::methods::estimate_transfer_execution(
                     estimated_gas_in_wei,
                     gas_price_in_wei,

@@ -13,13 +13,13 @@ use std::str::FromStr;
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
 pub async fn run_worker(
-    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
+    contract_name: AccountId,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+    start_block: u64
 ) {
-    let near_settings = settings.lock().unwrap().near.clone();
     let config = LakeConfigBuilder::default()
         .testnet()
-        .start_block_height(near_settings.near_lake_init_block)
+        .start_block_height(start_block)
         .build()
         .expect("Failed to build LakeConfig");
 
@@ -30,7 +30,7 @@ pub async fn run_worker(
     while let Some(streamer_message) = stream.recv().await {
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
-                if near_settings.contract_address == outcome.receipt.receiver_id {
+                if contract_name == outcome.receipt.receiver_id {
                     for log in outcome.execution_outcome.outcome.logs {
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {

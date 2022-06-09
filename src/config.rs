@@ -45,7 +45,7 @@ pub struct EthSettings {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NearSettings {
-    pub private_key: String,
+    pub near_credentials_path: String,
     pub rpc_url: Url,
     pub contract_address: near_lake_framework::near_indexer_primitives::types::AccountId,
     pub allowed_tokens: Vec<AccountId>,
