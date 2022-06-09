@@ -106,15 +106,13 @@ pub async fn eth_price() -> Result<f64, reqwest::Error> {
     }
 }
 
-pub async fn token_price(contract_address: web3::types::Address) -> Result<f64, reqwest::Error> {
+pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
     let client = coingecko::CoinGeckoClient::default();
     match client.ping().await {
         Ok(_) => {
-            let contract_address = &*format!("{:?}", contract_address);
             Ok(client
-                .token_price(
-                    "ethereum",
-                    &[contract_address],
+                .price(
+                    &[coin_id.clone()],
                     &["usd"],
                     true,
                     true,
@@ -122,8 +120,8 @@ pub async fn token_price(contract_address: web3::types::Address) -> Result<f64, 
                     true,
                 )
                 .await?
-                .get(contract_address)
-                .expect("Invalid contract address")
+                .get(&coin_id)
+                .expect("Invalid coin id")
                 .usd
                 .unwrap())
         }

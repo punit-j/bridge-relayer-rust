@@ -1,11 +1,11 @@
 pub async fn is_profitable(
-    fee_token: web3::types::H160,
+    coin_id: String,
     fee_amount: web3::types::U256,
     estimated_transfer_execution_price: f64,
     profit_threshold: f64,
 ) -> bool {
     let precision = f64::powf(10.0, 4.0);
-    let token_price = eth_client::methods::token_price(fee_token)
+    let token_price = eth_client::methods::token_price(coin_id)
         .await
         .expect("Failed to get token price");
     let token_price = web3::types::U256::from((token_price * precision) as u64);
@@ -51,7 +51,7 @@ pub mod tests {
         assert_eq!(
             true,
             super::is_profitable(
-                web3::types::Address::from_str("0xb2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap(),
+                "wrapped-near".to_string(),
                 web3::types::U256::from(1),
                 eth_client::methods::estimate_transfer_execution(
                     estimated_gas_in_wei,

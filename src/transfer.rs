@@ -5,7 +5,8 @@ pub async fn execute_transfer(
     contract_abi: &[u8],
     rpc_url: &str,
     contract_addr: &str,
-    profit_threshold: f64
+    profit_threshold: f64,
+    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
 ) -> Result<web3::types::H256, String> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -21,6 +22,7 @@ pub async fn execute_transfer(
     } else {
         return Err("Incorrect event passed".to_string());
     };
+
     let token = web3::types::Address::from(transfer_message.3.token_eth);
     let recipient = web3::types::Address::from(transfer_message.5);
     let nonce = web3::types::U256::from(transfer_message.0 .0);
@@ -47,9 +49,12 @@ pub async fn execute_transfer(
         eth_price_in_usd,
     );
 
+    let fee_token = transfer_message.4.token;
+    let coin_id = settings.lock().unwrap().near_tokens_coin_id.get_coin_id(fee_token);
+    let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
     let is_profitable_tx = crate::profit_estimation::is_profitable(
-        token,
-        amount,
+        coin_id,
+        fee_amount,
         estimated_transfer_execution_price,
         profit_threshold,
     )
@@ -89,14 +94,14 @@ pub mod tests {
             chain_id: 0,
             valid_till: 0,
             transfer: spectre_bridge_common::TransferDataEthereum {
-                token_near: near_sdk::AccountId::from_str(&"token".to_string()).unwrap(),
+                token_near: near_sdk::AccountId::from_str("token").unwrap(),
                 token_eth: web3::types::H160::from_str("0xb2d75C5a142A68BDA438e6a318C7FBB2242f9693")
                     .unwrap()
                     .0,
                 amount: near_sdk::json_types::U128(1),
             },
             fee: spectre_bridge_common::TransferDataNear {
-                token: near_sdk::AccountId::from_str(&"token".to_string()).unwrap(),
+                token: near_sdk::AccountId::from_str("wrap.near").unwrap(),
                 amount: 0.into(),
             },
             recipient: web3::types::H160::from_str("0x87b1fF03B64Fe4Bd063d8c6F7A01357FBEEdD51b")
@@ -165,9 +170,12 @@ pub mod tests {
         let profit_threshold = 1.0;
         assert_ne!(profit_threshold, 0.0);
 
+        let fee_token = transfer_message.4.token;
+        let coin_id = "wrapped-near".to_string();
+        let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
         let is_profitable_tx = crate::profit_estimation::is_profitable(
-            token,
-            amount,
+            coin_id,
+            fee_amount,
             estimated_transfer_execution_price,
             profit_threshold,
         )

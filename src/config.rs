@@ -6,6 +6,17 @@ use std::str::FromStr;
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct NearTokensCoinId {
+    pub mapping: std::collections::HashMap<near_sdk::AccountId, String>,
+}
+
+impl NearTokensCoinId {
+    pub fn get_coin_id(&self, near_token_account_id: near_sdk::AccountId) -> String {
+        self.mapping.get(&near_token_account_id).unwrap().to_string()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EthBridgeCounterpartSettings {
     pub contract_address: String,
 }
@@ -71,6 +82,7 @@ pub struct Settings {
     pub unlock_tokens_worker: UnlockTokensWorkerSettings,
     pub eth_light_client: EthLightClientSettings,
     pub eth_bridge_counterpart: EthBridgeCounterpartSettings,
+    pub near_tokens_coin_id: NearTokensCoinId,
 }
 
 impl Settings {
@@ -101,7 +113,7 @@ impl Settings {
                 nested_value = nested_value.get_mut(val).unwrap().borrow_mut();
             }
         }
-        let json_final: String = serde_json::to_string(&json).unwrap();
+        let json_final: String = serde_json::to_string_pretty(&json).unwrap();
         fs::write(self.config_path.as_str(), &json_final).expect("Unable to write file");
     }
 
@@ -115,6 +127,14 @@ impl Settings {
         self.set_json_value(
             vec!["near".to_string(), "allowed_tokens".to_string()],
             json!(tokens),
+        );
+    }
+
+    pub fn set_near_tokens_coin_id(&mut self, mapping: std::collections::HashMap<near_sdk::AccountId, String>) {
+        self.near_tokens_coin_id.mapping = mapping.clone();
+        self.set_json_value(
+            vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
+            json!(mapping),
         );
     }
 }
