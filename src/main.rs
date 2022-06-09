@@ -163,14 +163,8 @@ async fn main() {
                 if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
                     println!("event {:?}", event);
 
-                    let token_addr = web3::types::Address::from_str("b2d75C5a142A68BDA438e6a318C7FBB2242f9693").unwrap();
-
                     match event {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
-
-                            // TODO: Haddcoded token
-                            transfer.token_eth = spectre_bridge_common::EthAddress::from(token_addr);
-
                             transfer::execute_transfer(eth_keypair.public_key().to_string().as_str(), eth_keypair.display_secret().to_string().as_str(), // TODO: don't sure
                                                        spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
                                                        &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.as_str(), 0.0);
