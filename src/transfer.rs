@@ -1,3 +1,5 @@
+use crate::config;
+
 pub async fn execute_transfer(
     from: &str,
     private_key: &str,
@@ -6,7 +8,7 @@ pub async fn execute_transfer(
     rpc_url: &str,
     contract_addr: &str,
     profit_threshold: f64,
-    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
+    near_tokens_coin_id: &crate::config::NearTokensCoinId
 ) -> Result<web3::types::H256, String> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -50,7 +52,7 @@ pub async fn execute_transfer(
     );
 
     let fee_token = transfer_message.4.token;
-    let coin_id = settings.lock().unwrap().near_tokens_coin_id.get_coin_id(fee_token);
+    let coin_id = near_tokens_coin_id.get_coin_id(fee_token);
     let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
     let is_profitable_tx = crate::profit_estimation::is_profitable(
         coin_id,
