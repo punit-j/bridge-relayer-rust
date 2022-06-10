@@ -92,10 +92,9 @@ pub mod tests {
     pub async fn unlock_tokens() {
         let response = super::unlock_tokens(
             url::Url::parse("https://rpc.testnet.near.org").unwrap(),
-            "arseniyrest.testnet".to_string(),
             near_client::read_private_key::read_private_key_from_file(
                 "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
-            ),
+            ).unwrap(),
             "transfer.spectrebridge.testnet".to_string(),
             spectre_bridge_common::Proof::default(),
             909090,

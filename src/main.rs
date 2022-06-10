@@ -7,8 +7,6 @@ mod private_key;
 mod profit_estimation;
 mod transfer;
 mod unlock_tokens;
-mod message;
-mod message_handler;
 mod utils;
 
 #[macro_use]
@@ -165,9 +163,11 @@ async fn main() {
 
                     match event {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
+                            let near_tokens_coin_id= &settings.lock().unwrap().near_tokens_coin_id;
+
                             transfer::execute_transfer(eth_keypair.public_key().to_string().as_str(), eth_keypair.display_secret().to_string().as_str(), // TODO: don't sure
                                                        spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
-                                                       &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.as_str(), 0.0);
+                                                       &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.as_str(), 0.0, near_tokens_coin_id);
                         },
                         _ => {}
                     }
@@ -207,7 +207,6 @@ async fn main() {
 
 #[cfg(test)]
 pub mod tests {
-    /*
         const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
         const ETH_RPC_ENDPOINT_URL: &str =
             "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";
@@ -240,5 +239,5 @@ pub mod tests {
             let status = reqwest::get(ETHERSCAN_RPC_ENDPOINT_URL).await;
             assert!(status.is_ok());
             assert_eq!(reqwest::StatusCode::OK, status.unwrap().status());
-        }*/
+        }
 }
