@@ -112,7 +112,7 @@ pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
         Ok(_) => {
             Ok(client
                 .price(
-                    &[coin_id.clone()],
+                    &[&coin_id],
                     &["usd"],
                     true,
                     true,
