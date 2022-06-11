@@ -1,10 +1,10 @@
 pub async fn approve(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
     spender: &str,
     amount: u128,
-    private_key: &str,
+    key: impl web3::signing::Key,
 ) -> String {
     let spender: web3::types::H160 = spender.parse().unwrap();
     let amount = web3::types::U256::from(amount);
@@ -14,7 +14,7 @@ pub async fn approve(
         contract_abi,
         "approve",
         (spender, amount),
-        private_key,
+        key,
     )
     .await
     .expect("Failed to execute approve method");

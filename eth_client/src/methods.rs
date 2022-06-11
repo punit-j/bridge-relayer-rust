@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 pub fn construct_contract_interface(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
 ) -> web3::contract::Result<web3::contract::Contract<web3::transports::Http>> {
     let transport = web3::transports::Http::new(server_addr)?;
     let client = web3::Web3::new(transport);
     Ok(web3::contract::Contract::from_json(
         client.eth(),
-        contract_addr.parse().unwrap(),
+        contract_addr,
         contract_abi,
     )?)
 }
@@ -32,11 +32,11 @@ pub async fn get_contract_abi(
 
 pub async fn change(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
-    private_key: &str,
+    key: impl web3::signing::Key,
 ) -> web3::contract::Result<web3::types::H256> {
     let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
     Ok(abi
@@ -44,7 +44,7 @@ pub async fn change(
             method_name,
             args,
             web3::contract::Options::default(),
-            &secp256k1::SecretKey::from_str(private_key).unwrap(),
+            key,
         )
         .await?)
 }
@@ -57,7 +57,7 @@ pub async fn gas_price(server_addr: &str) -> web3::contract::Result<web3::types:
 
 pub async fn estimate_gas(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
@@ -67,7 +67,7 @@ pub async fn estimate_gas(
         .estimate_gas(
             method_name,
             args,
-            contract_addr.parse().unwrap(),
+            contract_addr,
             web3::contract::Options::default(),
         )
         .await?)

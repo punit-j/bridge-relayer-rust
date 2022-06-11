@@ -17,6 +17,7 @@ use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
+use std::ops::Deref;
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
@@ -25,6 +26,7 @@ use secp256k1::ffi::PublicKey;
 use clap::Parser;
 use near_crypto;
 use redis::Value;
+use web3::signing::Key;
 
 #[get("/health")]
 fn health() -> String {
@@ -108,19 +110,19 @@ async fn main() {
 
     // If args.eth_secret is valid then get key from it else from settings
     let eth_keypair = {
-        let secp = secp256k1::Secp256k1::new();
         if let Some(path) = args.eth_secret {
-            secp256k1::KeyPair::from_seckey_str(&secp,&path.as_str())
+            secp256k1::SecretKey::from_str(&path.as_str())
         } else {
-            secp256k1::KeyPair::from_seckey_str(&secp,&settings.lock().unwrap().eth.private_key)
+            secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
         }.expect("Unable to get an Eth key")
     };
+    let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
 
-    let eth_contract_address = settings.lock().unwrap().eth.contract_address.clone();
+    let eth_contract_address = web3::types::Address::from_str(settings.lock().unwrap().eth.contract_address.as_str()).unwrap();
 
     let eth_contract_abi = eth_client::methods::get_contract_abi(
         "https://api-rinkeby.etherscan.io",
-        eth_contract_address.as_str(),
+        eth_contract_address.to_string().as_str(),
         "",
     )
         .await
@@ -156,6 +158,7 @@ async fn main() {
     let subscriber = {
         let settings = settings.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
+        let eth_keypair= eth_keypair.clone();
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
@@ -165,9 +168,10 @@ async fn main() {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
                             let near_tokens_coin_id= &settings.lock().unwrap().near_tokens_coin_id;
 
-                            transfer::execute_transfer(eth_keypair.public_key().to_string().as_str(), eth_keypair.display_secret().to_string().as_str(), // TODO: don't sure
+                            transfer::execute_transfer(&eth_keypair,
                                                        spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
-                                                       &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.as_str(), 0.0, near_tokens_coin_id);
+                                                       &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.clone(), 0.0, near_tokens_coin_id);
+
                         },
                         _ => {}
                     }
@@ -207,37 +211,37 @@ async fn main() {
 
 #[cfg(test)]
 pub mod tests {
-        const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
-        const ETH_RPC_ENDPOINT_URL: &str =
-            "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";
-        const ETHERSCAN_RPC_ENDPOINT_URL: &str = "https://api-goerli.etherscan.io";
+    const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
+    const ETH_RPC_ENDPOINT_URL: &str =
+        "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";
+    const ETHERSCAN_RPC_ENDPOINT_URL: &str = "https://api-goerli.etherscan.io";
 
-        #[tokio::test]
-        async fn near_rpc_status() {
-            let client = near_jsonrpc_client::JsonRpcClient::connect(NEAR_RPC_ENDPOINT_URL);
-            let status = client
-                .call(near_jsonrpc_client::methods::status::RpcStatusRequest)
-                .await;
-            assert!(
-                matches!(
+    #[tokio::test]
+    async fn near_rpc_status() {
+        let client = near_jsonrpc_client::JsonRpcClient::connect(NEAR_RPC_ENDPOINT_URL);
+        let status = client
+            .call(near_jsonrpc_client::methods::status::RpcStatusRequest)
+            .await;
+        assert!(
+            matches!(
                     status,
                     Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
                 ),
-                "expected an Ok(RpcStatusResponse), found [{:?}]",
-                status
-            );
-        }
+            "expected an Ok(RpcStatusResponse), found [{:?}]",
+            status
+        );
+    }
 
-        #[tokio::test]
-        pub async fn eth_rpc_status() {
-            let transport = web3::transports::Http::new(ETH_RPC_ENDPOINT_URL);
-            assert!(transport.is_ok());
-        }
+    #[tokio::test]
+    pub async fn eth_rpc_status() {
+        let transport = web3::transports::Http::new(ETH_RPC_ENDPOINT_URL);
+        assert!(transport.is_ok());
+    }
 
-        #[tokio::test]
-        pub async fn etherscan_rpc_status() {
-            let status = reqwest::get(ETHERSCAN_RPC_ENDPOINT_URL).await;
-            assert!(status.is_ok());
-            assert_eq!(reqwest::StatusCode::OK, status.unwrap().status());
-        }
+    #[tokio::test]
+    pub async fn etherscan_rpc_status() {
+        let status = reqwest::get(ETHERSCAN_RPC_ENDPOINT_URL).await;
+        assert!(status.is_ok());
+        assert_eq!(reqwest::StatusCode::OK, status.unwrap().status());
+    }
 }

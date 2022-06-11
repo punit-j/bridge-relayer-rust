@@ -1,12 +1,12 @@
 use crate::config;
+use web3::signing::Key;
 
 pub async fn execute_transfer(
-    from: &str,
-    private_key: &str,
+    key: &secp256k1::SecretKey,
     transfer_message: spectre_bridge_common::Event,
     contract_abi: &[u8],
     rpc_url: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     profit_threshold: f64,
     near_tokens_coin_id: &crate::config::NearTokensCoinId
 ) -> Result<web3::types::H256, String> {
@@ -32,7 +32,7 @@ pub async fn execute_transfer(
     let method_args = (token, recipient, nonce, amount);
     let estimated_gas_in_wei = eth_client::methods::estimate_gas(
         rpc_url,
-        from,
+        key.address(),
         contract_abi,
         method_name,
         method_args,
@@ -72,7 +72,7 @@ pub async fn execute_transfer(
         contract_abi,
         method_name,
         method_args,
-        private_key,
+        key,
     ).await.map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
     Ok(tx_hash)
 }
