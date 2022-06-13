@@ -25,8 +25,9 @@ use borsh::BorshSerialize;
 use secp256k1::ffi::PublicKey;
 use clap::Parser;
 use near_crypto;
-use redis::Value;
+use redis::{AsyncCommands, Value};
 use web3::signing::Key;
+use web3::types::H256;
 
 #[get("/health")]
 fn health() -> String {
@@ -147,10 +148,10 @@ async fn main() {
 
     let near_worker = near::run_worker(near_contract_address,
                                        async_redis.clone(),
-                                       {
+                                       {91966098/*
                                            let mut r = async_redis.lock().unwrap().clone();
                                            if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                                           else {settings.lock().unwrap().near.near_lake_init_block}
+                                           else {settings.lock().unwrap().near.near_lake_init_block}*/
                                        }
     );
 
@@ -159,6 +160,7 @@ async fn main() {
         let settings = settings.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
         let eth_keypair= eth_keypair.clone();
+        let redis = async_redis.clone();
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
@@ -168,10 +170,20 @@ async fn main() {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
                             let near_tokens_coin_id= &settings.lock().unwrap().near_tokens_coin_id;
 
-                            transfer::execute_transfer(&eth_keypair,
-                                                       spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
-                                                       &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.clone(), 0.0, near_tokens_coin_id);
+                            let tx_hash = transfer::execute_transfer(&eth_keypair,
+                                                                     spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
+                                                                     &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.clone(), 0.0, near_tokens_coin_id)
+                                .await;
 
+                            match tx_hash {
+                                Ok(hash) => {
+                                    let res: redis::RedisResult<()> = redis.lock().unwrap().connection.hset(async_redis_wrapper::PENDING_TRANSACTIONS, hash.to_string(),
+                                                                                  std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())
+                                        .await;
+                                    if let Err(e) = res { eprintln!("Unable to store pending transaction: {}", e); }
+                                }
+                                Err(e) => { eprintln!("execute_transfer: {}", e); }
+                            }
                         },
                         _ => {}
                     }
@@ -190,23 +202,23 @@ async fn main() {
         async_redis.clone(),
     );
 
-
+/*
     let rocket = rocket::build()
         .mount(
             "/v1",
             routes![
-                                   health,
-                                   transactions,
-                                   set_threshold,
-                                   set_allowed_tokens,
-                                   profit
-                               ],
+                               health,
+                               transactions,
+                               set_threshold,
+                               set_allowed_tokens,
+                               profit
+                           ],
         )
         .manage(settings)
         .manage(storage)
         .manage(async_redis);
-
-    tokio::join!(near_worker, subscriber, unlock_tokens_worker, rocket.launch());
+*/
+    tokio::join!(near_worker, subscriber, /*unlock_tokens_worker, rocket.launch()*/);
 }
 
 #[cfg(test)]
@@ -224,9 +236,9 @@ pub mod tests {
             .await;
         assert!(
             matches!(
-                    status,
-                    Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
-                ),
+                status,
+                Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
+            ),
             "expected an Ok(RpcStatusResponse), found [{:?}]",
             status
         );
