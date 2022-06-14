@@ -28,11 +28,13 @@ use borsh::BorshSerialize;
 use secp256k1::ffi::PublicKey;
 use clap::Parser;
 use near_crypto;
-use redis::{AsyncCommands, Value};
+use redis::{AsyncCommands, RedisResult, Value};
+use spectre_bridge_common::Proof;
 use tokio::task::JoinHandle;
 use url::quirks::hash;
 use web3::signing::Key;
 use web3::types::H256;
+use crate::ethereum::proof::Error;
 
 #[get("/health")]
 fn health() -> String {
@@ -183,8 +185,13 @@ async fn main() {
 
                             match tx_hash {
                                 Ok(hash) => {
+                                    let d = crate::async_redis_wrapper::PendingTransactionData {
+                                        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                        nonce: u128::from(nonce)
+                                    };
+
                                     let res: redis::RedisResult<()> = redis.lock().unwrap().connection.hset(async_redis_wrapper::PENDING_TRANSACTIONS, hash.to_string(),
-                                                                                                            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())
+                                                                                                            serde_json::to_string(&d).unwrap())
                                         .await;
                                     if let Err(e) = res { eprintln!("Unable to store pending transaction: {}", e); }
                                 }
@@ -198,7 +205,7 @@ async fn main() {
         }
     };
 
-    let transactions_worker = {
+    let pending_transactions_worker = {
         let settings = settings.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
         let eth_keypair = eth_keypair.clone();
@@ -211,46 +218,69 @@ async fn main() {
                                                                         &eth_contract_abi.as_bytes(), eth_keypair).unwrap();
 
             // transaction hash and last processed time
-            let mut penging_transactions: HashMap<web3::types::H256, SystemTime> = HashMap::new();
-            // transaction hash and last processed time
-            //let mut waiting_proof_transactions: HashMap<web3::types::H256, SystemTime> = HashMap::new();
+            let mut pending_transactions: HashMap<web3::types::H256, async_redis_wrapper::PendingTransactionData> = HashMap::new();
+
+            const delay_sec: u64 = 20;  // TODO: get from settings
 
             loop {
                 // fill the pending_transactions
-                let mut iter: redis::AsyncIter<(String, u64)> = redis.connection.hscan(async_redis_wrapper::PENDING_TRANSACTIONS).await.unwrap();
+                let mut iter: redis::AsyncIter<(String, String)> = redis.connection.hscan(async_redis_wrapper::PENDING_TRANSACTIONS).await.unwrap();
                 while let Some(pair) = iter.next_item().await {
                     let hash = H256::from_str(pair.0.as_str()).expect("Unable to parse tx hash");
-                    let time = std::time::UNIX_EPOCH + Duration::from_secs(pair.1);
+                    let data = serde_json::from_str::<async_redis_wrapper::PendingTransactionData>(pair.1.as_str()).unwrap();
 
-                    if !penging_transactions.contains_key(&hash) {
-                        penging_transactions.insert(hash, time);
+                    if !pending_transactions.contains_key(&hash) {
+                        pending_transactions.insert(hash, data);
                         println!("New pending transaction: {}", hash)
                     }
                 }
 
-                // process the penging_transactions
+                // process the pending_transactions
                 let mut transactions_to_remove: Vec<H256> = Vec::new();
-                for item in &penging_transactions {
+                for mut item in pending_transactions.iter_mut() {
                     // remove and skip if transaction is already processing
                     if redis.hget(item.0.to_string()).await.is_ok() {
                         transactions_to_remove.push(*item.0);
                     }
-                    else {
+                    else if (item.1.timestamp + delay_sec) < std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() {
                         match eth_client.transaction_status(*item.0).await {
                             Ok(status) => {
                                 match status {
-                                    ethereum::transactions::TransactionStatus::Pengind => {}
-                                    ethereum::transactions::TransactionStatus::Failure => {
-                                        println!("Transfer token transaction is failed {:?}", item.0);
+                                    ethereum::transactions::TransactionStatus::Pengind => {
+                                        // update the timestamp
+                                        item.1.timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                                     }
-                                    ethereum::transactions::TransactionStatus::Sucess => {
+                                    ethereum::transactions::TransactionStatus::Failure(block_number) => {
+                                        println!("Transfer token transaction is failed {:?}", item.0);
+                                        transactions_to_remove.push(*item.0);
+                                    }
+                                    ethereum::transactions::TransactionStatus::Sucess(block_number) => {
+                                        let proof = eth_client.get_proof(item.0).await;
+                                        match proof {
+                                            Ok(proof) => {
+                                                let data = async_redis_wrapper::TransactionData {
+                                                    block: u64::try_from(block_number).unwrap(),
+                                                    proof,
+                                                    nonce: item.1.nonce
+                                                };
 
+                                                let _: () = redis.hset(item.0.to_string(), data).await.unwrap();
+                                                transactions_to_remove.push(*item.0);
+                                            }
+                                            Err(e) => { println!("Error on request transaction status: {:?}", e) }
+                                        }
                                     }
                                 }
                             }
                             Err(e) => { println!("Error on request transaction status: {:?}", e) }
                         }
                     }
+                }
+
+                for item in transactions_to_remove {
+                    let res: RedisResult<()> = redis.connection.hdel(async_redis_wrapper::PENDING_TRANSACTIONS, item.to_string()).await;
+                    if let Err(e) = res { eprintln!("Error on remove pending transaction {}", e); }
+                    pending_transactions.remove(&item);
                 }
 
 
@@ -285,7 +315,7 @@ async fn main() {
             .manage(storage)
             .manage(async_redis);
     */
-    tokio::join!(near_worker, /*subscriber,*/ transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
+    tokio::join!(near_worker, /*subscriber,*/ pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
 }
 
 #[cfg(test)]

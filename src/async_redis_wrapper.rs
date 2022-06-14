@@ -15,6 +15,12 @@ pub struct TransactionData {
     pub nonce: u128,
 }
 
+#[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PendingTransactionData {
+    pub timestamp: u64,
+    pub nonce: u128,
+}
+
 pub const OPTIONS: &str = "options";
 
 // Set of pairs <TX_HASH, TX_DATA>
