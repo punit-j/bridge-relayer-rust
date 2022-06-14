@@ -25,21 +25,21 @@ pub async fn transfer_token<'a, T: web3::Transport>(contract: &'a Contract<T>,
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransactionStatus {
     Pengind,
-    Failure,
-    Sucess
+    Failure(web3::types::U64),  // block_number
+    Sucess(web3::types::U64)  // block_number
 }
 
 pub async fn transaction_status<T: web3::Transport>(client: &api::Eth<T>, tx_hash: web3::types::H256)
                                                     -> web3::error::Result<TransactionStatus> {
     let res = client.transaction(TransactionId::from(tx_hash.clone())).await?.ok_or(web3::error::Error::Unreachable)?;
-
     if res.block_number.is_none() {
         return Ok(TransactionStatus::Pengind);
     }
 
     let res = client.transaction_receipt(tx_hash).await?.ok_or(web3::error::Error::Unreachable)?;
     if let Some(s) = res.status {
-        return Ok(if s==web3::types::U64::from(0) {TransactionStatus::Failure} else {TransactionStatus::Sucess});
+        let block_number = res.block_number.unwrap();
+        return Ok(if s==web3::types::U64::from(0) {TransactionStatus::Failure(block_number) } else {TransactionStatus::Sucess(block_number)});
     }
 
     Err(web3::error::Error::Unreachable)
