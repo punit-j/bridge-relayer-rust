@@ -3,6 +3,7 @@ mod async_redis_wrapper;
 mod config;
 mod last_block;
 mod near;
+mod ethereum;
 mod private_key;
 mod profit_estimation;
 mod transfer;
@@ -12,20 +13,24 @@ mod utils;
 #[macro_use]
 extern crate rocket;
 
+use std::collections::HashMap;
 use crate::config::Settings;
 use near_sdk::AccountId;
 use rocket::State;
 use serde_json::json;
 use std::env;
 use std::ops::Deref;
+use std::os::linux::raw::stat;
 use std::str::FromStr;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use borsh::BorshSerialize;
 use secp256k1::ffi::PublicKey;
 use clap::Parser;
 use near_crypto;
 use redis::{AsyncCommands, Value};
+use tokio::task::JoinHandle;
+use url::quirks::hash;
 use web3::signing::Key;
 use web3::types::H256;
 
@@ -161,6 +166,7 @@ async fn main() {
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
         let eth_keypair= eth_keypair.clone();
         let redis = async_redis.clone();
+        let eth_contract_abi= &eth_contract_abi;
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
@@ -172,13 +178,13 @@ async fn main() {
 
                             let tx_hash = transfer::execute_transfer(&eth_keypair,
                                                                      spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
-                                                                     &eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.clone(), 0.0, near_tokens_coin_id)
+                                                                     eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.clone(), 0.0, near_tokens_coin_id)
                                 .await;
 
                             match tx_hash {
                                 Ok(hash) => {
                                     let res: redis::RedisResult<()> = redis.lock().unwrap().connection.hset(async_redis_wrapper::PENDING_TRANSACTIONS, hash.to_string(),
-                                                                                  std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())
+                                                                                                            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs())
                                         .await;
                                     if let Err(e) = res { eprintln!("Unable to store pending transaction: {}", e); }
                                 }
@@ -188,6 +194,67 @@ async fn main() {
                         _ => {}
                     }
                 }
+            }
+        }
+    };
+
+    let transactions_worker = {
+        let settings = settings.clone();
+        let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
+        let eth_keypair = eth_keypair.clone();
+        let mut redis = async_redis.lock().unwrap().clone();
+        let eth_contract_abi= &eth_contract_abi;
+        async move {
+            let eth_client = ethereum::RainbowBridgeEthereumClient::new(rpc_url.as_str(),
+                                                                        "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
+                                                                        eth_contract_address,
+                                                                        &eth_contract_abi.as_bytes(), eth_keypair).unwrap();
+
+            // transaction hash and last processed time
+            let mut penging_transactions: HashMap<web3::types::H256, SystemTime> = HashMap::new();
+            // transaction hash and last processed time
+            //let mut waiting_proof_transactions: HashMap<web3::types::H256, SystemTime> = HashMap::new();
+
+            loop {
+                // fill the pending_transactions
+                let mut iter: redis::AsyncIter<(String, u64)> = redis.connection.hscan(async_redis_wrapper::PENDING_TRANSACTIONS).await.unwrap();
+                while let Some(pair) = iter.next_item().await {
+                    let hash = H256::from_str(pair.0.as_str()).expect("Unable to parse tx hash");
+                    let time = std::time::UNIX_EPOCH + Duration::from_secs(pair.1);
+
+                    if !penging_transactions.contains_key(&hash) {
+                        penging_transactions.insert(hash, time);
+                        println!("New pending transaction: {}", hash)
+                    }
+                }
+
+                // process the penging_transactions
+                let mut transactions_to_remove: Vec<H256> = Vec::new();
+                for item in &penging_transactions {
+                    // remove and skip if transaction is already processing
+                    if redis.hget(item.0.to_string()).await.is_ok() {
+                        transactions_to_remove.push(*item.0);
+                    }
+                    else {
+                        match eth_client.transaction_status(*item.0).await {
+                            Ok(status) => {
+                                match status {
+                                    ethereum::transactions::TransactionStatus::Pengind => {}
+                                    ethereum::transactions::TransactionStatus::Failure => {
+                                        println!("Transfer token transaction is failed {:?}", item.0);
+                                    }
+                                    ethereum::transactions::TransactionStatus::Sucess => {
+
+                                    }
+                                }
+                            }
+                            Err(e) => { println!("Error on request transaction status: {:?}", e) }
+                        }
+                    }
+                }
+
+
+                sleep(Duration::from_secs(5));
             }
         }
     };
@@ -202,23 +269,23 @@ async fn main() {
         async_redis.clone(),
     );
 
-/*
-    let rocket = rocket::build()
-        .mount(
-            "/v1",
-            routes![
-                               health,
-                               transactions,
-                               set_threshold,
-                               set_allowed_tokens,
-                               profit
-                           ],
-        )
-        .manage(settings)
-        .manage(storage)
-        .manage(async_redis);
-*/
-    tokio::join!(near_worker, subscriber, /*unlock_tokens_worker, rocket.launch()*/);
+    /*
+        let rocket = rocket::build()
+            .mount(
+                "/v1",
+                routes![
+                                   health,
+                                   transactions,
+                                   set_threshold,
+                                   set_allowed_tokens,
+                                   profit
+                               ],
+            )
+            .manage(settings)
+            .manage(storage)
+            .manage(async_redis);
+    */
+    tokio::join!(near_worker, /*subscriber,*/ transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
 }
 
 #[cfg(test)]

@@ -40,8 +40,8 @@
 //! }
 //! ```
 
-mod proof;
-mod transactions;
+pub mod proof;
+pub mod transactions;
 
 use core::time;
 use std::{

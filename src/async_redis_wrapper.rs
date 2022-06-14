@@ -28,7 +28,7 @@ pub const EVENTS: &str = "events";
 
 pub const PENDING_TRANSACTIONS: &str = "pending_transactions";
 
-pub const ABOUT_TO_PROVING_TRANSACTIONS: &str = "about_to_proving_transactions";
+pub const ABOUT_TO_UNLOCK_TRANSACTIONS: &str = "about_to_proving_transactions";
 
 // TODO: review. Moved from the redis_wrapper
 const REDIS_TRANSACTION_HASH: &str = "myhash";
