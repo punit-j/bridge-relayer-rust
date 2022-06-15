@@ -1,7 +1,7 @@
 {
   "eth": {
-    "contract_address": "0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84",
-    "abi_contract_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
+    "contract_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
+    "abi_contract_address": "0xBa78AE6A68DB5784e26a7DdCccd3939BB6cd5F57",
     "private_key": "",
     "rpc_url": "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a",
     "rpc2_url": "https://api-goerli.etherscan.io"
