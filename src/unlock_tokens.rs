@@ -40,7 +40,7 @@ pub async fn unlock_tokens_worker(
                 .tick()
                 .await;
             match connection
-                .lpop()
+                .lindex()
                 .await
                 .expect("REDIS: Failed to pop first tx_hash in queue")
             {
@@ -58,7 +58,7 @@ pub async fn unlock_tokens_worker(
                         <= last_block_number
                     {
                         true => {
-                            crate::unlock_tokens::unlock_tokens(
+                            let status = crate::unlock_tokens::unlock_tokens(
                                 unlock_tokens_worker_settings.server_addr,
                                 account.clone(),
                                 unlock_tokens_worker_settings.contract_account_id,
@@ -67,10 +67,16 @@ pub async fn unlock_tokens_worker(
                                 gas,
                             )
                                 .await;
-                            connection
+                            if let near_primitives::views::FinalExecutionStatus::SuccessValue(_) = status {
+                                connection
+                                .lpop()
+                                .await
+                                .expect("REDIS: Failed to delete element by tx_hash from queue");
+                                connection
                                 .hdel(tx_hash.clone())
                                 .await
                                 .expect("REDIS: Failed to delete element by tx_hash from set");
+                            }
                         }
                         false => connection
                             .rpush(tx_hash.clone())

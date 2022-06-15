@@ -120,6 +120,14 @@ impl AsyncRedisWrapper {
         }
     }
 
+    pub async fn lindex(&mut self) -> redis::RedisResult<Option<String>> {
+        let tx_hash: Option<String> = self
+            .connection
+            .lindex(TRANSACTION_HASHES, 0)
+            .await?;
+        Ok(tx_hash)
+    }
+
     // TODO: review. Moved from the redis_wrapper
     pub async fn get_all(&mut self) -> Vec<String> {
         let result: Vec<String> = self.connection.hvals(REDIS_TRANSACTION_HASH).await.unwrap();
