@@ -17,11 +17,6 @@ impl NearTokensCoinId {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EthBridgeCounterpartSettings {
-    pub contract_address: String,
-}
-
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EthLightClientSettings {
     pub contract_address: AccountId,
 }
@@ -51,7 +46,9 @@ pub struct UnlockTokensWorkerSettings {
 pub struct EthSettings {
     pub private_key: String,
     pub rpc_url: Url,
+    pub rpc2_url: Url,
     pub contract_address: String,
+    pub abi_contract_address: String,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -81,7 +78,6 @@ pub struct Settings {
     pub last_block_number_worker: LastBlockNumberWorkerSettings,
     pub unlock_tokens_worker: UnlockTokensWorkerSettings,
     pub eth_light_client: EthLightClientSettings,
-    pub eth_bridge_counterpart: EthBridgeCounterpartSettings,
     pub near_tokens_coin_id: NearTokensCoinId,
 }
 

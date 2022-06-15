@@ -129,12 +129,15 @@ async fn main() {
 
     let eth_contract_address = web3::types::Address::from_str(settings.lock().unwrap().eth.contract_address.as_str()).unwrap();
 
-    let eth_contract_abi = eth_client::methods::get_contract_abi(
-        "https://api-rinkeby.etherscan.io",
-        &eth_contract_address,
-        "",
-    )
-        .await
+
+    let eth_contract_abi = {
+        let s = settings.lock().unwrap();
+        eth_client::methods::get_contract_abi(
+            s.eth.rpc2_url.as_str(),
+            &web3::types::Address::from_str(s.eth.abi_contract_address.as_str()).unwrap(),
+            "",
+        ).await
+    }
         .expect("Failed to get contract abi");
 
     let near_account =
@@ -238,7 +241,7 @@ async fn main() {
             .manage(storage)
             .manage(async_redis);
     */
-    tokio::join!(near_worker, /*subscriber,*/ pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
+    tokio::join!(near_worker, subscriber, pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
 }
 
 #[cfg(test)]
