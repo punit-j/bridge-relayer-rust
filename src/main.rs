@@ -131,7 +131,7 @@ async fn main() {
 
     let eth_contract_abi = eth_client::methods::get_contract_abi(
         "https://api-rinkeby.etherscan.io",
-        eth_contract_address.to_string().as_str(),
+        &eth_contract_address,
         "",
     )
         .await

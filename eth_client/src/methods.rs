@@ -17,16 +17,29 @@ pub fn construct_contract_interface(
 // Alternative to this feature: include_bytes!("./<PATH>/<FILENAME.abi>")
 pub async fn get_contract_abi(
     endpoint_url: &str,
-    contract_addr: &str,
+    contract_addr: &web3::types::Address,
     api_key_token: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, String> {
     let response = reqwest::get(format!(
-        "{}/api?module=contract&action=getabi&address={}&apikey={}&format=raw",
+        "{}/api?module=contract&action=getabi&address={:?}&apikey={}&format=raw",
         endpoint_url, contract_addr, api_key_token
     ))
-    .await?
+    .await.map_err(|e| e.to_string())?
     .text()
-    .await?;
+    .await.map_err(|e| e.to_string())?;
+
+    #[derive(Debug, serde::Deserialize)]
+    struct ErrResponse<'a> {
+        message: &'a str,
+        result: &'a str,
+    }
+
+    // check for errors
+    let json = serde_json::from_str::<ErrResponse>(&response);
+    if let Ok(v) = json {
+        return Err(v.result.to_string());
+    }
+
     Ok(response)
 }
 
