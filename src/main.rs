@@ -91,6 +91,50 @@ async fn profit(
     json!(r.get_profit().await).to_string()
 }
 
+//
+// Example of body request
+//
+// {
+//     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
+//      ...
+// }
+// 
+#[post("/set_mapped_tokens", data = "<input>")]
+async fn set_mapped_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
+    settings.lock().unwrap().clone().set_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
+}
+
+#[get("/get_mapped_tokens")]
+async fn get_mapped_tokens(settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) -> String {
+    serde_json::to_string_pretty(&settings.lock().unwrap().clone().near_tokens_coin_id.mapping).expect("Failed to parse to string mapped tokens")
+}
+
+//
+// Example of body request
+//
+// {
+//     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
+//      ...
+// }
+// 
+#[post("/insert_mapped_tokens", data = "<input>")]
+async fn insert_mapped_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
+    settings.lock().unwrap().clone().insert_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
+}
+
+//
+// Example of body request
+//
+// [
+//     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near",
+//     ...
+// ]
+//
+#[post("/remove_mapped_tokens", data = "<input>")]
+async fn remove_mapped_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
+    settings.lock().unwrap().clone().remove_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
+}
+
 extern crate redis;
 
 #[derive(Parser, Debug)]
@@ -114,9 +158,15 @@ async fn main() {
     let args = Args::parse();
 
     let settings = match Settings::init(args.config) {
-        Ok(s) => std::sync::Arc::new(std::sync::Mutex::new(s)),
+        Ok(settings) => std::sync::Arc::new(std::sync::Mutex::new(settings)),
         Err(msg) => panic!("{}", msg),
     };
+
+    let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
+        async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await,
+    ));
+
+    let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     // If args.eth_secret is valid then get key from it else from settings
     let eth_keypair = {
@@ -128,15 +178,14 @@ async fn main() {
     };
     let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
 
-    let eth_contract_address = web3::types::Address::from_str(settings.lock().unwrap().eth.contract_address.as_str()).unwrap();
-
+    let eth_contract_address = settings.lock().unwrap().clone().eth.bridge_proxy_address;
 
     let eth_contract_abi = {
         let s = settings.lock().unwrap();
         eth_client::methods::get_contract_abi(
-            s.eth.rpc2_url.as_str(),
-            &web3::types::Address::from_str(s.eth.abi_contract_address.as_str()).unwrap(),
-            "",
+            &s.etherscan_api.endpoint_url,
+            s.eth.bridge_impl_address,
+            &s.etherscan_api.api_key,
         ).await
     }
         .expect("Failed to get contract abi");
@@ -149,12 +198,6 @@ async fn main() {
             near_client::read_private_key::read_private_key_from_file(settings.lock().unwrap().near.near_credentials_path.as_str())
         }
             .unwrap();
-
-    let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
-        async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await,
-    ));
-
-    let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
 
@@ -232,7 +275,7 @@ async fn main() {
         async_redis.clone(),
     );
 
-    /*
+    
         let rocket = rocket::build()
             .mount(
                 "/v1",
@@ -241,14 +284,20 @@ async fn main() {
                                    transactions,
                                    set_threshold,
                                    set_allowed_tokens,
-                                   profit
+                                   profit,
+                                   set_mapped_tokens,
+                                   get_mapped_tokens,
+                                   insert_mapped_tokens,
+                                   remove_mapped_tokens,
                                ],
             )
             .manage(settings)
             .manage(storage)
             .manage(async_redis);
-    */
-    tokio::join!(near_worker, subscriber, pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
+    
+    // tokio::join!(near_worker, subscriber, pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
+
+    tokio::join!(rocket.launch());
 }
 
 #[cfg(test)]

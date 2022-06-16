@@ -45,11 +45,7 @@ pub async fn unlock_tokens_worker(
                 .expect("REDIS: Failed to pop first tx_hash in queue")
             {
                 Some(tx_hash) => {
-                    let mut last_block_number: u64;
-                    {
-                        let mut storage = storage.lock().unwrap();
-                        last_block_number = *storage.last_block_number.lock().unwrap();
-                    }
+                    let last_block_number = storage.lock().unwrap().clone().last_block_number;
                     let tx_data = connection
                         .hget(tx_hash.clone())
                         .await

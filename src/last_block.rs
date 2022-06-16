@@ -1,13 +1,14 @@
 use near_sdk::borsh::BorshDeserialize;
 
+#[derive(Clone, Debug)]
 pub struct Storage {
-    pub last_block_number: std::sync::Mutex<u64>,
+    pub last_block_number: u64,
 }
 
 impl Storage {
     pub fn new() -> Self {
         Storage {
-            last_block_number: std::sync::Mutex::new(0),
+            last_block_number: 0,
         }
     }
 }
@@ -32,10 +33,7 @@ pub async fn last_block_number_worker(
             )
             .await
             .expect("Failed to fetch result by calling last_block_number view contract method");
-            {
-                let mut storage = storage.lock().unwrap();
-                storage.last_block_number = std::sync::Mutex::new(number);
-            }
+            storage.lock().unwrap().last_block_number = number;
         }
     });
 }
@@ -64,7 +62,7 @@ pub mod tests {
     pub async fn query_storage_data(
         storage: std::sync::Arc<std::sync::Mutex<super::Storage>>,
     ) -> u64 {
-        *storage.lock().unwrap().last_block_number.lock().unwrap()
+        storage.lock().unwrap().last_block_number
     }
 
     pub async fn mocked_last_block_number_worker(
@@ -75,8 +73,7 @@ pub mod tests {
         let number = super::last_block_number(server_addr.clone(), contract_account_id.clone())
             .await
             .expect("Failed to fetch response by calling last_block_number contract method");
-        let mut storage = storage.lock().unwrap();
-        storage.last_block_number = std::sync::Mutex::new(number);
+        storage.lock().unwrap().last_block_number = number;
     }
 
     #[tokio::test]

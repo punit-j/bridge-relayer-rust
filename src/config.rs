@@ -11,19 +11,14 @@ pub struct NearTokensCoinId {
 }
 
 impl NearTokensCoinId {
-    pub fn get_coin_id(&self, near_token_account_id: near_sdk::AccountId) -> String {
-        self.mapping.get(&near_token_account_id).unwrap().to_string()
+    pub fn get_coin_id(&self, near_token_account_id: near_sdk::AccountId) -> Option<String> {
+        Some(self.mapping.get(&near_token_account_id)?.to_string())
     }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EthLightClientSettings {
-    pub contract_address: AccountId,
-}
-
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EtherscanAPISettings {
-    pub endpoint_url: Url,
+    pub endpoint_url: String,
     pub api_key: String,
 }
 
@@ -44,12 +39,10 @@ pub struct UnlockTokensWorkerSettings {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EthSettings {
+    pub bridge_proxy_address: web3::types::Address,
+    pub bridge_impl_address: web3::types::Address,
     pub private_key: String,
     pub rpc_url: Url,
-    pub rpc2_url: Url,
-    pub contract_address: String,
-    pub abi_contract_address: String,
-
     #[serde(default)]
     pub pending_transaction_poll_delay_sec: u32
 }
@@ -80,7 +73,6 @@ pub struct Settings {
     pub etherscan_api: EtherscanAPISettings,
     pub last_block_number_worker: LastBlockNumberWorkerSettings,
     pub unlock_tokens_worker: UnlockTokensWorkerSettings,
-    pub eth_light_client: EthLightClientSettings,
     pub near_tokens_coin_id: NearTokensCoinId,
 }
 
@@ -129,11 +121,29 @@ impl Settings {
         );
     }
 
-    pub fn set_near_tokens_coin_id(&mut self, mapping: std::collections::HashMap<near_sdk::AccountId, String>) {
-        self.near_tokens_coin_id.mapping = mapping.clone();
+    pub fn set_mapped_tokens(&mut self, mapped_tokens: std::collections::HashMap<near_sdk::AccountId, String>) {
+        self.near_tokens_coin_id.mapping = mapped_tokens.clone();
         self.set_json_value(
             vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
-            json!(mapping),
+            json!(mapped_tokens),
+        );
+    }
+
+    pub fn insert_mapped_tokens(&mut self, mapped_tokens: std::collections::HashMap<near_sdk::AccountId, String>) {
+        self.near_tokens_coin_id.mapping.extend(mapped_tokens);
+        self.set_json_value(
+            vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
+            json!(self.near_tokens_coin_id.mapping)
+        );
+    }
+
+    pub fn remove_mapped_tokens(&mut self, token_addresses: Vec<near_sdk::AccountId>) {
+        for entry in token_addresses {
+            self.near_tokens_coin_id.mapping.remove(&entry);
+        }
+        self.set_json_value(
+            vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
+            json!(self.near_tokens_coin_id.mapping)
         );
     }
 }

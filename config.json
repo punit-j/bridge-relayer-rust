@@ -1,17 +1,13 @@
 {
   "eth": {
-    "contract_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
-    "abi_contract_address": "0xBa78AE6A68DB5784e26a7DdCccd3939BB6cd5F57",
+    "bridge_impl_address": "0xBa78AE6A68DB5784e26a7DdCccd3939BB6cd5F57",
+    "bridge_proxy_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
+    "pending_transaction_poll_delay_sec": 5,
     "private_key": "",
-    "rpc_url": "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a",
-    "rpc2_url": "https://api-goerli.etherscan.io",
-    "pending_transaction_poll_delay_sec": 5
-  },
-  "eth_light_client": {
-    "contract_address": "transfer.spectrebridge.testnet"
+    "rpc_url": "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a"
   },
   "etherscan_api": {
-    "api_key": "",
+    "api_key": "25PJD4MEHKXRJ8G1J8Z3HU32USC1SH1K3E",
     "endpoint_url": "https://api-goerli.etherscan.io"
   },
   "last_block_number_worker": {

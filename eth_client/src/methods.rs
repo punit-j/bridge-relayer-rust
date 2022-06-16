@@ -17,29 +17,16 @@ pub fn construct_contract_interface(
 // Alternative to this feature: include_bytes!("./<PATH>/<FILENAME.abi>")
 pub async fn get_contract_abi(
     endpoint_url: &str,
-    contract_addr: &web3::types::Address,
+    contract_addr: web3::types::Address,
     api_key_token: &str,
-) -> Result<String, String> {
+) -> Result<String, Box<dyn std::error::Error>> {
     let response = reqwest::get(format!(
         "{}/api?module=contract&action=getabi&address={:?}&apikey={}&format=raw",
         endpoint_url, contract_addr, api_key_token
     ))
-    .await.map_err(|e| e.to_string())?
+    .await?
     .text()
-    .await.map_err(|e| e.to_string())?;
-
-    #[derive(Debug, serde::Deserialize)]
-    struct ErrResponse<'a> {
-        message: &'a str,
-        result: &'a str,
-    }
-
-    // check for errors
-    let json = serde_json::from_str::<ErrResponse>(&response);
-    if let Ok(v) = json {
-        return Err(v.result.to_string());
-    }
-
+    .await?;
     Ok(response)
 }
 
@@ -106,17 +93,7 @@ pub fn estimate_transfer_execution(
 }
 
 pub async fn eth_price() -> Result<f64, reqwest::Error> {
-    let client = coingecko::CoinGeckoClient::default();
-    match client.ping().await {
-        Ok(_) => Ok(client
-            .price(&["ethereum"], &["usd"], true, true, true, true)
-            .await?
-            .get("ethereum")
-            .unwrap()
-            .usd
-            .unwrap()),
-        Err(Error) => Err(Error),
-    }
+    Ok(token_price("ethereum".to_string()).await?)
 }
 
 pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
@@ -138,20 +115,6 @@ pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
                 .usd
                 .unwrap())
         }
-        Err(Error) => Err(Error),
+        Err(error) => Err(error),
     }
-}
-
-pub async fn block(
-    server_addr: &str,
-    block_number: web3::types::BlockNumber,
-) -> web3::contract::Result<web3::types::Block<web3::types::H256>> {
-    let transport = web3::transports::Http::new(server_addr)?;
-    let client = web3::Web3::new(transport);
-    let block = client
-        .eth()
-        .block(web3::types::BlockId::Number(block_number))
-        .await
-        .expect("Failed to get block");
-    Ok(block.unwrap())
 }
