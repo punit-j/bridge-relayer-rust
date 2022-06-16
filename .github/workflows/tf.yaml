@@ -1,0 +1,32 @@
+name: tf manual
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: terraform init; terraform apply -var ssh_pub_key="${{secrets.SPECTRESSHPUB}}" --auto-approve
+      
+      
+      - name: Terraform Init
+        uses: hashicorp/terraform-github-actions/init@v0.4.0
+        env:
+           TF_ACTION_WORKING_DIR: 'terraform'
+           AWS_ACCESS_KEY_ID:  ${{ secrets.AWS_ACCESS_KEY_ID_VALUE }}
+           AWS_SECRET_ACCESS_KEY:  ${{ secrets.AWS_SECRET_ACCESS_KEY_VALUE }}
+           
+      - name: Terraform Apply
+        uses: hashicorp/terraform-github-actions/apply@v0.4.0
+        env:
+           TF_ACTION_WORKING_DIR: 'terraform'
+           AWS_ACCESS_KEY_ID:  ${{ secrets.AWS_ACCESS_KEY_ID_VALUE }}
+           AWS_SECRET_ACCESS_KEY:  ${{ secrets.AWS_SECRET_ACCESS_KEY_VALUE }}
+           
+      - uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "[Bot] Update all the things!"
+          commit_user_name: TF
+          commit_user_email: TF@example.com
