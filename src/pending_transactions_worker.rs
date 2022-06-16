@@ -30,7 +30,7 @@ pub async fn run(rpc_url: url::Url,
 
             if !pending_transactions.contains_key(&hash) {
                 pending_transactions.insert(hash, data);
-                println!("New pending transaction: {}", hash)
+                println!("New pending transaction: {:#?}", hash)
             }
         }
 

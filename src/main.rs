@@ -32,6 +32,7 @@ use near_crypto;
 use redis::{AsyncCommands, RedisResult, Value};
 use spectre_bridge_common::Proof;
 use tokio::task::JoinHandle;
+use uint::rustc_hex::ToHex;
 use url::quirks::hash;
 use web3::signing::Key;
 use web3::types::H256;
@@ -194,7 +195,7 @@ async fn main() {
                                         nonce: u128::from(nonce)
                                     };
 
-                                    let res: redis::RedisResult<()> = redis.lock().unwrap().connection.hset(async_redis_wrapper::PENDING_TRANSACTIONS, hash.to_string(),
+                                    let res: redis::RedisResult<()> = redis.lock().unwrap().connection.hset(async_redis_wrapper::PENDING_TRANSACTIONS, hash.as_bytes().to_hex::<String>(),
                                                                                                             serde_json::to_string(&d).unwrap())
                                         .await;
                                     if let Err(e) = res { eprintln!("Unable to store pending transaction: {}", e); }
