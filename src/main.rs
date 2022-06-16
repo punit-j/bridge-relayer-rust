@@ -210,11 +210,17 @@ async fn main() {
         }
     };
 
-    let pending_transactions_worker = pending_transactions_worker::run(settings.lock().unwrap().eth.rpc_url.clone(),
-                                                                       eth_contract_address,
-                                                                       eth_contract_abi.clone(),
-                                                                       &eth_keypair,
-                                                                       async_redis.lock().unwrap().clone());
+    let pending_transactions_worker = {
+        let s = settings.lock().unwrap();
+        pending_transactions_worker::run(s.eth.rpc_url.clone(),
+                                         eth_contract_address,
+                                         eth_contract_abi.clone(),
+                                         &eth_keypair,
+                                         async_redis.lock().unwrap().clone(),
+                                         if s.eth.pending_transaction_poll_delay_sec > 0 { s.eth.pending_transaction_poll_delay_sec as u64 }
+                                         else {5})
+    };
+
 
     let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
 

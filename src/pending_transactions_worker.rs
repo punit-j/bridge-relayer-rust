@@ -10,7 +10,8 @@ pub async fn run(rpc_url: url::Url,
                  eth_contract_address: web3::types::Address,
                  eth_contract_abi: String,
                  eth_keypair: &secp256k1::SecretKey,
-                 mut redis: crate::async_redis_wrapper::AsyncRedisWrapper) {
+                 mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
+                 delay_request_status_sec: u64) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(rpc_url.as_str(),
                                                                 "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
                                                                 eth_contract_address,
@@ -18,8 +19,6 @@ pub async fn run(rpc_url: url::Url,
 
     // transaction hash and last processed time
     let mut pending_transactions: std::collections::HashMap<web3::types::H256, async_redis_wrapper::PendingTransactionData> = std::collections::HashMap::new();
-
-    const delay_sec: u64 = 20;  // TODO: get from settings
 
     loop {
         // fill the pending_transactions
@@ -41,7 +40,7 @@ pub async fn run(rpc_url: url::Url,
             if redis.hget(item.0.to_string()).await.is_ok() {
                 transactions_to_remove.push(*item.0);
             }
-            else if (item.1.timestamp + delay_sec) < std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() {
+            else if (item.1.timestamp + delay_request_status_sec) < std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() {
                 match eth_client.transaction_status(*item.0).await {
                     Ok(status) => {
                         match status {
@@ -82,6 +81,6 @@ pub async fn run(rpc_url: url::Url,
             pending_transactions.remove(&item);
         }
 
-        tokio::time::sleep(core::time::Duration::from_secs(5));
+        tokio::time::sleep(core::time::Duration::from_secs(1));
     }
 }

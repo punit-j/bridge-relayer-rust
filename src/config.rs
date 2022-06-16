@@ -49,6 +49,9 @@ pub struct EthSettings {
     pub rpc2_url: Url,
     pub contract_address: String,
     pub abi_contract_address: String,
+
+    #[serde(default)]
+    pub pending_transaction_poll_delay_sec: u32
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
