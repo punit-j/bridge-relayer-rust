@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  destroy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -13,7 +13,8 @@ jobs:
           export AWS_SECRET_ACCESS_KEY="${{secrets.AWS_SECRET_ACCESS_KEY_VALUE}}"
           export AWS_REGION="${{secrets.AWS_REGION_VALUE}}"
           terraform init; 
-          terraform destroy --auto-approve
+          terraform destroy -var ssh_pub_key='${{secrets.SPECTRESSHPUB}}' --auto-approve
+         
       
             
       - uses: stefanzweifel/git-auto-commit-action@v4
