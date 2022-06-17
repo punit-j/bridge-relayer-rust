@@ -18,7 +18,7 @@ impl NearTokensCoinId {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EtherscanAPISettings {
-    pub endpoint_url: String,
+    pub endpoint_url: url::Url,
     pub api_key: String,
 }
 
