@@ -2,13 +2,14 @@ version: '3.8'
 
 services:
   spectre-bridge-service:
-    image: localhost:5031/spectre-bridge-service-deploy:latest
+    build: .
     ports:
-      - 443:3000
+      - 3001:3000
+    restart: always
     depends_on:
       - redis
     networks:
-      - bridge
+      - spectre-bridge-service
 
   redis:
     image: redis:alpine
@@ -23,12 +24,10 @@ services:
     restart: always
     environment:
       - REDIS_REPLICATION_MODE=master
-    network_mode: host
     networks:
-      - bridge
+      - spectre-bridge-service
 
 volumes:
   redis_data:
-    
 networks:
-  bridge:
+  spectre-bridge-service:
