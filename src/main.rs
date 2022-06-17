@@ -183,7 +183,7 @@ async fn main() {
     let eth_contract_abi = {
         let s = settings.lock().unwrap();
         eth_client::methods::get_contract_abi(
-            &s.etherscan_api.endpoint_url,
+            &s.etherscan_api.endpoint_url.to_string(),
             s.eth.bridge_impl_address,
             &s.etherscan_api.api_key,
         ).await
@@ -275,7 +275,7 @@ async fn main() {
         async_redis.clone(),
     );
 
-    
+    /*
         let rocket = rocket::build()
             .mount(
                 "/v1",
@@ -294,10 +294,8 @@ async fn main() {
             .manage(settings)
             .manage(storage)
             .manage(async_redis);
-    
-    // tokio::join!(near_worker, subscriber, pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
-
-    tokio::join!(rocket.launch());
+    */
+    tokio::join!(near_worker, subscriber, pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
 }
 
 #[cfg(test)]
