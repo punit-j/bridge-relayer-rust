@@ -43,30 +43,18 @@
 pub mod proof;
 pub mod transactions;
 
+use bytes::{BufMut, BytesMut};
 use core::time;
-use std::{
-    borrow::Borrow,
-    string,
-    collections::HashMap,
-    fs,
-    str::FromStr,
-    process::Command,
-    thread::sleep
+use near_sdk::{
+    borsh::{self, BorshDeserialize, BorshSerialize},
+    serde::{Deserialize, Serialize},
+    BlockHeight,
 };
 use std::time::Duration;
-use near_sdk::{
-    BlockHeight,
-    borsh::{self, BorshDeserialize, BorshSerialize},
-    serde::{Deserialize, Serialize}
+use std::{
+    borrow::Borrow, collections::HashMap, fs, process::Command, str::FromStr, string, thread::sleep,
 };
-use web3::{
-    contract::Contract,
-    ethabi,
-    types,
-    transports::Http,
-    api::Namespace
-};
-use bytes::{BytesMut, BufMut};
+use web3::{api::Namespace, contract::Contract, ethabi, transports::Http, types};
 
 #[derive(Debug)]
 pub struct RainbowBridgeEthereumClient<'a> {
@@ -74,43 +62,61 @@ pub struct RainbowBridgeEthereumClient<'a> {
     rainbow_bridge_index: &'a str,
     client: web3::api::Eth<Http>,
     contract: Contract<Http>,
-    key: secp256k1::SecretKey
+    key: secp256k1::SecretKey,
 }
 
-impl <'a>RainbowBridgeEthereumClient<'a> {
-    pub fn new(url: &'a str, rainbow_bridge_index: &'a str,
-               contract_addr: web3::ethabi::Address,
-               abi_json: &[u8],
-               key: secp256k1::SecretKey
+impl<'a> RainbowBridgeEthereumClient<'a> {
+    pub fn new(
+        url: &'a str,
+        rainbow_bridge_index: &'a str,
+        contract_addr: web3::ethabi::Address,
+        abi_json: &[u8],
+        key: secp256k1::SecretKey,
     ) -> Result<Self, std::string::String> {
         let transport = web3::transports::Http::new(url).unwrap();
         let client = web3::api::Eth::new(transport);
 
-        let contract = web3::contract::Contract::from_json(client.clone(), contract_addr, &*abi_json)
-            .map_err(|e| e.to_string())?;
+        let contract =
+            web3::contract::Contract::from_json(client.clone(), contract_addr, &*abi_json)
+                .map_err(|e| e.to_string())?;
 
         Ok(Self {
             api_url: url,
             rainbow_bridge_index,
             client,
             contract,
-            key
+            key,
         })
     }
 
-    pub async fn transfer_token(&self, token: web3::ethabi::Address,
-                                receiver: web3::ethabi::Address,
-                                amount: u64,
-                                nonce: web3::types::U256
+    pub async fn transfer_token(
+        &self,
+        token: web3::ethabi::Address,
+        receiver: web3::ethabi::Address,
+        amount: u64,
+        nonce: web3::types::U256,
     ) -> web3::error::Result<web3::types::H256> {
-        transactions::transfer_token(&self.contract, &self.key, token, receiver, amount, nonce).await
+        transactions::transfer_token(&self.contract, &self.key, token, receiver, amount, nonce)
+            .await
     }
 
-    pub async fn transaction_status(&self, tx_hash: web3::types::H256) -> web3::error::Result<transactions::TransactionStatus> {
+    pub async fn transaction_status(
+        &self,
+        tx_hash: web3::types::H256,
+    ) -> web3::error::Result<transactions::TransactionStatus> {
         transactions::transaction_status(&self.client, tx_hash).await
     }
 
-    pub async fn get_proof<'b, 'c>(&self, tx_hash: &'b web3::types::H256) -> Result<spectre_bridge_common::Proof, proof::Error<'c>> {
-        proof::get_proof(self.api_url, &self.client, self.rainbow_bridge_index, &tx_hash).await
+    pub async fn get_proof<'b, 'c>(
+        &self,
+        tx_hash: &'b web3::types::H256,
+    ) -> Result<spectre_bridge_common::Proof, proof::Error<'c>> {
+        proof::get_proof(
+            self.api_url,
+            &self.client,
+            self.rainbow_bridge_index,
+            &tx_hash,
+        )
+        .await
     }
 }

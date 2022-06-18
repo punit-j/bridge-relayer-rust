@@ -5,7 +5,7 @@ pub async fn execute_transfer(
     rpc_url: &str,
     contract_addr: web3::types::Address,
     profit_threshold: f64,
-    near_tokens_coin_id: &crate::config::NearTokensCoinId
+    near_tokens_coin_id: &crate::config::NearTokensCoinId,
 ) -> Result<web3::types::H256, String> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -34,8 +34,8 @@ pub async fn execute_transfer(
         method_name,
         method_args,
     )
-        .await
-        .expect("Failed to estimate gas in WEI");
+    .await
+    .expect("Failed to estimate gas in WEI");
     let gas_price_in_wei = eth_client::methods::gas_price(rpc_url)
         .await
         .expect("Failed to fetch gas price in WEI");
@@ -49,7 +49,9 @@ pub async fn execute_transfer(
     );
 
     let fee_token = transfer_message.4.token;
-    let coin_id = near_tokens_coin_id.get_coin_id(fee_token).expect("Failed to get coin id by matching");
+    let coin_id = near_tokens_coin_id
+        .get_coin_id(fee_token)
+        .expect("Failed to get coin id by matching");
     let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
     let is_profitable_tx = crate::profit_estimation::is_profitable(
         coin_id,
@@ -57,7 +59,7 @@ pub async fn execute_transfer(
         estimated_transfer_execution_price,
         profit_threshold,
     )
-        .await;
+    .await;
 
     if !is_profitable_tx {
         return Err("transaction is not profitable".to_string());
@@ -70,6 +72,8 @@ pub async fn execute_transfer(
         method_name,
         method_args,
         key,
-    ).await.map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
+    )
+    .await
+    .map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
     Ok(tx_hash)
 }

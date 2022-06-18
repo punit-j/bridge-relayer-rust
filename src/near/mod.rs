@@ -15,7 +15,7 @@ pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 pub async fn run_worker(
     contract_name: AccountId,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-    start_block: u64
+    start_block: u64,
 ) {
     let config = LakeConfigBuilder::default()
         .testnet()

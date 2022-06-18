@@ -1,6 +1,5 @@
 use futures_util::StreamExt;
 use redis::{AsyncCommands, RedisResult};
-use std::sync;
 
 #[derive(Clone)]
 pub struct AsyncRedisWrapper {
@@ -28,6 +27,10 @@ pub const TRANSACTIONS: &str = "transactions";
 
 // Transaction queue
 pub const TRANSACTION_HASHES: &str = "transaction_hashes";
+
+// Directions
+pub const DIRECTION_LEFT: &str = "LEFT";
+pub const DIRECTION_RIGHT: &str = "RIGHT";
 
 // Transaction queue
 pub const EVENTS: &str = "events";
@@ -77,55 +80,113 @@ impl AsyncRedisWrapper {
             .unwrap();
     }
 
-    pub async fn hset(
+    pub async fn store_tx(
         &mut self,
         tx_hash: String,
         tx_data: TransactionData,
     ) -> redis::RedisResult<()> {
-        self.connection
-            .hset(
+        let storing_status = self
+            .hsetnx(
                 TRANSACTIONS,
-                tx_hash,
-                serde_json::to_string(&tx_data).expect(""),
+                &tx_hash,
+                &serde_json::to_string(&tx_data)
+                    .expect("REDIS: Failed to serialize transaction data"),
             )
-            .await?;
-        Ok(())
-    }
-
-    pub async fn rpush(&mut self, tx_hash: String) -> redis::RedisResult<()> {
-        Ok(self.connection.rpush(TRANSACTION_HASHES, tx_hash).await?)
-    }
-
-    pub async fn hget(&mut self, tx_hash: String) -> redis::RedisResult<TransactionData> {
-        let serialized_data: String = self.connection.hget(TRANSACTIONS, tx_hash).await?;
-        Ok(serde_json::from_str(&serialized_data).expect(""))
-    }
-
-    pub async fn hdel(&mut self, tx_hash: String) -> redis::RedisResult<()> {
-        Ok(self.connection.hdel(TRANSACTIONS, tx_hash).await?)
-    }
-
-    pub async fn hkeys(&mut self) -> redis::RedisResult<Vec<String>> {
-        Ok(self.connection.hkeys(TRANSACTIONS).await?)
-    }
-
-    pub async fn lpop(&mut self) -> redis::RedisResult<Option<String>> {
-        let tx_hashes: Vec<String> = self
-            .connection
-            .lpop(TRANSACTION_HASHES, std::num::NonZeroUsize::new(1))
-            .await?;
-        match tx_hashes.is_empty() {
-            true => Ok(None),
-            false => Ok(Some(tx_hashes[0].clone())),
+            .await;
+        if let Ok(redis::Value::Int(1)) = storing_status {
+            return Ok(self.rpush(TRANSACTION_HASHES, &tx_hash).await?);
+        } else {
+            return Err(storing_status.unwrap_err());
         }
     }
 
-    pub async fn lindex(&mut self) -> redis::RedisResult<Option<String>> {
-        let tx_hash: Option<String> = self
-            .connection
-            .lindex(TRANSACTION_HASHES, 0)
-            .await?;
-        Ok(tx_hash)
+    pub async fn unstore_tx(&mut self, tx_hash: String) -> redis::RedisResult<()> {
+        let unstoring_status = self.hdel(TRANSACTIONS, &tx_hash).await;
+        if let Ok(redis::Value::Int(1)) = unstoring_status {
+            return Ok(self.lrem(TRANSACTION_HASHES, 0, &tx_hash).await?);
+        } else {
+            return Err(unstoring_status.unwrap_err());
+        }
+    }
+
+    pub async fn get_tx_hash(&mut self) -> redis::RedisResult<Option<String>> {
+        match self.lindex(TRANSACTION_HASHES, 0).await {
+            Ok(value) => {
+                if let redis::Value::Data(_) = value {
+                    return Ok(Some(redis::from_redis_value(&value)?));
+                } else {
+                    return Ok(None);
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub async fn get_tx_data(&mut self, tx_hash: String) -> redis::RedisResult<TransactionData> {
+        match self.hget(TRANSACTIONS, &tx_hash).await {
+            Ok(value) => {
+                let serialized_tx_data: String = redis::from_redis_value(&value)?;
+                return Ok(serde_json::from_str(&serialized_tx_data)
+                    .expect("REDIS: Failed to deserialize transaction data"));
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub async fn move_tx_queue_tail(&mut self) -> redis::RedisResult<()> {
+        Ok(self
+            .lmove(
+                TRANSACTION_HASHES,
+                TRANSACTION_HASHES,
+                DIRECTION_LEFT,
+                DIRECTION_RIGHT,
+            )
+            .await?)
+    }
+
+    async fn hsetnx(
+        &mut self,
+        key: &str,
+        field: &str,
+        value: &str,
+    ) -> redis::RedisResult<redis::Value> {
+        Ok(self.connection.hset_nx(key, field, value).await?)
+    }
+
+    async fn rpush(&mut self, key: &str, value: &str) -> redis::RedisResult<()> {
+        Ok(self.connection.rpush(key, value).await?)
+    }
+
+    async fn lindex(&mut self, key: &str, index: isize) -> redis::RedisResult<redis::Value> {
+        Ok(self.connection.lindex(key, index).await?)
+    }
+
+    async fn lrem(&mut self, key: &str, count: isize, value: &str) -> redis::RedisResult<()> {
+        Ok(self.connection.lrem(key, count, value).await?)
+    }
+
+    async fn hget(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
+        Ok(self.connection.hget(key, field).await?)
+    }
+
+    async fn hdel(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
+        Ok(self.connection.hdel(key, field).await?)
+    }
+
+    async fn lmove(
+        &mut self,
+        srckey: &str,
+        dstkey: &str,
+        src_dir: &str,
+        dst_dir: &str,
+    ) -> redis::RedisResult<()> {
+        Ok(redis::cmd("lmove")
+            .arg(srckey)
+            .arg(dstkey)
+            .arg(src_dir)
+            .arg(dst_dir)
+            .query_async(&mut self.connection)
+            .await?)
     }
 
     // TODO: review. Moved from the redis_wrapper

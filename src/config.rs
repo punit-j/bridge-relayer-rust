@@ -18,7 +18,7 @@ impl NearTokensCoinId {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EtherscanAPISettings {
-    pub endpoint_url: String,
+    pub endpoint_url: url::Url,
     pub api_key: String,
 }
 
@@ -44,7 +44,7 @@ pub struct EthSettings {
     pub private_key: String,
     pub rpc_url: Url,
     #[serde(default)]
-    pub pending_transaction_poll_delay_sec: u32
+    pub pending_transaction_poll_delay_sec: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -121,7 +121,10 @@ impl Settings {
         );
     }
 
-    pub fn set_mapped_tokens(&mut self, mapped_tokens: std::collections::HashMap<near_sdk::AccountId, String>) {
+    pub fn set_mapped_tokens(
+        &mut self,
+        mapped_tokens: std::collections::HashMap<near_sdk::AccountId, String>,
+    ) {
         self.near_tokens_coin_id.mapping = mapped_tokens.clone();
         self.set_json_value(
             vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
@@ -129,11 +132,14 @@ impl Settings {
         );
     }
 
-    pub fn insert_mapped_tokens(&mut self, mapped_tokens: std::collections::HashMap<near_sdk::AccountId, String>) {
+    pub fn insert_mapped_tokens(
+        &mut self,
+        mapped_tokens: std::collections::HashMap<near_sdk::AccountId, String>,
+    ) {
         self.near_tokens_coin_id.mapping.extend(mapped_tokens);
         self.set_json_value(
             vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
-            json!(self.near_tokens_coin_id.mapping)
+            json!(self.near_tokens_coin_id.mapping),
         );
     }
 
@@ -143,7 +149,7 @@ impl Settings {
         }
         self.set_json_value(
             vec!["near_tokens_coin_id".to_string(), "mapping".to_string()],
-            json!(self.near_tokens_coin_id.mapping)
+            json!(self.near_tokens_coin_id.mapping),
         );
     }
 }

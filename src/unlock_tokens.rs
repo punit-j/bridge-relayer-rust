@@ -18,8 +18,8 @@ async fn unlock_tokens(
         gas,
         0,
     )
-        .await
-        .expect("Failed to fetch response by calling lp_unlock contract method");
+    .await
+    .expect("Failed to fetch response by calling lp_unlock contract method");
     response.status
 }
 
@@ -34,27 +34,27 @@ pub async fn unlock_tokens_worker(
         let mut connection = redis.lock().unwrap().clone();
         loop {
             let unlock_tokens_worker_settings =
-                settings.lock().unwrap().unlock_tokens_worker.clone();
+                settings.lock().unwrap().clone().unlock_tokens_worker;
             crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
                 .await
                 .tick()
                 .await;
             match connection
-                .lindex()
+                .get_tx_hash()
                 .await
-                .expect("REDIS: Failed to pop first tx_hash in queue")
+                .expect("REDIS: Failed to get first transaction hash in queue")
             {
                 Some(tx_hash) => {
                     let last_block_number = storage.lock().unwrap().clone().last_block_number;
                     let tx_data = connection
-                        .hget(tx_hash.clone())
+                        .get_tx_data(tx_hash.clone())
                         .await
-                        .expect("REDIS: Failed to get TransactionData by tx_hash from set");
+                        .expect("REDIS: Failed to get transaction data by hash from set");
                     match tx_data.block + unlock_tokens_worker_settings.some_blocks_number
                         <= last_block_number
                     {
                         true => {
-                            let status = crate::unlock_tokens::unlock_tokens(
+                            let tx_execution_status = crate::unlock_tokens::unlock_tokens(
                                 unlock_tokens_worker_settings.server_addr,
                                 account.clone(),
                                 unlock_tokens_worker_settings.contract_account_id,
@@ -62,22 +62,17 @@ pub async fn unlock_tokens_worker(
                                 tx_data.nonce,
                                 gas,
                             )
-                                .await;
-                            if let near_primitives::views::FinalExecutionStatus::SuccessValue(_) = status {
-                                connection
-                                .lpop()
-                                .await
-                                .expect("REDIS: Failed to delete element by tx_hash from queue");
-                                connection
-                                .hdel(tx_hash.clone())
-                                .await
-                                .expect("REDIS: Failed to delete element by tx_hash from set");
+                            .await;
+                            if let near_primitives::views::FinalExecutionStatus::SuccessValue(_) =
+                                tx_execution_status
+                            {
+                                connection.unstore_tx(tx_hash).await.expect("REDIS: Failed to unstore transaction");
                             }
                         }
                         false => connection
-                            .rpush(tx_hash.clone())
+                            .move_tx_queue_tail()
                             .await
-                            .expect("REDIS: failed to enqueue tx_hash"),
+                            .expect("REDIS: Failed to move transaction from head to tail of queue"),
                     }
                 }
                 None => (),
@@ -96,13 +91,14 @@ pub mod tests {
             url::Url::parse("https://rpc.testnet.near.org").unwrap(),
             near_client::read_private_key::read_private_key_from_file(
                 "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
-            ).unwrap(),
+            )
+            .unwrap(),
             "transfer.spectrebridge.testnet".to_string(),
             spectre_bridge_common::Proof::default(),
             909090,
             300_000_000_000_000,
         )
-            .await;
+        .await;
         assert_eq!(response.as_success().is_some(), true);
     }
 }

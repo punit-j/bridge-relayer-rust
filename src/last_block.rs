@@ -20,16 +20,14 @@ pub async fn last_block_number_worker(
     tokio::spawn(async move {
         loop {
             let last_block_number_worker_settings =
-                settings.lock().unwrap().last_block_number_worker.clone();
+                settings.lock().unwrap().clone().last_block_number_worker;
             crate::utils::request_interval(last_block_number_worker_settings.request_interval_secs)
                 .await
                 .tick()
                 .await;
             let number = last_block_number(
-                last_block_number_worker_settings.server_addr.clone(),
-                last_block_number_worker_settings
-                    .contract_account_id
-                    .clone(),
+                last_block_number_worker_settings.server_addr,
+                last_block_number_worker_settings.contract_account_id,
             )
             .await
             .expect("Failed to fetch result by calling last_block_number view contract method");

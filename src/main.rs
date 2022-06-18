@@ -1,42 +1,42 @@
 mod approve;
 mod async_redis_wrapper;
 mod config;
+mod ethereum;
 mod last_block;
 mod near;
-mod ethereum;
+mod pending_transactions_worker;
 mod private_key;
 mod profit_estimation;
 mod transfer;
 mod unlock_tokens;
 mod utils;
-mod pending_transactions_worker;
 
 #[macro_use]
 extern crate rocket;
 
-use std::collections::HashMap;
 use crate::config::Settings;
+use crate::ethereum::proof::Error;
+use borsh::BorshSerialize;
+use clap::Parser;
+use near_crypto;
 use near_sdk::AccountId;
+use redis::{AsyncCommands, RedisResult, Value};
 use rocket::State;
+use secp256k1::ffi::PublicKey;
 use serde_json::json;
+use spectre_bridge_common::Proof;
+use std::collections::HashMap;
 use std::env;
 use std::ops::Deref;
 use std::os::linux::raw::stat;
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
-use borsh::BorshSerialize;
-use secp256k1::ffi::PublicKey;
-use clap::Parser;
-use near_crypto;
-use redis::{AsyncCommands, RedisResult, Value};
-use spectre_bridge_common::Proof;
 use tokio::task::JoinHandle;
 use uint::rustc_hex::ToHex;
 use url::quirks::hash;
 use web3::signing::Key;
 use web3::types::H256;
-use crate::ethereum::proof::Error;
 
 #[get("/health")]
 fn health() -> String {
@@ -98,15 +98,23 @@ async fn profit(
 //     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
 //      ...
 // }
-// 
+//
 #[post("/set_mapped_tokens", data = "<input>")]
-async fn set_mapped_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
-    settings.lock().unwrap().clone().set_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
+async fn set_mapped_tokens(
+    input: String,
+    settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>,
+) {
+    settings
+        .lock()
+        .unwrap()
+        .clone()
+        .set_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
 }
 
 #[get("/get_mapped_tokens")]
 async fn get_mapped_tokens(settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) -> String {
-    serde_json::to_string_pretty(&settings.lock().unwrap().clone().near_tokens_coin_id.mapping).expect("Failed to parse to string mapped tokens")
+    serde_json::to_string_pretty(&settings.lock().unwrap().clone().near_tokens_coin_id.mapping)
+        .expect("Failed to parse to string mapped tokens")
 }
 
 //
@@ -116,10 +124,15 @@ async fn get_mapped_tokens(settings: &State<std::sync::Arc<std::sync::Mutex<Sett
 //     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
 //      ...
 // }
-// 
+//
 #[post("/insert_mapped_tokens", data = "<input>")]
-async fn insert_mapped_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
-    settings.lock().unwrap().clone().insert_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
+async fn insert_mapped_tokens(
+    input: String,
+    settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>,
+) {
+    settings.lock().unwrap().clone().insert_mapped_tokens(
+        serde_json::from_str(&input).expect("Failed to parse JSON request body"),
+    )
 }
 
 //
@@ -131,8 +144,13 @@ async fn insert_mapped_tokens(input: String, settings: &State<std::sync::Arc<std
 // ]
 //
 #[post("/remove_mapped_tokens", data = "<input>")]
-async fn remove_mapped_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
-    settings.lock().unwrap().clone().remove_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
+async fn remove_mapped_tokens(
+    input: String,
+    settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>,
+) {
+    settings.lock().unwrap().clone().remove_mapped_tokens(
+        serde_json::from_str(&input).expect("Failed to parse JSON request body"),
+    )
 }
 
 extern crate redis;
@@ -150,7 +168,7 @@ struct Args {
 
     /// path to json file
     #[clap(long)]
-    near_credentials: Option<String>
+    near_credentials: Option<String>,
 }
 
 #[tokio::main]
@@ -174,7 +192,8 @@ async fn main() {
             secp256k1::SecretKey::from_str(&path.as_str())
         } else {
             secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
-        }.expect("Unable to get an Eth key")
+        }
+        .expect("Unable to get an Eth key")
     };
     let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
 
@@ -183,69 +202,108 @@ async fn main() {
     let eth_contract_abi = {
         let s = settings.lock().unwrap();
         eth_client::methods::get_contract_abi(
-            &s.etherscan_api.endpoint_url,
+            &s.etherscan_api.endpoint_url.to_string(),
             s.eth.bridge_impl_address,
             &s.etherscan_api.api_key,
-        ).await
+        )
+        .await
     }
-        .expect("Failed to get contract abi");
+    .expect("Failed to get contract abi");
 
-    let near_account =
-        if let Some(path) = args.near_credentials {
-            near_client::read_private_key::read_private_key_from_file(path.as_str())
-        }
-        else {
-            near_client::read_private_key::read_private_key_from_file(settings.lock().unwrap().near.near_credentials_path.as_str())
-        }
-            .unwrap();
+    let near_account = if let Some(path) = args.near_credentials {
+        near_client::read_private_key::read_private_key_from_file(path.as_str())
+    } else {
+        near_client::read_private_key::read_private_key_from_file(
+            settings.lock().unwrap().near.near_credentials_path.as_str(),
+        )
+    }
+    .unwrap();
 
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
 
-    let near_worker = near::run_worker(near_contract_address,
-                                       async_redis.clone(),
-                                       {91966098/*
-                                           let mut r = async_redis.lock().unwrap().clone();
-                                           if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                                           else {settings.lock().unwrap().near.near_lake_init_block}*/
-                                       }
-    );
+    let near_worker = near::run_worker(near_contract_address, async_redis.clone(), {
+        91966098 /*
+                 let mut r = async_redis.lock().unwrap().clone();
+                 if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
+                 else {settings.lock().unwrap().near.near_lake_init_block}*/
+    });
 
-    let mut stream = async_redis_wrapper::subscribe::<String>(async_redis_wrapper::EVENTS.to_string(), async_redis.clone()).unwrap();
+    let mut stream = async_redis_wrapper::subscribe::<String>(
+        async_redis_wrapper::EVENTS.to_string(),
+        async_redis.clone(),
+    )
+    .unwrap();
     let subscriber = {
         let settings = settings.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-        let eth_keypair= eth_keypair.clone();
+        let eth_keypair = eth_keypair.clone();
         let redis = async_redis.clone();
-        let eth_contract_abi= &eth_contract_abi;
+        let eth_contract_abi = &eth_contract_abi;
         async move {
             while let Some(msg) = stream.recv().await {
-                if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+                if let Ok(event) =
+                    serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
+                {
                     println!("event {:?}", event);
 
                     match event {
-                        spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, mut transfer, fee, recipient } => {
-                            let near_tokens_coin_id= &settings.lock().unwrap().near_tokens_coin_id;
+                        spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                            nonce,
+                            chain_id,
+                            valid_till,
+                            mut transfer,
+                            fee,
+                            recipient,
+                        } => {
+                            let near_tokens_coin_id = &settings.lock().unwrap().near_tokens_coin_id;
 
-                            let tx_hash = transfer::execute_transfer(&eth_keypair,
-                                                                     spectre_bridge_common::Event::SpectreBridgeTransferEvent { nonce, chain_id, valid_till, transfer, fee, recipient },
-                                                                     eth_contract_abi.as_bytes(), rpc_url.as_str(), eth_contract_address.clone(), 0.0, near_tokens_coin_id)
-                                .await;
+                            let tx_hash = transfer::execute_transfer(
+                                &eth_keypair,
+                                spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                                    nonce,
+                                    chain_id,
+                                    valid_till,
+                                    transfer,
+                                    fee,
+                                    recipient,
+                                },
+                                eth_contract_abi.as_bytes(),
+                                rpc_url.as_str(),
+                                eth_contract_address.clone(),
+                                0.0,
+                                near_tokens_coin_id,
+                            )
+                            .await;
 
                             match tx_hash {
                                 Ok(hash) => {
                                     let d = crate::async_redis_wrapper::PendingTransactionData {
-                                        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                                        nonce: u128::from(nonce)
+                                        timestamp: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap()
+                                            .as_secs(),
+                                        nonce: u128::from(nonce),
                                     };
 
-                                    let res: redis::RedisResult<()> = redis.lock().unwrap().connection.hset(async_redis_wrapper::PENDING_TRANSACTIONS, hash.as_bytes().to_hex::<String>(),
-                                                                                                            serde_json::to_string(&d).unwrap())
+                                    let res: redis::RedisResult<()> = redis
+                                        .lock()
+                                        .unwrap()
+                                        .connection
+                                        .hset(
+                                            async_redis_wrapper::PENDING_TRANSACTIONS,
+                                            hash.as_bytes().to_hex::<String>(),
+                                            serde_json::to_string(&d).unwrap(),
+                                        )
                                         .await;
-                                    if let Err(e) = res { eprintln!("Unable to store pending transaction: {}", e); }
+                                    if let Err(e) = res {
+                                        eprintln!("Unable to store pending transaction: {}", e);
+                                    }
                                 }
-                                Err(e) => { eprintln!("execute_transfer: {}", e); }
+                                Err(e) => {
+                                    eprintln!("execute_transfer: {}", e);
+                                }
                             }
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -255,17 +313,22 @@ async fn main() {
 
     let pending_transactions_worker = {
         let s = settings.lock().unwrap();
-        pending_transactions_worker::run(s.eth.rpc_url.clone(),
-                                         eth_contract_address,
-                                         eth_contract_abi.clone(),
-                                         &eth_keypair,
-                                         async_redis.lock().unwrap().clone(),
-                                         if s.eth.pending_transaction_poll_delay_sec > 0 { s.eth.pending_transaction_poll_delay_sec as u64 }
-                                         else {5})
+        pending_transactions_worker::run(
+            s.eth.rpc_url.clone(),
+            eth_contract_address,
+            eth_contract_abi.clone(),
+            &eth_keypair,
+            async_redis.lock().unwrap().clone(),
+            if s.eth.pending_transaction_poll_delay_sec > 0 {
+                s.eth.pending_transaction_poll_delay_sec as u64
+            } else {
+                5
+            },
+        )
     };
 
-
-    let last_block_number_worker = last_block::last_block_number_worker(settings.clone(), storage.clone());
+    let last_block_number_worker =
+        last_block::last_block_number_worker(settings.clone(), storage.clone());
 
     let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
         near_account,
@@ -275,29 +338,33 @@ async fn main() {
         async_redis.clone(),
     );
 
-    
-        let rocket = rocket::build()
-            .mount(
-                "/v1",
-                routes![
-                                   health,
-                                   transactions,
-                                   set_threshold,
-                                   set_allowed_tokens,
-                                   profit,
-                                   set_mapped_tokens,
-                                   get_mapped_tokens,
-                                   insert_mapped_tokens,
-                                   remove_mapped_tokens,
-                               ],
-            )
-            .manage(settings)
-            .manage(storage)
-            .manage(async_redis);
-    
-    // tokio::join!(near_worker, subscriber, pending_transactions_worker, /*unlock_tokens_worker, rocket.launch()*/);
+    let rocket = rocket::build()
+        .mount(
+            "/v1",
+            routes![
+                health,
+                transactions,
+                set_threshold,
+                set_allowed_tokens,
+                profit,
+                set_mapped_tokens,
+                get_mapped_tokens,
+                insert_mapped_tokens,
+                remove_mapped_tokens,
+            ],
+        )
+        .manage(settings)
+        .manage(storage)
+        .manage(async_redis);
 
-    tokio::join!(rocket.launch());
+    tokio::join!(
+        near_worker,
+        subscriber,
+        pending_transactions_worker,
+        last_block_number_worker,
+        unlock_tokens_worker,
+        rocket.launch()
+    );
 }
 
 #[cfg(test)]
