@@ -251,7 +251,7 @@ async fn main() {
                             nonce,
                             chain_id,
                             valid_till,
-                            mut transfer,
+                            transfer,
                             fee,
                             recipient,
                         } => {

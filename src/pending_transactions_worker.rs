@@ -51,7 +51,11 @@ pub async fn run(
         let mut transactions_to_remove: Vec<web3::types::H256> = Vec::new();
         for mut item in pending_transactions.iter_mut() {
             // remove and skip if transaction is already processing
-            if redis.get_tx_data(item.0.as_bytes().to_hex::<String>()).await.is_ok() {
+            if redis
+                .get_tx_data(item.0.as_bytes().to_hex::<String>())
+                .await
+                .is_ok()
+            {
                 transactions_to_remove.push(*item.0);
             } else if (item.1.timestamp + delay_request_status_sec)
                 < std::time::SystemTime::now()
@@ -83,8 +87,10 @@ pub async fn run(
                                             nonce: item.1.nonce,
                                         };
 
-                                        let _: () =
-                                            redis.store_transaction(item.0.as_bytes().to_hex::<String>(), data).await.unwrap();
+                                        let _: () = redis
+                                            .store_tx(item.0.as_bytes().to_hex::<String>(), data)
+                                            .await
+                                            .unwrap();
                                         transactions_to_remove.push(*item.0);
                                     }
                                     Err(e) => {
@@ -104,7 +110,10 @@ pub async fn run(
         for item in transactions_to_remove {
             let res: redis::RedisResult<()> = redis
                 .connection
-                .hdel(async_redis_wrapper::PENDING_TRANSACTIONS, item.as_bytes().to_hex::<String>())
+                .hdel(
+                    async_redis_wrapper::PENDING_TRANSACTIONS,
+                    item.as_bytes().to_hex::<String>(),
+                )
                 .await;
             if let Err(e) = res {
                 eprintln!("Error on remove pending transaction {}", e);

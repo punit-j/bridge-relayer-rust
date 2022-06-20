@@ -50,7 +50,6 @@ pub async fn unlock_tokens_worker(
                         .get_tx_data(tx_hash.clone())
                         .await
                         .expect("REDIS: Failed to get transaction data by hash from set");
-                    println!("\n\n tx_data.block {} \n\n unlock_tokens_worker_settings.some_blocks_number {} \n\n last_block_number {}", tx_data.block.clone(), unlock_tokens_worker_settings.some_blocks_number.clone(), last_block_number.clone());
                     match tx_data.block + unlock_tokens_worker_settings.some_blocks_number
                         <= last_block_number
                     {
