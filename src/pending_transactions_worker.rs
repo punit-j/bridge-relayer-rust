@@ -94,7 +94,7 @@ pub async fn run(
                                         transactions_to_remove.push(*item.0);
                                     }
                                     Err(e) => {
-                                        println!("Error on request transaction status: {:?}", e)
+                                        println!("Error on request proof: {:?}", e)
                                     }
                                 }
                             }
