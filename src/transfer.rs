@@ -6,7 +6,7 @@ pub async fn execute_transfer(
     contract_addr: web3::types::Address,
     profit_threshold: f64,
     near_tokens_coin_id: &crate::config::NearTokensCoinId,
-) -> Result<web3::types::H256, String> {
+) -> Option<web3::types::H256> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
         nonce,
@@ -19,9 +19,8 @@ pub async fn execute_transfer(
     {
         (nonce, chain_id, valid_till, transfer, fee, recipient)
     } else {
-        return Err("Incorrect event passed".to_string());
+        return None;
     };
-
     let token = web3::types::Address::from(transfer_message.3.token_eth);
     let recipient = web3::types::Address::from(transfer_message.5);
     let nonce = web3::types::U256::from(transfer_message.0 .0);
@@ -47,7 +46,6 @@ pub async fn execute_transfer(
         gas_price_in_wei,
         eth_price_in_usd,
     );
-
     let fee_token = transfer_message.4.token;
     let coin_id = near_tokens_coin_id
         .get_coin_id(fee_token)
@@ -60,20 +58,20 @@ pub async fn execute_transfer(
         profit_threshold,
     )
     .await;
-
-    if !is_profitable_tx {
-        return Err("transaction is not profitable".to_string());
+    match is_profitable_tx {
+        true => {
+            let tx_hash = eth_client::methods::change(
+                rpc_url,
+                contract_addr,
+                contract_abi,
+                method_name,
+                method_args,
+                key,
+            )
+            .await
+            .expect("Failed to execute tokens transfer");
+            Some(tx_hash)
+        }
+        false => None,
     }
-
-    let tx_hash = eth_client::methods::change(
-        rpc_url,
-        contract_addr,
-        contract_abi,
-        method_name,
-        method_args,
-        key,
-    )
-    .await
-    .map_err(|e| format!("Failed to execute tokens transfer: {}", e.to_string()))?;
-    Ok(tx_hash)
 }

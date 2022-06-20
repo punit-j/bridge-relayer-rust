@@ -276,7 +276,7 @@ async fn main() {
                             .await;
 
                             match tx_hash {
-                                Ok(hash) => {
+                                Some(hash) => {
                                     let d = crate::async_redis_wrapper::PendingTransactionData {
                                         timestamp: std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
@@ -299,9 +299,7 @@ async fn main() {
                                         eprintln!("Unable to store pending transaction: {}", e);
                                     }
                                 }
-                                Err(e) => {
-                                    eprintln!("execute_transfer: {}", e);
-                                }
+                                None => (),
                             }
                         }
                         _ => {}
@@ -331,7 +329,7 @@ async fn main() {
         last_block::last_block_number_worker(settings.clone(), storage.clone());
 
     let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
-        near_account,
+        near_account.clone(),
         300_000_000_000_000,
         settings.clone(),
         storage.clone(),

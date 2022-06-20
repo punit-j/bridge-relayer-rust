@@ -50,6 +50,7 @@ pub async fn unlock_tokens_worker(
                         .get_tx_data(tx_hash.clone())
                         .await
                         .expect("REDIS: Failed to get transaction data by hash from set");
+                    println!("\n\n tx_data.block {} \n\n unlock_tokens_worker_settings.some_blocks_number {} \n\n last_block_number {}", tx_data.block.clone(), unlock_tokens_worker_settings.some_blocks_number.clone(), last_block_number.clone());
                     match tx_data.block + unlock_tokens_worker_settings.some_blocks_number
                         <= last_block_number
                     {
@@ -66,7 +67,10 @@ pub async fn unlock_tokens_worker(
                             if let near_primitives::views::FinalExecutionStatus::SuccessValue(_) =
                                 tx_execution_status
                             {
-                                connection.unstore_tx(tx_hash).await.expect("REDIS: Failed to unstore transaction");
+                                connection
+                                    .unstore_tx(tx_hash)
+                                    .await
+                                    .expect("REDIS: Failed to unstore transaction");
                             }
                         }
                         false => connection

@@ -31,7 +31,9 @@ pub async fn last_block_number_worker(
             )
             .await
             .expect("Failed to fetch result by calling last_block_number view contract method");
+            println!("\n\n RECEIVED BLOCK {}\n\n", number.clone());
             storage.lock().unwrap().last_block_number = number;
+            println!("\n\nBLOCK IN STORAGE {}\n\n", storage.lock().unwrap().clone().last_block_number);
         }
     });
 }
