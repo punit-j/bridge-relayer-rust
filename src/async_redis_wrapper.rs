@@ -80,7 +80,7 @@ impl AsyncRedisWrapper {
             .unwrap();
     }
 
-    pub async fn store_tx(
+    pub async fn store_transaction(
         &mut self,
         tx_hash: String,
         tx_data: TransactionData,
