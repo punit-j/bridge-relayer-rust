@@ -32,6 +32,7 @@ use std::os::linux::raw::stat;
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use near_primitives::types::TransactionOrReceiptId::Transaction;
 use tokio::task::JoinHandle;
 use uint::rustc_hex::ToHex;
 use url::quirks::hash;
@@ -222,10 +223,9 @@ async fn main() {
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
 
     let near_worker = near::run_worker(near_contract_address, async_redis.clone(), {
-        91966098 /*
                  let mut r = async_redis.lock().unwrap().clone();
                  if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-                 else {settings.lock().unwrap().near.near_lake_init_block}*/
+                 else {settings.lock().unwrap().near.near_lake_init_block}
     });
 
     let mut stream = async_redis_wrapper::subscribe::<String>(
@@ -256,6 +256,7 @@ async fn main() {
                             recipient,
                         } => {
                             let near_tokens_coin_id = &settings.lock().unwrap().near_tokens_coin_id;
+                            let near_addr = transfer.token_near.clone();
 
                             let tx_hash = transfer::execute_transfer(
                                 &eth_keypair,
@@ -299,7 +300,7 @@ async fn main() {
                                         eprintln!("Unable to store pending transaction: {}", e);
                                     }
                                 }
-                                Ok(None) => (),
+                                Ok(None) => {println!("Transaction {} is not profitable: {}", u128::from(nonce), near_addr);},
                                 Err(error) => eprint!("Failed to execute transferTokens: {}", error),
                             }
                         }
@@ -336,7 +337,7 @@ async fn main() {
         storage.clone(),
         async_redis.clone(),
     );
-
+/*
     let rocket = rocket::build()
         .mount(
             "/v1",
@@ -355,14 +356,14 @@ async fn main() {
         .manage(settings)
         .manage(storage)
         .manage(async_redis);
-
+*/
     tokio::join!(
         near_worker,
         subscriber,
         pending_transactions_worker,
         last_block_number_worker,
         unlock_tokens_worker,
-        rocket.launch()
+        //rocket.launch()
     );
 }
 
