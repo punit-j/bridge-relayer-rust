@@ -92,15 +92,15 @@ pub fn estimate_transfer_execution(
         / precision
 }
 
-pub async fn eth_price() -> Result<f64, reqwest::Error> {
+pub async fn eth_price() -> Result<Option<f64>, reqwest::Error> {
     Ok(token_price("ethereum".to_string()).await?)
 }
 
-pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
+pub async fn token_price(coin_id: String) -> Result<Option<f64>, reqwest::Error> {
     let client = coingecko::CoinGeckoClient::default();
     match client.ping().await {
         Ok(_) => {
-            Ok(client
+            let token_price = client
                 .price(
                     &[&coin_id],
                     &["usd"],
@@ -109,11 +109,18 @@ pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
                     true,
                     true,
                 )
-                .await?
-                .get(&coin_id)
-                .expect("Invalid coin id")
-                .usd
-                .unwrap())
+                .await;
+                match token_price {
+                    Ok(hashmap) => {
+                        match hashmap.get(&coin_id) {
+                            Some(entry) => {
+                                Ok(entry.usd)
+                            },
+                            None => Ok(None),
+                        }
+                    },
+                    Err(error) => Err(error),
+                }
         }
         Err(error) => Err(error),
     }

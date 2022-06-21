@@ -276,7 +276,7 @@ async fn main() {
                             .await;
 
                             match tx_hash {
-                                Some(hash) => {
+                                Ok(Some(hash)) => {
                                     let d = crate::async_redis_wrapper::PendingTransactionData {
                                         timestamp: std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
@@ -299,7 +299,8 @@ async fn main() {
                                         eprintln!("Unable to store pending transaction: {}", e);
                                     }
                                 }
-                                None => (),
+                                Ok(None) => (),
+                                Err(error) => eprint!("Failed to execute transferTokens: {}", error),
                             }
                         }
                         _ => {}
