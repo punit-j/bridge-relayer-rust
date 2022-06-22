@@ -18,6 +18,7 @@ use crate::ethereum::proof::Error;
 use borsh::BorshSerialize;
 use clap::Parser;
 use near_crypto;
+use near_primitives::types::TransactionOrReceiptId::Transaction;
 use near_sdk::AccountId;
 use redis::{AsyncCommands, RedisResult, Value};
 use rocket::State;
@@ -185,186 +186,196 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
-    // // If args.eth_secret is valid then get key from it else from settings
-    // let eth_keypair = {
-    //     if let Some(path) = args.eth_secret {
-    //         secp256k1::SecretKey::from_str(&path.as_str())
-    //     } else {
-    //         secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
-    //     }
-    //     .expect("Unable to get an Eth key")
-    // };
-    // let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
+    // If args.eth_secret is valid then get key from it else from settings
+    let eth_keypair = {
+        if let Some(path) = args.eth_secret {
+            secp256k1::SecretKey::from_str(&path.as_str())
+        } else {
+            secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
+        }
+        .expect("Unable to get an Eth key")
+    };
+    let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
 
-    // let eth_contract_address = settings.lock().unwrap().clone().eth.bridge_proxy_address;
+    let eth_contract_address = settings.lock().unwrap().clone().eth.bridge_proxy_address;
 
-    // let eth_contract_abi = {
-    //     let s = settings.lock().unwrap();
-    //     eth_client::methods::get_contract_abi(
-    //         &s.etherscan_api.endpoint_url.to_string(),
-    //         s.eth.bridge_impl_address,
-    //         &s.etherscan_api.api_key,
-    //     )
-    //     .await
-    // }
-    // .expect("Failed to get contract abi");
-
-    // let near_account = if let Some(path) = args.near_credentials {
-    //     near_client::read_private_key::read_private_key_from_file(path.as_str())
-    // } else {
-    //     near_client::read_private_key::read_private_key_from_file(
-    //         settings.lock().unwrap().near.near_credentials_path.as_str(),
-    //     )
-    // }
-    // .unwrap();
-
-    // let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
-
-    // let near_worker = near::run_worker(near_contract_address, async_redis.clone(), {
-    //     91966098 /*
-    //              let mut r = async_redis.lock().unwrap().clone();
-    //              if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {b}
-    //              else {settings.lock().unwrap().near.near_lake_init_block}*/
-    // });
-
-    // let mut stream = async_redis_wrapper::subscribe::<String>(
-    //     async_redis_wrapper::EVENTS.to_string(),
-    //     async_redis.clone(),
-    // )
-    // .unwrap();
-    // let subscriber = {
-    //     let settings = settings.clone();
-    //     let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-    //     let eth_keypair = eth_keypair.clone();
-    //     let redis = async_redis.clone();
-    //     let eth_contract_abi = &eth_contract_abi;
-    //     async move {
-    //         while let Some(msg) = stream.recv().await {
-    //             if let Ok(event) =
-    //                 serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
-    //             {
-    //                 println!("event {:?}", event);
-
-    //                 match event {
-    //                     spectre_bridge_common::Event::SpectreBridgeTransferEvent {
-    //                         nonce,
-    //                         chain_id,
-    //                         valid_till,
-    //                         transfer,
-    //                         fee,
-    //                         recipient,
-    //                     } => {
-    //                         let near_tokens_coin_id = &settings.lock().unwrap().near_tokens_coin_id;
-
-    //                         let tx_hash = transfer::execute_transfer(
-    //                             &eth_keypair,
-    //                             spectre_bridge_common::Event::SpectreBridgeTransferEvent {
-    //                                 nonce,
-    //                                 chain_id,
-    //                                 valid_till,
-    //                                 transfer,
-    //                                 fee,
-    //                                 recipient,
-    //                             },
-    //                             eth_contract_abi.as_bytes(),
-    //                             rpc_url.as_str(),
-    //                             eth_contract_address.clone(),
-    //                             0.0,
-    //                             near_tokens_coin_id,
-    //                         )
-    //                         .await;
-
-    //                         match tx_hash {
-    //                             Ok(Some(hash)) => {
-    //                                 let d = crate::async_redis_wrapper::PendingTransactionData {
-    //                                     timestamp: std::time::SystemTime::now()
-    //                                         .duration_since(std::time::UNIX_EPOCH)
-    //                                         .unwrap()
-    //                                         .as_secs(),
-    //                                     nonce: u128::from(nonce),
-    //                                 };
-
-    //                                 let res: redis::RedisResult<()> = redis
-    //                                     .lock()
-    //                                     .unwrap()
-    //                                     .connection
-    //                                     .hset(
-    //                                         async_redis_wrapper::PENDING_TRANSACTIONS,
-    //                                         hash.as_bytes().to_hex::<String>(),
-    //                                         serde_json::to_string(&d).unwrap(),
-    //                                     )
-    //                                     .await;
-    //                                 if let Err(e) = res {
-    //                                     eprintln!("Unable to store pending transaction: {}", e);
-    //                                 }
-    //                             }
-    //                             Ok(None) => (),
-    //                             Err(error) => eprint!("Failed to execute transferTokens: {}", error),
-    //                         }
-    //                     }
-    //                     _ => {}
-    //                 }
-    //             }
-    //         }
-    //     }
-    // };
-
-    // let pending_transactions_worker = {
-    //     let s = settings.lock().unwrap();
-    //     pending_transactions_worker::run(
-    //         s.eth.rpc_url.clone(),
-    //         eth_contract_address,
-    //         eth_contract_abi.clone(),
-    //         &eth_keypair,
-    //         async_redis.lock().unwrap().clone(),
-    //         if s.eth.pending_transaction_poll_delay_sec > 0 {
-    //             s.eth.pending_transaction_poll_delay_sec as u64
-    //         } else {
-    //             5
-    //         },
-    //     )
-    // };
-
-    // let last_block_number_worker =
-    //     last_block::last_block_number_worker(settings.clone(), storage.clone());
-
-    // let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
-    //     near_account.clone(),
-    //     300_000_000_000_000,
-    //     settings.clone(),
-    //     storage.clone(),
-    //     async_redis.clone(),
-    // );
-
-    let rocket = rocket::build()
-        .mount(
-            "/v1",
-            routes![
-                health,
-                transactions,
-                set_threshold,
-                set_allowed_tokens,
-                profit,
-                set_mapped_tokens,
-                get_mapped_tokens,
-                insert_mapped_tokens,
-                remove_mapped_tokens,
-            ],
+    let eth_contract_abi = {
+        let s = settings.lock().unwrap();
+        eth_client::methods::get_contract_abi(
+            &s.etherscan_api.endpoint_url.to_string(),
+            s.eth.bridge_impl_address,
+            &s.etherscan_api.api_key,
         )
-        .manage(settings)
-        .manage(storage)
-        .manage(async_redis);
+        .await
+    }
+    .expect("Failed to get contract abi");
 
-    // tokio::join!(
-    //     near_worker,
-    //     subscriber,
-    //     pending_transactions_worker,
-    //     last_block_number_worker,
-    //     unlock_tokens_worker,
-    //     rocket.launch()
-    // );
+    let near_account = if let Some(path) = args.near_credentials {
+        near_client::read_private_key::read_private_key_from_file(path.as_str())
+    } else {
+        near_client::read_private_key::read_private_key_from_file(
+            settings.lock().unwrap().near.near_credentials_path.as_str(),
+        )
+    }
+    .unwrap();
 
-    tokio::join!(rocket.launch());
+    let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
+
+    let near_worker = near::run_worker(near_contract_address, async_redis.clone(), {
+        let mut r = async_redis.lock().unwrap().clone();
+        if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {
+            b
+        } else {
+            settings.lock().unwrap().near.near_lake_init_block
+        }
+    });
+
+    let mut stream = async_redis_wrapper::subscribe::<String>(
+        async_redis_wrapper::EVENTS.to_string(),
+        async_redis.clone(),
+    )
+    .unwrap();
+    let subscriber = {
+        let settings = settings.clone();
+        let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
+        let eth_keypair = eth_keypair.clone();
+        let redis = async_redis.clone();
+        let eth_contract_abi = &eth_contract_abi;
+        async move {
+            while let Some(msg) = stream.recv().await {
+                if let Ok(event) =
+                    serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
+                {
+                    println!("event {:?}", event);
+
+                    match event {
+                        spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                            nonce,
+                            chain_id,
+                            valid_till,
+                            transfer,
+                            fee,
+                            recipient,
+                        } => {
+                            let near_tokens_coin_id = &settings.lock().unwrap().near_tokens_coin_id;
+                            let near_addr = transfer.token_near.clone();
+
+                            let tx_hash = transfer::execute_transfer(
+                                &eth_keypair,
+                                spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                                    nonce,
+                                    chain_id,
+                                    valid_till,
+                                    transfer,
+                                    fee,
+                                    recipient,
+                                },
+                                eth_contract_abi.as_bytes(),
+                                rpc_url.as_str(),
+                                eth_contract_address.clone(),
+                                0.0,
+                                near_tokens_coin_id,
+                            )
+                            .await;
+
+                            match tx_hash {
+                                Ok(Some(hash)) => {
+                                    let d = crate::async_redis_wrapper::PendingTransactionData {
+                                        timestamp: std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap()
+                                            .as_secs(),
+                                        nonce: u128::from(nonce),
+                                    };
+
+                                    let res: redis::RedisResult<()> = redis
+                                        .lock()
+                                        .unwrap()
+                                        .connection
+                                        .hset(
+                                            async_redis_wrapper::PENDING_TRANSACTIONS,
+                                            hash.as_bytes().to_hex::<String>(),
+                                            serde_json::to_string(&d).unwrap(),
+                                        )
+                                        .await;
+                                    if let Err(e) = res {
+                                        eprintln!("Unable to store pending transaction: {}", e);
+                                    }
+                                }
+                                Ok(None) => {
+                                    println!(
+                                        "Transaction {} is not profitable: {}",
+                                        u128::from(nonce),
+                                        near_addr
+                                    );
+                                }
+                                Err(error) => {
+                                    eprint!("Failed to execute transferTokens: {}", error)
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    };
+
+    let pending_transactions_worker = {
+        let s = settings.lock().unwrap();
+        pending_transactions_worker::run(
+            s.eth.rpc_url.clone(),
+            eth_contract_address,
+            eth_contract_abi.clone(),
+            &eth_keypair,
+            async_redis.lock().unwrap().clone(),
+            if s.eth.pending_transaction_poll_delay_sec > 0 {
+                s.eth.pending_transaction_poll_delay_sec as u64
+            } else {
+                5
+            },
+        )
+    };
+
+    let last_block_number_worker =
+        last_block::last_block_number_worker(settings.clone(), storage.clone());
+
+    let unlock_tokens_worker = unlock_tokens::unlock_tokens_worker(
+        near_account.clone(),
+        300_000_000_000_000,
+        settings.clone(),
+        storage.clone(),
+        async_redis.clone(),
+    );
+    
+    /*
+        let rocket = rocket::build()
+            .mount(
+                "/v1",
+                routes![
+                    health,
+                    transactions,
+                    set_threshold,
+                    set_allowed_tokens,
+                    profit,
+                    set_mapped_tokens,
+                    get_mapped_tokens,
+                    insert_mapped_tokens,
+                    remove_mapped_tokens,
+                ],
+            )
+            .manage(settings)
+            .manage(storage)
+            .manage(async_redis);
+    */
+    tokio::join!(
+        near_worker,
+        subscriber,
+        pending_transactions_worker,
+        last_block_number_worker,
+        unlock_tokens_worker,
+        //rocket.launch()
+    );
 }
 
 #[cfg(test)]
