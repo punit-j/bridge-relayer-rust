@@ -193,7 +193,7 @@ async fn main() {
         } else {
             secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
         }
-        .expect("Unable to get an Eth key")
+            .expect("Unable to get an Eth key")
     };
     let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
 
@@ -206,9 +206,9 @@ async fn main() {
             s.eth.bridge_impl_address,
             &s.etherscan_api.api_key,
         )
-        .await
+            .await
     }
-    .expect("Failed to get contract abi");
+        .expect("Failed to get contract abi");
 
     let near_account = if let Some(path) = args.near_credentials {
         near_client::read_private_key::read_private_key_from_file(path.as_str())
@@ -217,7 +217,7 @@ async fn main() {
             settings.lock().unwrap().near.near_credentials_path.as_str(),
         )
     }
-    .unwrap();
+        .unwrap();
 
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
 
@@ -234,7 +234,7 @@ async fn main() {
         async_redis_wrapper::EVENTS.to_string(),
         async_redis.clone(),
     )
-    .unwrap();
+        .unwrap();
     let subscriber = {
         let settings = settings.clone();
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
@@ -244,9 +244,9 @@ async fn main() {
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) =
-                    serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
+                serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
                 {
-                    println!("event {:?}", event);
+                    println!("Process event {:?}", event);
 
                     match event {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -276,7 +276,7 @@ async fn main() {
                                 0.0,
                                 near_tokens_coin_id,
                             )
-                            .await;
+                                .await;
 
                             match tx_hash {
                                 Ok(Some(hash)) => {
@@ -347,12 +347,12 @@ async fn main() {
         storage.clone(),
         async_redis.clone(),
     );
-    
-    /*
-        let rocket = rocket::build()
-            .mount(
-                "/v1",
-                routes![
+
+
+    let rocket = rocket::build()
+        .mount(
+            "/v1",
+            routes![
                     health,
                     transactions,
                     set_threshold,
@@ -363,18 +363,18 @@ async fn main() {
                     insert_mapped_tokens,
                     remove_mapped_tokens,
                 ],
-            )
-            .manage(settings)
-            .manage(storage)
-            .manage(async_redis);
-    */
+        )
+        .manage(settings)
+        .manage(storage)
+        .manage(async_redis);
+
     tokio::join!(
         near_worker,
         subscriber,
         pending_transactions_worker,
         last_block_number_worker,
         unlock_tokens_worker,
-        //rocket.launch()
+        rocket.launch()
     );
 }
 
