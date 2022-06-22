@@ -41,7 +41,7 @@
     "contract_account_id": "transfer.spectrebridge.testnet",
     "request_interval_secs": 15,
     "server_addr": "https://rpc.testnet.near.org",
-    "some_blocks_number": 10
+    "blocks_for_tx_finalization": 10
   },
   "vault_addr": "http://127.0.0.1:8200/v1/kv/"
 }
