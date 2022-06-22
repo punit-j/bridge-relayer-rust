@@ -106,9 +106,13 @@ pub async fn execute_transfer(
                 method_args,
                 key,
             )
-            .await
-            .expect("Failed to execute tokens transfer");
-            Ok(Some(tx_hash))
+            .await;
+            match tx_hash {
+                Ok(hash) => Ok(Some(hash)),
+                Err(error) => {
+                    return Err(format!("Failed to execute tokens transfer: {}", error).into())
+                }
+            }
         }
         false => Ok(None),
     }

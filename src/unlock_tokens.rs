@@ -5,7 +5,7 @@ async fn unlock_tokens(
     proof: spectre_bridge_common::Proof,
     nonce: u128,
     gas: u64,
-) -> near_primitives::views::FinalExecutionStatus {
+) -> Result<near_primitives::views::FinalExecutionStatus, String> {
     let response = near_client::methods::change(
         server_addr,
         account,
@@ -18,9 +18,17 @@ async fn unlock_tokens(
         gas,
         0,
     )
-    .await
-    .expect("Failed to fetch response by calling lp_unlock contract method");
-    response.status
+    .await;
+    match response {
+        Ok(result) => Ok(result.status),
+        Err(error) => {
+            return Err(format!(
+                "Failed to fetch response by calling lp_unlock contract method: {}",
+                error
+            )
+            .into())
+        }
+    }
 }
 
 pub async fn unlock_tokens_worker(
@@ -39,69 +47,70 @@ pub async fn unlock_tokens_worker(
                 .await
                 .tick()
                 .await;
-            match connection
-                .get_tx_hash()
-                .await
-                .expect("REDIS: Failed to get first transaction hash in queue")
-            {
-                Some(tx_hash) => {
+            match connection.get_tx_hash().await {
+                Ok(Some(tx_hash)) => {
                     let last_block_number = storage.lock().unwrap().clone().last_block_number;
-                    let tx_data = connection
-                        .get_tx_data(tx_hash.clone())
-                        .await
-                        .expect("REDIS: Failed to get transaction data by hash from set");
-                    match tx_data.block + unlock_tokens_worker_settings.some_blocks_number
-                        <= last_block_number
-                    {
-                        true => {
-                            let tx_execution_status = crate::unlock_tokens::unlock_tokens(
-                                unlock_tokens_worker_settings.server_addr,
-                                account.clone(),
-                                unlock_tokens_worker_settings.contract_account_id,
-                                tx_data.proof,
-                                tx_data.nonce,
-                                gas,
-                            )
-                            .await;
-                            if let near_primitives::views::FinalExecutionStatus::SuccessValue(_) =
-                                tx_execution_status
+                    let tx_data = connection.get_tx_data(tx_hash.clone()).await;
+                    match tx_data {
+                        Ok(data) => {
+                            match data.block + unlock_tokens_worker_settings.some_blocks_number
+                                <= last_block_number
                             {
-                                connection
-                                    .unstore_tx(tx_hash)
-                                    .await
-                                    .expect("REDIS: Failed to unstore transaction");
+                                true => {
+                                    let tx_execution_status = crate::unlock_tokens::unlock_tokens(
+                                        unlock_tokens_worker_settings.server_addr,
+                                        account.clone(),
+                                        unlock_tokens_worker_settings.contract_account_id,
+                                        data.proof,
+                                        data.nonce,
+                                        gas,
+                                    )
+                                    .await;
+                                    if let Ok(
+                                        near_primitives::views::FinalExecutionStatus::SuccessValue(
+                                            _,
+                                        ),
+                                    ) = tx_execution_status
+                                    {
+                                        let unstore_tx_status =
+                                            connection.unstore_tx(tx_hash).await;
+                                        match unstore_tx_status {
+                                            Ok(_) => (),
+                                            Err(error) => eprintln!(
+                                                "REDIS: Failed to unstore transaction: {}",
+                                                error
+                                            ),
+                                        }
+                                    } else {
+                                        eprintln!(
+                                            "Failed to unlock tokens: {}",
+                                            tx_execution_status.unwrap_err()
+                                        )
+                                    }
+                                }
+                                false => {
+                                    let move_tx_queue_tail_status =
+                                        connection.move_tx_queue_tail().await;
+                                    match move_tx_queue_tail_status {
+                                    Ok(_) => (),
+                                    Err(error) => eprintln!("REDIS: Failed to move transaction from head to tail of queue: {}", error),
+                                }
+                                }
                             }
                         }
-                        false => connection
-                            .move_tx_queue_tail()
-                            .await
-                            .expect("REDIS: Failed to move transaction from head to tail of queue"),
+                        Err(error) => eprintln!(
+                            "REDIS: Failed to get transaction data by hash from set: {}",
+                            error
+                        ),
                     }
                 }
-                None => (),
+                Ok(None) => (),
+                Err(error) => eprintln!(
+                    "REDIS: Failed to get first transaction hash in queue: {}",
+                    error
+                ),
             }
         }
     });
     Ok(())
-}
-
-#[cfg(test)]
-pub mod tests {
-
-    #[tokio::test]
-    pub async fn unlock_tokens() {
-        let response = super::unlock_tokens(
-            url::Url::parse("https://rpc.testnet.near.org").unwrap(),
-            near_client::read_private_key::read_private_key_from_file(
-                "/home/arseniyk/.near-credentials/testnet/arseniyrest.testnet.json",
-            )
-            .unwrap(),
-            "transfer.spectrebridge.testnet".to_string(),
-            spectre_bridge_common::Proof::default(),
-            909090,
-            300_000_000_000_000,
-        )
-        .await;
-        assert_eq!(response.as_success().is_some(), true);
-    }
 }
