@@ -187,15 +187,14 @@ async fn main() {
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     // If args.eth_secret is valid then get key from it else from settings
-    let eth_keypair = {
+    let eth_keypair = std::sync::Arc::new({
         if let Some(path) = args.eth_secret {
             secp256k1::SecretKey::from_str(&path.as_str())
         } else {
             secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
         }
             .expect("Unable to get an Eth key")
-    };
-    let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
+    });
 
     let eth_contract_address = settings.lock().unwrap().clone().eth.bridge_proxy_address;
 
@@ -261,7 +260,7 @@ async fn main() {
                             let near_addr = transfer.token_near.clone();
 
                             let tx_hash = transfer::execute_transfer(
-                                &eth_keypair,
+                                eth_keypair.clone().as_ref(),
                                 spectre_bridge_common::Event::SpectreBridgeTransferEvent {
                                     nonce,
                                     chain_id,
@@ -280,6 +279,8 @@ async fn main() {
 
                             match tx_hash {
                                 Ok(Some(hash)) => {
+                                    println!("New eth transaction: {:#?}", hash);
+
                                     let d = crate::async_redis_wrapper::PendingTransactionData {
                                         timestamp: std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
@@ -321,21 +322,30 @@ async fn main() {
         }
     };
 
-    let pending_transactions_worker = {
-        let s = settings.lock().unwrap();
-        pending_transactions_worker::run(
-            s.eth.rpc_url.clone(),
-            eth_contract_address,
-            eth_contract_abi.clone(),
-            &eth_keypair,
-            async_redis.lock().unwrap().clone(),
-            if s.eth.pending_transaction_poll_delay_sec > 0 {
-                s.eth.pending_transaction_poll_delay_sec as u64
-            } else {
-                5
-            },
-        )
-    };
+    let pending_transactions_worker = tokio::spawn({
+        let s = {
+            let s = settings.lock().unwrap();
+            (s.eth.rpc_url.clone(), s.eth.pending_transaction_poll_delay_sec)
+        };
+        let eth_keypair = eth_keypair.clone();
+        let redis = async_redis.lock().unwrap().clone();
+        let eth_contract_abi = eth_contract_abi.clone();
+
+        async move {
+            pending_transactions_worker::run(
+                s.0,
+                eth_contract_address,
+                eth_contract_abi,
+                web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
+                redis,
+                if s.1 > 0 {
+                    s.1 as u64
+                } else {
+                    5
+                },
+            ).await
+        }
+    });
 
     let last_block_number_worker =
         last_block::last_block_number_worker(settings.clone(), storage.clone());
@@ -348,34 +358,34 @@ async fn main() {
         async_redis.clone(),
     );
 
-
-    let rocket = rocket::build()
-        .mount(
-            "/v1",
-            routes![
-                    health,
-                    transactions,
-                    set_threshold,
-                    set_allowed_tokens,
-                    profit,
-                    set_mapped_tokens,
-                    get_mapped_tokens,
-                    insert_mapped_tokens,
-                    remove_mapped_tokens,
-                ],
-        )
-        .manage(settings)
-        .manage(storage)
-        .manage(async_redis);
-
+    /*
+        let rocket = rocket::build()
+            .mount(
+                "/v1",
+                routes![
+                        health,
+                        transactions,
+                        set_threshold,
+                        set_allowed_tokens,
+                        profit,
+                        set_mapped_tokens,
+                        get_mapped_tokens,
+                        insert_mapped_tokens,
+                        remove_mapped_tokens,
+                    ],
+            )
+            .manage(settings)
+            .manage(storage)
+            .manage(async_redis);
+    */
     tokio::join!(
-        near_worker,
-        subscriber,
-        pending_transactions_worker,
-        last_block_number_worker,
-        unlock_tokens_worker,
-        rocket.launch()
-    );
+                near_worker,
+                subscriber,
+                pending_transactions_worker,
+                last_block_number_worker,
+                unlock_tokens_worker,
+                //rocket.launch()
+            );
 }
 
 #[cfg(test)]
@@ -393,9 +403,9 @@ pub mod tests {
             .await;
         assert!(
             matches!(
-                status,
-                Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
-            ),
+                        status,
+                        Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
+                    ),
             "expected an Ok(RpcStatusResponse), found [{:?}]",
             status
         );

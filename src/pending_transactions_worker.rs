@@ -3,11 +3,11 @@ use crate::{async_redis_wrapper, ethereum, ToHex};
 use crate::redis::AsyncCommands;
 use std::str::FromStr;
 
-pub async fn run(
+pub async fn run<'a> (
     rpc_url: url::Url,
     eth_contract_address: web3::types::Address,
     eth_contract_abi: String,
-    eth_keypair: &secp256k1::SecretKey,
+    eth_keypair: web3::signing::SecretKeyRef<'a>,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
     delay_request_status_sec: u64,
 ) {
@@ -16,7 +16,7 @@ pub async fn run(
         "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
         eth_contract_address,
         &eth_contract_abi.as_bytes(),
-        *eth_keypair,
+        eth_keypair,
     )
     .unwrap();
 
