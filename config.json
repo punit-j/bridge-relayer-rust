@@ -1,17 +1,13 @@
 {
   "eth": {
-    "contract_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
+    "bridge_impl_address": "0xBa78AE6A68DB5784e26a7DdCccd3939BB6cd5F57",
+    "bridge_proxy_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
+    "pending_transaction_poll_delay_sec": 5,
     "private_key": "",
     "rpc_url": "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a"
   },
-  "eth_bridge_counterpart": {
-    "contract_address": "0x5c739e4039D552E2DBF94ce9E7Db261c88BcEc84"
-  },
-  "eth_light_client": {
-    "contract_address": "transfer.spectrebridge.testnet"
-  },
   "etherscan_api": {
-    "api_key": "",
+    "api_key": "25PJD4MEHKXRJ8G1J8Z3HU32USC1SH1K3E",
     "endpoint_url": "https://api-goerli.etherscan.io"
   },
   "last_block_number_worker": {
@@ -24,7 +20,7 @@
       "token8.spectrebridge.testnet",
       "token16.spectrebridge.testnet"
     ],
-    "contract_address": "transfer.spectrebridge2.testnet",
+    "contract_address": "transfer.spectrebridge.testnet",
     "near_credentials_path": "",
     "near_lake_init_block": 90753143,
     "rpc_url": "https://rpc.testnet.near.org"
@@ -34,7 +30,7 @@
       "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
       "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near": "usd-coin",
       "dac17f958d2ee523a2206206994597c13d831ec7.factory.bridge.near": "tether",
-      "wrap.near": "wrapped-near"
+      "token.spectrebridge.testnet": "wrapped-near"
     }
   },
   "profit_thershold": 909,
@@ -42,10 +38,10 @@
     "url": "redis://127.0.0.1/"
   },
   "unlock_tokens_worker": {
-    "contract_account_id": "transfer.spectrebridge2.testnet",
+    "contract_account_id": "transfer.spectrebridge.testnet",
     "request_interval_secs": 15,
     "server_addr": "https://rpc.testnet.near.org",
-    "some_blocks_number": 5
+    "blocks_for_tx_finalization": 10
   },
   "vault_addr": "http://127.0.0.1:8200/v1/kv/"
 }

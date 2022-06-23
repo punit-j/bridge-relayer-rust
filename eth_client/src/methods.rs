@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 pub fn construct_contract_interface(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
 ) -> web3::contract::Result<web3::contract::Contract<web3::transports::Http>> {
     let transport = web3::transports::Http::new(server_addr)?;
     let client = web3::Web3::new(transport);
     Ok(web3::contract::Contract::from_json(
         client.eth(),
-        contract_addr.parse().unwrap(),
+        contract_addr,
         contract_abi,
     )?)
 }
@@ -17,11 +17,11 @@ pub fn construct_contract_interface(
 // Alternative to this feature: include_bytes!("./<PATH>/<FILENAME.abi>")
 pub async fn get_contract_abi(
     endpoint_url: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     api_key_token: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let response = reqwest::get(format!(
-        "{}/api?module=contract&action=getabi&address={}&apikey={}&format=raw",
+        "{}/api?module=contract&action=getabi&address={:?}&apikey={}&format=raw",
         endpoint_url, contract_addr, api_key_token
     ))
     .await?
@@ -32,11 +32,11 @@ pub async fn get_contract_abi(
 
 pub async fn change(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
-    private_key: &str,
+    key: impl web3::signing::Key,
 ) -> web3::contract::Result<web3::types::H256> {
     let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
     Ok(abi
@@ -44,7 +44,7 @@ pub async fn change(
             method_name,
             args,
             web3::contract::Options::default(),
-            &secp256k1::SecretKey::from_str(private_key).unwrap(),
+            key,
         )
         .await?)
 }
@@ -57,7 +57,7 @@ pub async fn gas_price(server_addr: &str) -> web3::contract::Result<web3::types:
 
 pub async fn estimate_gas(
     server_addr: &str,
-    contract_addr: &str,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
@@ -67,7 +67,7 @@ pub async fn estimate_gas(
         .estimate_gas(
             method_name,
             args,
-            contract_addr.parse().unwrap(),
+            contract_addr,
             web3::contract::Options::default(),
         )
         .await?)
@@ -92,25 +92,15 @@ pub fn estimate_transfer_execution(
         / precision
 }
 
-pub async fn eth_price() -> Result<f64, reqwest::Error> {
-    let client = coingecko::CoinGeckoClient::default();
-    match client.ping().await {
-        Ok(_) => Ok(client
-            .price(&["ethereum"], &["usd"], true, true, true, true)
-            .await?
-            .get("ethereum")
-            .unwrap()
-            .usd
-            .unwrap()),
-        Err(Error) => Err(Error),
-    }
+pub async fn eth_price() -> Result<Option<f64>, reqwest::Error> {
+    Ok(token_price("ethereum".to_string()).await?)
 }
 
-pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
+pub async fn token_price(coin_id: String) -> Result<Option<f64>, reqwest::Error> {
     let client = coingecko::CoinGeckoClient::default();
     match client.ping().await {
         Ok(_) => {
-            Ok(client
+            let token_price = client
                 .price(
                     &[&coin_id],
                     &["usd"],
@@ -119,26 +109,19 @@ pub async fn token_price(coin_id: String) -> Result<f64, reqwest::Error> {
                     true,
                     true,
                 )
-                .await?
-                .get(&coin_id)
-                .expect("Invalid coin id")
-                .usd
-                .unwrap())
+                .await;
+                match token_price {
+                    Ok(hashmap) => {
+                        match hashmap.get(&coin_id) {
+                            Some(entry) => {
+                                Ok(entry.usd)
+                            },
+                            None => Ok(None),
+                        }
+                    },
+                    Err(error) => Err(error),
+                }
         }
-        Err(Error) => Err(Error),
+        Err(error) => Err(error),
     }
-}
-
-pub async fn block(
-    server_addr: &str,
-    block_number: web3::types::BlockNumber,
-) -> web3::contract::Result<web3::types::Block<web3::types::H256>> {
-    let transport = web3::transports::Http::new(server_addr)?;
-    let client = web3::Web3::new(transport);
-    let block = client
-        .eth()
-        .block(web3::types::BlockId::Number(block_number))
-        .await
-        .expect("Failed to get block");
-    Ok(block.unwrap())
 }

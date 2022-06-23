@@ -15,7 +15,7 @@ pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 pub async fn run_worker(
     contract_name: AccountId,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-    start_block: u64
+    start_block: u64,
 ) {
     let config = LakeConfigBuilder::default()
         .testnet()
@@ -36,7 +36,7 @@ pub async fn run_worker(
                             match get_event(json) {
                                 Ok(r) => {
                                     println!("Push event: {:?}", r);
-                                    let mut redis = redis.lock().unwrap().clone();
+                                    let mut redis = redis.lock().unwrap();
                                     redis.event_pub(r).await;
                                 }
                                 Err(e) => {
@@ -50,7 +50,7 @@ pub async fn run_worker(
                 }
             }
         }
-        let mut r = redis.lock().unwrap().clone();
+        let mut r = redis.lock().unwrap();
         // store block number to redis
         let _: () = r
             .option_set(

@@ -22,18 +22,15 @@
 //! ```
 
 use serde_json::json;
+use spectre_bridge_common;
+use std::{process, string};
 use web3::{
+    api,
     contract::{Contract, Options},
     ethabi::ParamType::String,
     ethabi::Uint,
-    types::{H256, TransactionReceipt, U256},
+    types::{TransactionReceipt, H256, U256},
     Web3,
-    api
-};
-use spectre_bridge_common;
-use std::{
-    string,
-    process
 };
 
 #[derive(Debug)]
@@ -44,45 +41,69 @@ pub enum Error<'a> {
     Json(serde_json::Error),
 }
 
-pub async fn get_proof<'a, 'b, T: web3::Transport>(url: &'a str,
-                                                   client: &'a api::Eth<T>,
-                                                   rb_bridge_index_js_url: &'a str,
-                                                   tx_hash: &'a H256)
-                                                   -> Result<spectre_bridge_common::Proof, Error<'b>> {
+pub async fn get_proof<'a, 'b, T: web3::Transport>(
+    url: &'a str,
+    client: &'a api::Eth<T>,
+    rb_bridge_index_js_url: &'a str,
+    tx_hash: &'a H256,
+) -> Result<spectre_bridge_common::Proof, Error<'b>> {
     let log_index = get_transaction_log_index(&client, &tx_hash).await?;
 
     let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tx_hash});
 
     let mut command = process::Command::new("node");
-    command.arg(rb_bridge_index_js_url).arg("eth-to-near-find-proof")
+    command
+        .arg(rb_bridge_index_js_url)
+        .arg("eth-to-near-find-proof")
         .arg(json_args.to_string())
-        .arg("--eth-node-url").arg(url);
+        .arg("--eth-node-url")
+        .arg(url);
 
-    let rr = command.output().map_err(|e| Error::Other("Unable to unwrap output"))?.stdout;
+    let rr = command
+        .output()
+        .map_err(|e| Error::Other("Unable to unwrap output"))?
+        .stdout;
     let mut out = std::str::from_utf8(&rr).map_err(|e| Error::Other("Unable to parse output"))?;
 
     let json = serde_json::from_str::<serde_json::Value>(out).map_err(|e| Error::Json(e))?;
-    let json= json.get("proof_locker").ok_or(Error::Other("JSON doesnt contain the proof_locker"))?;
+    let json = json
+        .get("proof_locker")
+        .ok_or(Error::Other("JSON doesnt contain the proof_locker"))?;
 
-    let res = serde_json::from_value::<spectre_bridge_common::Proof>(json.clone()).map_err(|e| Error::Json(e))?;
+    let res = serde_json::from_value::<spectre_bridge_common::Proof>(json.clone())
+        .map_err(|e| Error::Json(e))?;
     Ok(res)
 }
 
-pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(client: &'a api::Eth<T>, tx_hash: &'a H256) -> Result<U256, Error<'b>> {
-    let receipt = client.transaction_receipt(tx_hash.clone())
+pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(
+    client: &'a api::Eth<T>,
+    tx_hash: &'a H256,
+) -> Result<U256, Error<'b>> {
+    let receipt = client
+        .transaction_receipt(tx_hash.clone())
         .await
         .map_err(|e| Error::Web3(e))?
         .ok_or(Error::Other("Unable to unwrap receipt"))?;
 
     // get log of block contains this transaction
-    let logs = client.logs(web3::types::FilterBuilder::default()
-        .block_hash(receipt.block_hash.ok_or(Error::Other("Unable to unwrap the 'block_hash'"))?)
-        .address(vec!(receipt.to.ok_or(Error::Other("Unable to unwrap the 'to'"))?))// contract address
-        .build())
+    let logs = client
+        .logs(
+            web3::types::FilterBuilder::default()
+                .block_hash(
+                    receipt
+                        .block_hash
+                        .ok_or(Error::Other("Unable to unwrap the 'block_hash'"))?,
+                )
+                .address(vec![receipt
+                    .to
+                    .ok_or(Error::Other("Unable to unwrap the 'to'"))?]) // contract address
+                .build(),
+        )
         .await
         .map_err(|e| Error::Web3(e))?;
 
-    let log = logs.iter()
+    let log = logs
+        .iter()
         .find(|&log| {
             if let Some(hash) = log.transaction_hash {
                 if hash == *tx_hash {
@@ -90,7 +111,8 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(client: &'a a
                 }
             };
             false
-        }).ok_or(Error::Other("Log not found"))?;
+        })
+        .ok_or(Error::Other("Log not found"))?;
 
     log.log_index.ok_or(Error::Empty)
 }
