@@ -10,6 +10,7 @@ pub async fn run(
     eth_keypair: &secp256k1::SecretKey,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
     delay_request_status_sec: u64,
+    tx_hashes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
         rpc_url.as_str(),
@@ -81,14 +82,18 @@ pub async fn run(
                                 let proof = eth_client.get_proof(item.0).await;
                                 match proof {
                                     Ok(proof) => {
-                                        let data = async_redis_wrapper::TransactionData {
+                                        let data = async_redis_wrapper::TxData {
                                             block: u64::try_from(block_number).unwrap(),
                                             proof,
                                             nonce: item.1.nonce,
                                         };
 
                                         let _: () = redis
-                                            .store_tx(item.0.as_bytes().to_hex::<String>(), data)
+                                            .store_tx(
+                                                item.0.as_bytes().to_hex::<String>(),
+                                                data,
+                                                tx_hashes.clone(),
+                                            )
                                             .await
                                             .unwrap();
                                         transactions_to_remove.push(*item.0);

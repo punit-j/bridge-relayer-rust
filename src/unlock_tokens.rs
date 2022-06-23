@@ -37,6 +37,7 @@ pub async fn unlock_tokens_worker(
     settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
     storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+    tx_hashes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) -> redis::RedisResult<()> {
     tokio::spawn(async move {
         let mut connection = redis.lock().unwrap().clone();
@@ -47,8 +48,9 @@ pub async fn unlock_tokens_worker(
                 .await
                 .tick()
                 .await;
-            match connection.get_tx_hash().await {
-                Ok(Some(tx_hash)) => {
+            let tx_hashes_queue = tx_hashes.lock().unwrap().clone();
+            match tx_hashes_queue.first() {
+                Some(tx_hash) => {
                     let last_block_number = storage.lock().unwrap().clone().last_block_number;
                     let tx_data = connection.get_tx_data(tx_hash.clone()).await;
                     match tx_data {
@@ -72,8 +74,9 @@ pub async fn unlock_tokens_worker(
                                         ),
                                     ) = tx_execution_status
                                     {
-                                        let unstore_tx_status =
-                                            connection.unstore_tx(tx_hash).await;
+                                        let unstore_tx_status = connection
+                                            .unstore_tx(tx_hash.to_string(), tx_hashes.clone())
+                                            .await;
                                         match unstore_tx_status {
                                             Ok(_) => (),
                                             Err(error) => eprintln!(
@@ -88,14 +91,8 @@ pub async fn unlock_tokens_worker(
                                         )
                                     }
                                 }
-                                false => {
-                                    let move_tx_queue_tail_status =
-                                        connection.move_tx_queue_tail().await;
-                                    match move_tx_queue_tail_status {
-                                    Ok(_) => (),
-                                    Err(error) => eprintln!("REDIS: Failed to move transaction from head to tail of queue: {}", error),
-                                }
-                                }
+                                false => tx_hashes.lock().unwrap()[0..tx_hashes_queue.len()]
+                                    .rotate_left(1),
                             }
                         }
                         Err(error) => eprintln!(
@@ -104,11 +101,7 @@ pub async fn unlock_tokens_worker(
                         ),
                     }
                 }
-                Ok(None) => (),
-                Err(error) => eprintln!(
-                    "REDIS: Failed to get first transaction hash in queue: {}",
-                    error
-                ),
+                None => (),
             }
         }
     });

@@ -26,12 +26,12 @@ use secp256k1::ffi::PublicKey;
 use serde_json::json;
 use spectre_bridge_common::Proof;
 use std::collections::HashMap;
-use std::env;
 use std::ops::Deref;
 use std::os::linux::raw::stat;
 use std::str::FromStr;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
+use std::{default, env};
 use tokio::task::JoinHandle;
 use uint::rustc_hex::ToHex;
 use url::quirks::hash;
@@ -186,6 +186,21 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
+    let tx_hashes = async_redis
+        .lock()
+        .unwrap()
+        .clone()
+        .get_tx_hashes(crate::async_redis_wrapper::TRANSACTIONS)
+        .await;
+
+    let tx_hashes = match tx_hashes {
+        Ok(queue) => std::sync::Arc::new(std::sync::Mutex::new(queue)),
+        Err(error) => {
+            println!("REDIS: Failed to get transaction hashes: {}", error);
+            std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::default()))
+        }
+    };
+
     // If args.eth_secret is valid then get key from it else from settings
     let eth_keypair = {
         if let Some(path) = args.eth_secret {
@@ -334,6 +349,7 @@ async fn main() {
             } else {
                 5
             },
+            tx_hashes.clone(),
         )
     };
 
@@ -346,35 +362,36 @@ async fn main() {
         settings.clone(),
         storage.clone(),
         async_redis.clone(),
+        tx_hashes.clone(),
     );
-    
-    /*
-        let rocket = rocket::build()
-            .mount(
-                "/v1",
-                routes![
-                    health,
-                    transactions,
-                    set_threshold,
-                    set_allowed_tokens,
-                    profit,
-                    set_mapped_tokens,
-                    get_mapped_tokens,
-                    insert_mapped_tokens,
-                    remove_mapped_tokens,
-                ],
-            )
-            .manage(settings)
-            .manage(storage)
-            .manage(async_redis);
-    */
+
+    let rocket = rocket::build()
+        .mount(
+            "/v1",
+            routes![
+                health,
+                transactions,
+                set_threshold,
+                set_allowed_tokens,
+                profit,
+                set_mapped_tokens,
+                get_mapped_tokens,
+                insert_mapped_tokens,
+                remove_mapped_tokens,
+            ],
+        )
+        .manage(settings)
+        .manage(storage)
+        .manage(async_redis)
+        .manage(tx_hashes);
+
     tokio::join!(
         near_worker,
         subscriber,
         pending_transactions_worker,
         last_block_number_worker,
         unlock_tokens_worker,
-        //rocket.launch()
+        rocket.launch()
     );
 }
 
