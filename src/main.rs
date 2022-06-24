@@ -9,6 +9,7 @@ mod profit_estimation;
 mod transfer;
 mod unlock_tokens;
 mod utils;
+mod event_processor;
 
 #[macro_use]
 extern crate rocket;
@@ -196,7 +197,7 @@ async fn main() {
             .expect("Unable to get an Eth key")
     });
 
-    let eth_contract_address = settings.lock().unwrap().clone().eth.bridge_proxy_address;
+    let eth_contract_address = std::sync::Arc::new(settings.lock().unwrap().clone().eth.bridge_proxy_address);
 
     let eth_contract_abi = {
         let s = settings.lock().unwrap();
@@ -236,10 +237,11 @@ async fn main() {
     )
         .unwrap();
     let subscriber = {
-        let settings = settings.clone();
-        let eth_keypair = eth_keypair.clone();
-        let redis = async_redis.clone();
-        let eth_contract_abi = eth_contract_abi.clone();
+        let settings = std::sync::Arc::clone(&settings);
+        let eth_keypair = std::sync::Arc::clone(&eth_keypair);
+        let redis = std::sync::Arc::clone(&async_redis);
+        let eth_contract_abi = std::sync::Arc::clone(&eth_contract_abi);
+        let eth_contract_address = std::sync::Arc::clone(&eth_contract_address);
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) =
@@ -256,72 +258,12 @@ async fn main() {
                             fee,
                             recipient,
                         } => {
-
-                            tokio::spawn({
-                                let settings = std::sync::Arc::clone(&settings);
-                                let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-                                let near_addr = transfer.token_near.clone();
-                                let eth_keypair = std::sync::Arc::clone(&eth_keypair);
-                                let mut redis = redis.lock().unwrap().clone();
-                                let eth_contract_abi = std::sync::Arc::clone(&eth_contract_abi);
-                                async move {
-                                    let near_tokens_coin_id = settings.lock().unwrap().near_tokens_coin_id.clone(); // TODO: put the settings to the transfer::execute_transfer
-
-                                    let tx_hash = transfer::execute_transfer(
-                                        eth_keypair.clone().as_ref(),
-                                        spectre_bridge_common::Event::SpectreBridgeTransferEvent {
-                                            nonce,
-                                            chain_id,
-                                            valid_till,
-                                            transfer,
-                                            fee,
-                                            recipient,
-                                        },
-                                        eth_contract_abi.as_bytes(),
-                                        rpc_url.as_str(),
-                                        web3::types::Address::from_str("eth_contract_address.clone()").unwrap(),
-                                        0.0,
-                                        &near_tokens_coin_id,
-                                    )
-                                        .await;
-
-                                    match tx_hash {
-                                        Ok(Some(hash)) => {
-                                            println!("New eth transaction: {:#?}", hash);
-
-                                            let d = crate::async_redis_wrapper::PendingTransactionData {
-                                                timestamp: std::time::SystemTime::now()
-                                                    .duration_since(std::time::UNIX_EPOCH)
-                                                    .unwrap()
-                                                    .as_secs(),
-                                                nonce: u128::from(nonce),
-                                            };
-
-                                            let res: redis::RedisResult<()> = redis
-                                                .connection
-                                                .hset(
-                                                    async_redis_wrapper::PENDING_TRANSACTIONS,
-                                                    hash.as_bytes().to_hex::<String>(),
-                                                    serde_json::to_string(&d).unwrap(),
-                                                )
-                                                .await;
-                                            if let Err(e) = res {
-                                                eprintln!("Unable to store pending transaction: {}", e);
-                                            }
-                                        }
-                                        Ok(None) => {
-                                            println!(
-                                                "Transaction {} is not profitable: {}",
-                                                u128::from(nonce),
-                                                near_addr
-                                            );
-                                        }
-                                        Err(error) => {
-                                            eprint!("Failed to execute transferTokens: {}", error)
-                                        }
-                                    }
-                                }
-                            });
+                            event_processor::process_transfer_event(nonce, chain_id, valid_till, transfer, fee, recipient,
+                                                                    settings.clone(),
+                                                                    redis.clone(),
+                                                                    eth_contract_address.as_ref().clone(),
+                                                                    eth_keypair.clone(),
+                                                                    eth_contract_abi.clone());
                         }
                         _ => {}
                     }
@@ -342,7 +284,7 @@ async fn main() {
         async move {
             pending_transactions_worker::run(
                 s.0,
-                eth_contract_address,
+                eth_contract_address.as_ref().clone(),
                 eth_contract_abi.as_ref().clone(),
                 web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
                 redis,
