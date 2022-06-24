@@ -10,7 +10,6 @@ pub async fn run(
     eth_keypair: &secp256k1::SecretKey,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
     delay_request_status_sec: u64,
-    tx_hashes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
         rpc_url.as_str(),
@@ -87,18 +86,10 @@ pub async fn run(
                                             proof,
                                             nonce: item.1.nonce,
                                         };
-                                        let tx_hash = item.0.as_bytes().to_hex::<String>();
-                                        let store_tx_status =
-                                            redis.store_tx(tx_hash.clone(), data).await;
-                                        match store_tx_status {
-                                            Ok(_) => {
-                                                tx_hashes.lock().unwrap().push(tx_hash);
-                                            }
-                                            Err(error) => eprintln!(
-                                                "REDIS: Failed to store transaction: {}",
-                                                error
-                                            ),
-                                        }
+                                        let _: () = redis
+                                            .store_tx(item.0.as_bytes().to_hex::<String>(), data)
+                                            .await
+                                            .unwrap();
                                         transactions_to_remove.push(*item.0);
                                     }
                                     Err(e) => {

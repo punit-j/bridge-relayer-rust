@@ -186,20 +186,20 @@ async fn main() {
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
-    let tx_hashes = async_redis
-        .lock()
-        .unwrap()
-        .clone()
-        .get_tx_hashes(crate::async_redis_wrapper::TRANSACTIONS)
-        .await;
+    // let tx_hashes = async_redis
+    //     .lock()
+    //     .unwrap()
+    //     .clone()
+    //     .get_tx_hashes(crate::async_redis_wrapper::TRANSACTIONS)
+    //     .await;
 
-    let tx_hashes = match tx_hashes {
-        Ok(queue) => std::sync::Arc::new(std::sync::Mutex::new(queue)),
-        Err(error) => {
-            println!("REDIS: Failed to get transaction hashes: {}", error);
-            std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::default()))
-        }
-    };
+    // let tx_hashes = match tx_hashes {
+    //     Ok(queue) => std::sync::Arc::new(std::sync::Mutex::new(queue)),
+    //     Err(error) => {
+    //         println!("REDIS: Failed to get transaction hashes: {}", error);
+    //         std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::default()))
+    //     }
+    // };
 
     // If args.eth_secret is valid then get key from it else from settings
     let eth_keypair = {
@@ -349,7 +349,6 @@ async fn main() {
             } else {
                 5
             },
-            tx_hashes.clone(),
         )
     };
 
@@ -362,7 +361,6 @@ async fn main() {
         settings.clone(),
         storage.clone(),
         async_redis.clone(),
-        tx_hashes.clone(),
     );
 
     let rocket = rocket::build()
@@ -382,8 +380,7 @@ async fn main() {
         )
         .manage(settings)
         .manage(storage)
-        .manage(async_redis)
-        .manage(tx_hashes);
+        .manage(async_redis);
 
     tokio::join!(
         near_worker,

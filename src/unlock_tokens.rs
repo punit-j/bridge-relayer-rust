@@ -37,7 +37,6 @@ pub async fn unlock_tokens_worker(
     settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
     storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-    tx_hashes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) -> redis::RedisResult<()> {
     tokio::spawn(async move {
         let mut connection = redis.lock().unwrap().clone();
@@ -48,61 +47,74 @@ pub async fn unlock_tokens_worker(
                 .await
                 .tick()
                 .await;
-            let tx_hashes_queue = tx_hashes.lock().unwrap().clone();
-            match tx_hashes_queue.first() {
-                Some(tx_hash) => {
-                    let last_block_number = storage.lock().unwrap().clone().last_block_number;
-                    let tx_data = connection.get_tx_data(tx_hash.clone()).await;
-                    match tx_data {
-                        Ok(data) => {
-                            match data.block + unlock_tokens_worker_settings.some_blocks_number
-                                <= last_block_number
-                            {
-                                true => {
-                                    let tx_execution_status = crate::unlock_tokens::unlock_tokens(
-                                        unlock_tokens_worker_settings.server_addr,
-                                        account.clone(),
-                                        unlock_tokens_worker_settings.contract_account_id,
-                                        data.proof,
-                                        data.nonce,
-                                        gas,
-                                    )
-                                    .await;
-                                    if let Ok(
-                                        near_primitives::views::FinalExecutionStatus::SuccessValue(
-                                            _,
-                                        ),
-                                    ) = tx_execution_status
-                                    {
-                                        let unstore_tx_status =
-                                            connection.unstore_tx(tx_hash.to_string()).await;
-                                        match unstore_tx_status {
-                                            Ok(_) => {
-                                                tx_hashes.lock().unwrap().remove(0);
+            let tx_hashes_queue = connection
+                .get_tx_hashes(crate::async_redis_wrapper::TRANSACTIONS)
+                .await;
+            match tx_hashes_queue {
+                Ok(mut queue) => {
+                    while !queue.is_empty() {
+                        match queue.first() {
+                            Some(tx_hash) => {
+                                let last_block_number =
+                                    storage.lock().unwrap().clone().last_block_number;
+                                let tx_data = connection.get_tx_data(tx_hash.clone()).await;
+                                match tx_data {
+                                    Ok(data) => {
+                                        match data.block + unlock_tokens_worker_settings.some_blocks_number
+                                            <= last_block_number
+                                        {
+                                            true => {
+                                                let tx_execution_status = crate::unlock_tokens::unlock_tokens(
+                                                    unlock_tokens_worker_settings.server_addr.clone(),
+                                                    account.clone(),
+                                                    unlock_tokens_worker_settings.contract_account_id.clone(),
+                                                    data.proof,
+                                                    data.nonce,
+                                                    gas,
+                                                )
+                                                .await;
+                                                if let Ok(
+                                                    near_primitives::views::FinalExecutionStatus::SuccessValue(
+                                                        _,
+                                                    ),
+                                                ) = tx_execution_status
+                                                {
+                                                    let unstore_tx_status =
+                                                        connection.unstore_tx(tx_hash.to_string()).await;
+                                                    match unstore_tx_status {
+                                                        Ok(_) => {
+                                                            queue.remove(0);
+                                                        }
+                                                        Err(error) => eprintln!(
+                                                            "REDIS: Failed to unstore transaction: {}",
+                                                            error
+                                                        ),
+                                                    }
+                                                } else {
+                                                    eprintln!(
+                                                        "Failed to unlock tokens: {}",
+                                                        tx_execution_status.unwrap_err()
+                                                    )
+                                                }
                                             }
-                                            Err(error) => eprintln!(
-                                                "REDIS: Failed to unstore transaction: {}",
-                                                error
-                                            ),
+                                            false => {
+                                                let queue_len = queue.len();
+                                                queue[0..queue_len]
+                                                .rotate_left(1)
+                                            },
                                         }
-                                    } else {
-                                        eprintln!(
-                                            "Failed to unlock tokens: {}",
-                                            tx_execution_status.unwrap_err()
-                                        )
                                     }
+                                    Err(error) => eprintln!(
+                                        "REDIS: Failed to get transaction data by hash from set: {}",
+                                        error
+                                    ),
                                 }
-                                false => tx_hashes.lock().unwrap()[0..tx_hashes_queue.len()]
-                                    .rotate_left(1),
                             }
+                            None => (),
                         }
-                        Err(error) => eprintln!(
-                            "REDIS: Failed to get transaction data by hash from set: {}",
-                            error
-                        ),
                     }
                 }
-                None => (),
+                Err(error) => eprintln!("REDIS: Failed to get queue of tx_hashes: {}", error),
             }
         }
     });
