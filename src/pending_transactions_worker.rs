@@ -87,15 +87,18 @@ pub async fn run(
                                             proof,
                                             nonce: item.1.nonce,
                                         };
-
-                                        let _: () = redis
-                                            .store_tx(
-                                                item.0.as_bytes().to_hex::<String>(),
-                                                data,
-                                                tx_hashes.clone(),
-                                            )
-                                            .await
-                                            .unwrap();
+                                        let tx_hash = item.0.as_bytes().to_hex::<String>();
+                                        let store_tx_status =
+                                            redis.store_tx(tx_hash.clone(), data).await;
+                                        match store_tx_status {
+                                            Ok(_) => {
+                                                tx_hashes.lock().unwrap().push(tx_hash);
+                                            }
+                                            Err(error) => eprintln!(
+                                                "REDIS: Failed to store transaction: {}",
+                                                error
+                                            ),
+                                        }
                                         transactions_to_remove.push(*item.0);
                                     }
                                     Err(e) => {

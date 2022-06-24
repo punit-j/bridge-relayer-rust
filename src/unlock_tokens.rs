@@ -74,11 +74,12 @@ pub async fn unlock_tokens_worker(
                                         ),
                                     ) = tx_execution_status
                                     {
-                                        let unstore_tx_status = connection
-                                            .unstore_tx(tx_hash.to_string(), tx_hashes.clone())
-                                            .await;
+                                        let unstore_tx_status =
+                                            connection.unstore_tx(tx_hash.to_string()).await;
                                         match unstore_tx_status {
-                                            Ok(_) => (),
+                                            Ok(_) => {
+                                                tx_hashes.lock().unwrap().remove(0);
+                                            }
                                             Err(error) => eprintln!(
                                                 "REDIS: Failed to unstore transaction: {}",
                                                 error

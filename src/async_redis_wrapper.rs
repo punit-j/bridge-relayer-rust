@@ -73,12 +73,7 @@ impl AsyncRedisWrapper {
             .unwrap();
     }
 
-    pub async fn store_tx(
-        &mut self,
-        tx_hash: String,
-        tx_data: TxData,
-        tx_hashes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
-    ) -> redis::RedisResult<()> {
+    pub async fn store_tx(&mut self, tx_hash: String, tx_data: TxData) -> redis::RedisResult<()> {
         let storing_status = self
             .hsetnx(
                 TRANSACTIONS,
@@ -88,21 +83,15 @@ impl AsyncRedisWrapper {
             )
             .await;
         if let Ok(redis::Value::Int(1)) = storing_status {
-            tx_hashes.lock().unwrap().push(tx_hash);
             return Ok(());
         } else {
             return Err(storing_status.unwrap_err());
         }
     }
 
-    pub async fn unstore_tx(
-        &mut self,
-        tx_hash: String,
-        tx_hashes: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
-    ) -> redis::RedisResult<()> {
+    pub async fn unstore_tx(&mut self, tx_hash: String) -> redis::RedisResult<()> {
         let unstoring_status = self.hdel(TRANSACTIONS, &tx_hash).await;
         if let Ok(redis::Value::Int(1)) = unstoring_status {
-            tx_hashes.lock().unwrap().remove(0);
             return Ok(());
         } else {
             return Err(unstoring_status.unwrap_err());
