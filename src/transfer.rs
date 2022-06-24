@@ -6,7 +6,7 @@ pub async fn execute_transfer(
     contract_addr: web3::types::Address,
     profit_threshold: f64,
     near_tokens_coin_id: &crate::config::NearTokensCoinId,
-) -> Result<Option<web3::types::H256>, Box<dyn std::error::Error>> {
+) -> Result<Option<web3::types::H256>, String> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
         nonce,
