@@ -1,3 +1,8 @@
+use std::sync::{Arc, Mutex};
+use spectre_bridge_common::Event;
+use web3::signing::Key;
+use web3::types::Address;
+
 pub async fn execute_transfer(
     key: impl web3::signing::Key,
     transfer_message: spectre_bridge_common::Event,
@@ -5,7 +10,7 @@ pub async fn execute_transfer(
     rpc_url: &str,
     contract_addr: web3::types::Address,
     profit_threshold: f64,
-    near_tokens_coin_id: &crate::config::NearTokensCoinId,
+    settings: Arc<Mutex<crate::Settings>>,
 ) -> Result<Option<web3::types::H256>, String> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -71,7 +76,7 @@ pub async fn execute_transfer(
     let fee_token = transfer_message.4.token;
     let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
 
-    let coin_id = near_tokens_coin_id.get_coin_id(fee_token);
+    let coin_id = settings.lock().unwrap().near_tokens_coin_id.get_coin_id(fee_token);
     match coin_id {
         Some(_) => (),
         None => {

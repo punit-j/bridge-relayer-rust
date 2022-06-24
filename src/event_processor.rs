@@ -24,7 +24,6 @@ pub fn process_transfer_event(nonce: near_sdk::json_types::U128,
         let near_addr = transfer.token_near.clone();
         let eth_contract_abi = std::sync::Arc::clone(&eth_contract_abi);
         async move {
-            let near_tokens_coin_id = settings.lock().unwrap().near_tokens_coin_id.clone(); // TODO: put the settings to the transfer::execute_transfer
             let mut redis = redis.lock().unwrap().clone();
             let tx_hash = crate::transfer::execute_transfer(
                 eth_key.clone().as_ref(),
@@ -40,7 +39,7 @@ pub fn process_transfer_event(nonce: near_sdk::json_types::U128,
                 rpc_url.as_str(),
                 eth_contract_address,
                 0.0,
-                &near_tokens_coin_id,
+                settings.clone(),
             )
                 .await;
 
