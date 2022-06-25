@@ -308,11 +308,10 @@ async fn main() {
         async_redis.clone(),
     );
 
-    /*
-        let rocket = rocket::build()
-            .mount(
-                "/v1",
-                routes![
+    let rocket = rocket::build()
+        .mount(
+            "/v1",
+            routes![
                         health,
                         transactions,
                         set_threshold,
@@ -323,18 +322,18 @@ async fn main() {
                         insert_mapped_tokens,
                         remove_mapped_tokens,
                     ],
-            )
-            .manage(settings)
-            .manage(storage)
-            .manage(async_redis);
-    */
+        )
+        .manage(settings)
+        .manage(storage)
+        .manage(async_redis);
+
     tokio::join!(
                     near_worker,
                     subscriber,
                     pending_transactions_worker,
                     last_block_number_worker,
                     unlock_tokens_worker,
-                    //rocket.launch()
+                    rocket.launch()
                 );
 }
 
