@@ -57,12 +57,8 @@ pub async fn run<'a> (
                 .is_ok()
             {
                 transactions_to_remove.push(*item.0);
-            } else if (item.1.timestamp + delay_request_status_sec)
-                < std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-            {
+            }
+            else {
                 match eth_client.transaction_status(*item.0).await {
                     Ok(status) => {
                         match status {
