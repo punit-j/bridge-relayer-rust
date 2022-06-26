@@ -94,18 +94,18 @@ impl AsyncRedisWrapper {
             )
             .await;
         if let Ok(redis::Value::Int(1)) = storing_status {
-            return Ok(self.rpush(TRANSACTION_HASHES, &tx_hash).await?);
+            return self.rpush(TRANSACTION_HASHES, &tx_hash).await;
         } else {
-            return Err(storing_status.unwrap_err());
+            Err(storing_status.unwrap_err())
         }
     }
 
     pub async fn unstore_tx(&mut self, tx_hash: String) -> redis::RedisResult<()> {
         let unstoring_status = self.hdel(TRANSACTIONS, &tx_hash).await;
         if let Ok(redis::Value::Int(1)) = unstoring_status {
-            return Ok(self.lrem(TRANSACTION_HASHES, 0, &tx_hash).await?);
+            return self.lrem(TRANSACTION_HASHES, 0, &tx_hash).await;
         } else {
-            return Err(unstoring_status.unwrap_err());
+            Err(unstoring_status.unwrap_err())
         }
     }
 
@@ -113,9 +113,9 @@ impl AsyncRedisWrapper {
         match self.lindex(TRANSACTION_HASHES, 0).await {
             Ok(value) => {
                 if let redis::Value::Data(_) = value {
-                    return Ok(Some(redis::from_redis_value(&value)?));
+                    Ok(Some(redis::from_redis_value(&value)?))
                 } else {
-                    return Ok(None);
+                    Ok(None)
                 }
             }
             Err(error) => Err(error),
@@ -126,22 +126,22 @@ impl AsyncRedisWrapper {
         match self.hget(TRANSACTIONS, &tx_hash).await {
             Ok(value) => {
                 let serialized_tx_data: String = redis::from_redis_value(&value)?;
-                return Ok(serde_json::from_str(&serialized_tx_data)
-                    .expect("REDIS: Failed to deserialize transaction data"));
+                Ok(serde_json::from_str(&serialized_tx_data)
+                    .expect("REDIS: Failed to deserialize transaction data"))
             }
             Err(error) => Err(error),
         }
     }
 
     pub async fn move_tx_queue_tail(&mut self) -> redis::RedisResult<()> {
-        Ok(self
+        self
             .lmove(
                 TRANSACTION_HASHES,
                 TRANSACTION_HASHES,
                 DIRECTION_LEFT,
                 DIRECTION_RIGHT,
             )
-            .await?)
+            .await
     }
 
     async fn hsetnx(
@@ -150,27 +150,27 @@ impl AsyncRedisWrapper {
         field: &str,
         value: &str,
     ) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.hset_nx(key, field, value).await?)
+        self.connection.hset_nx(key, field, value).await
     }
 
     async fn rpush(&mut self, key: &str, value: &str) -> redis::RedisResult<()> {
-        Ok(self.connection.rpush(key, value).await?)
+        self.connection.rpush(key, value).await
     }
 
     async fn lindex(&mut self, key: &str, index: isize) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.lindex(key, index).await?)
+        self.connection.lindex(key, index).await
     }
 
     async fn lrem(&mut self, key: &str, count: isize, value: &str) -> redis::RedisResult<()> {
-        Ok(self.connection.lrem(key, count, value).await?)
+        self.connection.lrem(key, count, value).await
     }
 
     async fn hget(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.hget(key, field).await?)
+        self.connection.hget(key, field).await
     }
 
     async fn hdel(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.hdel(key, field).await?)
+        self.connection.hdel(key, field).await
     }
 
     async fn lmove(
@@ -180,13 +180,13 @@ impl AsyncRedisWrapper {
         src_dir: &str,
         dst_dir: &str,
     ) -> redis::RedisResult<()> {
-        Ok(redis::cmd("lmove")
+        redis::cmd("lmove")
             .arg(srckey)
             .arg(dstkey)
             .arg(src_dir)
             .arg(dst_dir)
             .query_async(&mut self.connection)
-            .await?)
+            .await
     }
 
     // TODO: review. Moved from the redis_wrapper
@@ -245,7 +245,7 @@ pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
 
         while let Some(s) = pubsub_stream.next().await {
             let pubsub_msg: T = s.get_payload().expect("Failed to fetch the message");
-            if let Err(e) = sender.send(pubsub_msg).await {
+            if let Err(_e) = sender.send(pubsub_msg).await {
                 break;
             }
         }

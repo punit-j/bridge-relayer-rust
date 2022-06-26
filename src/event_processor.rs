@@ -1,9 +1,6 @@
+use crate::{async_redis_wrapper, ToHex};
 use crate::async_redis_wrapper::AsyncRedisWrapper;
-use crate::{async_redis_wrapper, Settings, ToHex};
-use near_sdk::json_types::U128;
 use redis::AsyncCommands;
-use secp256k1::SecretKey;
-use spectre_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
 use std::sync::{Arc, Mutex};
 
 pub fn process_transfer_event(

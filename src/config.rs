@@ -2,7 +2,6 @@ use near_sdk::AccountId;
 use serde_json::json;
 use std::borrow::BorrowMut;
 use std::fs;
-use std::str::FromStr;
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

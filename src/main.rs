@@ -15,29 +15,14 @@ mod utils;
 extern crate rocket;
 
 use crate::config::Settings;
-use crate::ethereum::proof::Error;
-use borsh::BorshSerialize;
 use clap::Parser;
-use near_crypto;
-use near_primitives::types::TransactionOrReceiptId::Transaction;
 use near_sdk::AccountId;
-use redis::{AsyncCommands, RedisResult, Value};
+use redis::{AsyncCommands};
 use rocket::State;
-use secp256k1::ffi::PublicKey;
 use serde_json::json;
-use spectre_bridge_common::Proof;
-use std::collections::HashMap;
-use std::env;
-use std::ops::Deref;
-use std::os::linux::raw::stat;
 use std::str::FromStr;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
-use tokio::task::JoinHandle;
 use uint::rustc_hex::ToHex;
-use url::quirks::hash;
-use web3::signing::Key;
-use web3::types::H256;
+
 
 #[get("/health")]
 fn health() -> String {
@@ -190,7 +175,7 @@ async fn main() {
     // If args.eth_secret is valid then get key from it else from settings
     let eth_keypair = std::sync::Arc::new({
         if let Some(path) = args.eth_secret {
-            secp256k1::SecretKey::from_str(&path.as_str())
+            secp256k1::SecretKey::from_str(path.as_str())
         } else {
             secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
         }
@@ -269,7 +254,7 @@ async fn main() {
                                 recipient,
                                 settings.clone(),
                                 redis.clone(),
-                                eth_contract_address.as_ref().clone(),
+                                *eth_contract_address.as_ref(),
                                 eth_keypair.clone(),
                                 eth_contract_abi.clone(),
                             );
@@ -296,7 +281,7 @@ async fn main() {
         async move {
             pending_transactions_worker::run(
                 s.0,
-                eth_contract_address.as_ref().clone(),
+                *eth_contract_address.as_ref(),
                 eth_contract_abi.as_ref().clone(),
                 web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
                 redis,

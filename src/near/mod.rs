@@ -1,14 +1,6 @@
-use near_lake_framework::near_indexer_primitives::types::{AccountId, BlockHeight};
-use near_lake_framework::near_indexer_primitives::views::{
-    StateChangeValueView, StateChangeWithCauseView,
-};
-use near_lake_framework::{LakeConfig, LakeConfigBuilder};
-use redis::AsyncCommands;
-use rocket::form::validate::Len;
-use serde_json::json;
-use spectre_bridge_common::Event;
-use std::io::Write;
-use std::str::FromStr;
+use near_lake_framework::near_indexer_primitives::types::{AccountId};
+use near_lake_framework::{LakeConfigBuilder};
+
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
@@ -86,11 +78,11 @@ pub fn fix_json(mut json: serde_json::Value) -> serde_json::Value {
 }
 
 /// Gets an event from json and checks standard+version
-pub fn get_event(mut json: serde_json::Value) -> Result<spectre_bridge_common::Event, ParceError> {
-    let mut json = fix_json(json);
+pub fn get_event(json: serde_json::Value) -> Result<spectre_bridge_common::Event, ParceError> {
+    let json = fix_json(json);
 
     let r = serde_json::from_value::<spectre_bridge_common::EventMessage>(json.clone());
-    let r = r.map_err(|e| ParceError::Json(e))?;
+    let r = r.map_err(ParceError::Json)?;
 
     if r.standard != spectre_bridge_common::STANDARD {
         return Err(ParceError::NotEvent);
@@ -101,19 +93,19 @@ pub fn get_event(mut json: serde_json::Value) -> Result<spectre_bridge_common::E
     }
 
     let r = serde_json::from_value::<spectre_bridge_common::Event>(json);
-    let r = r.map_err(|e| ParceError::Json(e))?;
+    let r = r.map_err(ParceError::Json)?;
 
     Ok(r)
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::near::{fix_json, get_event};
+    use crate::near::{fix_json};
     use assert_json_diff::assert_json_eq;
-    use near_sdk::json_types::U128;
-    use near_sdk::AccountId;
+    
+    
     use serde_json::json;
-    use std::str::FromStr;
+    
 
     #[test]
     fn fix_json_test() {

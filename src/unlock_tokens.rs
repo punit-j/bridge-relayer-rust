@@ -25,8 +25,7 @@ async fn unlock_tokens(
             return Err(format!(
                 "Failed to fetch response by calling lp_unlock contract method: {}",
                 error
-            )
-            .into())
+            ))
         }
     }
 }

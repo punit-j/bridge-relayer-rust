@@ -9,13 +9,13 @@ pub async fn run<'a>(
     eth_contract_abi: String,
     eth_keypair: web3::signing::SecretKeyRef<'a>,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
-    delay_request_status_sec: u64,
+    _delay_request_status_sec: u64,
 ) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
         rpc_url.as_str(),
         "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
         eth_contract_address,
-        &eth_contract_abi.as_bytes(),
+        eth_contract_abi.as_bytes(),
         eth_keypair,
     )
     .unwrap();
@@ -41,8 +41,8 @@ pub async fn run<'a>(
             )
             .unwrap();
 
-            if !pending_transactions.contains_key(&hash) {
-                pending_transactions.insert(hash, data);
+            if let std::collections::hash_map::Entry::Vacant(e) = pending_transactions.entry(hash) {
+                e.insert(data);
                 println!("New pending transaction: {:#?}", hash)
             }
         }
@@ -68,7 +68,7 @@ pub async fn run<'a>(
                                     .unwrap()
                                     .as_secs();
                             }
-                            ethereum::transactions::TransactionStatus::Failure(block_number) => {
+                            ethereum::transactions::TransactionStatus::Failure(_block_number) => {
                                 println!("Transfer token transaction is failed {:?}", item.0);
                                 transactions_to_remove.push(*item.0);
                             }

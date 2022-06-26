@@ -43,18 +43,7 @@
 pub mod proof;
 pub mod transactions;
 
-use bytes::{BufMut, BytesMut};
-use core::time;
-use near_sdk::{
-    borsh::{self, BorshDeserialize, BorshSerialize},
-    serde::{Deserialize, Serialize},
-    BlockHeight,
-};
-use std::time::Duration;
-use std::{
-    borrow::Borrow, collections::HashMap, fs, process::Command, str::FromStr, string, thread::sleep,
-};
-use web3::{api::Namespace, contract::Contract, ethabi, transports::Http, types};
+use web3::{api::Namespace, contract::Contract, transports::Http};
 
 pub struct RainbowBridgeEthereumClient<'a> {
     api_url: &'a str,
@@ -84,7 +73,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
             rainbow_bridge_index,
             client,
             contract,
-            key: web3::signing::SecretKeyRef::from(key),
+            key,
         })
     }
 
@@ -114,7 +103,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
             self.api_url,
             &self.client,
             self.rainbow_bridge_index,
-            &tx_hash,
+            tx_hash,
         )
         .await
     }

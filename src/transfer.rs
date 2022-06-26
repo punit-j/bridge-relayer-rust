@@ -1,7 +1,5 @@
-use spectre_bridge_common::Event;
 use std::sync::{Arc, Mutex};
 use web3::signing::Key;
-use web3::types::Address;
 
 pub async fn execute_transfer(
     key: impl web3::signing::Key,
@@ -43,13 +41,13 @@ pub async fn execute_transfer(
     .await;
     match estimated_gas_in_wei {
         Ok(_) => (),
-        Err(error) => return Err(format!("Failed to estimate gas in WEI: {}", error).into()),
+        Err(error) => return Err(format!("Failed to estimate gas in WEI: {}", error)),
     }
 
     let gas_price_in_wei = eth_client::methods::gas_price(rpc_url).await;
     match gas_price_in_wei {
         Ok(_) => (),
-        Err(error) => return Err(format!("Failed to fetch gas price in WEI: {}", error).into()),
+        Err(error) => return Err(format!("Failed to fetch gas price in WEI: {}", error)),
     }
 
     let eth_price_in_usd = eth_client::methods::eth_price().await;
@@ -58,12 +56,12 @@ pub async fn execute_transfer(
             Some(_) => (),
             None => {
                 return Err(
-                    format!("Failed to fetch Ethereum price in USD: Invalid coin id").into(),
+                    "Failed to fetch Ethereum price in USD: Invalid coin id".to_string(),
                 )
             }
         },
         Err(error) => {
-            return Err(format!("Failed to fetch Ethereum price in USD: {}", error).into())
+            return Err(format!("Failed to fetch Ethereum price in USD: {}", error))
         }
     }
 
@@ -84,7 +82,7 @@ pub async fn execute_transfer(
     match coin_id {
         Some(_) => (),
         None => {
-            return Err(format!("Failed to get coin id ({}) by matching", coin_id.unwrap()).into())
+            return Err(format!("Failed to get coin id ({}) by matching", coin_id.unwrap()))
         }
     }
 
@@ -92,9 +90,9 @@ pub async fn execute_transfer(
     match fee_token_usd {
         Ok(price) => match price {
             Some(_) => (),
-            None => return Err(format!("Failed to get token price: Invalid coin id").into()),
+            None => return Err("Failed to get token price: Invalid coin id".to_string()),
         },
-        Err(error) => return Err(format!("Failed to get token price: {}", error).into()),
+        Err(error) => return Err(format!("Failed to get token price: {}", error)),
     }
 
     let is_profitable_tx = crate::profit_estimation::is_profitable(
@@ -119,7 +117,7 @@ pub async fn execute_transfer(
             match tx_hash {
                 Ok(hash) => Ok(Some(hash)),
                 Err(error) => {
-                    return Err(format!("Failed to execute tokens transfer: {}", error).into())
+                    return Err(format!("Failed to execute tokens transfer: {}", error))
                 }
             }
         }
