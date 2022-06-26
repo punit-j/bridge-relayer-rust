@@ -1,6 +1,7 @@
 mod async_redis_wrapper;
 mod config;
 mod ethereum;
+mod event_processor;
 mod last_block;
 mod near;
 mod pending_transactions_worker;
@@ -9,7 +10,6 @@ mod profit_estimation;
 mod transfer;
 mod unlock_tokens;
 mod utils;
-mod event_processor;
 
 #[macro_use]
 extern crate rocket;
@@ -194,10 +194,11 @@ async fn main() {
         } else {
             secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
         }
-            .expect("Unable to get an Eth key")
+        .expect("Unable to get an Eth key")
     });
 
-    let eth_contract_address = std::sync::Arc::new(settings.lock().unwrap().clone().eth.bridge_proxy_address);
+    let eth_contract_address =
+        std::sync::Arc::new(settings.lock().unwrap().clone().eth.bridge_proxy_address);
 
     let eth_contract_abi = {
         let s = settings.lock().unwrap();
@@ -206,10 +207,11 @@ async fn main() {
                 &s.etherscan_api.endpoint_url.to_string(),
                 s.eth.bridge_impl_address,
                 &s.etherscan_api.api_key,
-            ).await.expect("Failed to get contract abi")
+            )
+            .await
+            .expect("Failed to get contract abi"),
         )
     };
-
 
     let near_account = if let Some(path) = args.near_credentials {
         near_client::read_private_key::read_private_key_from_file(path.as_str())
@@ -218,7 +220,7 @@ async fn main() {
             settings.lock().unwrap().near.near_credentials_path.as_str(),
         )
     }
-        .unwrap();
+    .unwrap();
 
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
 
@@ -235,7 +237,7 @@ async fn main() {
         async_redis_wrapper::EVENTS.to_string(),
         async_redis.clone(),
     )
-        .unwrap();
+    .unwrap();
     let subscriber = {
         let settings = std::sync::Arc::clone(&settings);
         let eth_keypair = std::sync::Arc::clone(&eth_keypair);
@@ -245,7 +247,7 @@ async fn main() {
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) =
-                serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
+                    serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
                 {
                     println!("Process event {:?}", event);
 
@@ -258,12 +260,19 @@ async fn main() {
                             fee,
                             recipient,
                         } => {
-                            event_processor::process_transfer_event(nonce, chain_id, valid_till, transfer, fee, recipient,
-                                                                    settings.clone(),
-                                                                    redis.clone(),
-                                                                    eth_contract_address.as_ref().clone(),
-                                                                    eth_keypair.clone(),
-                                                                    eth_contract_abi.clone());
+                            event_processor::process_transfer_event(
+                                nonce,
+                                chain_id,
+                                valid_till,
+                                transfer,
+                                fee,
+                                recipient,
+                                settings.clone(),
+                                redis.clone(),
+                                eth_contract_address.as_ref().clone(),
+                                eth_keypair.clone(),
+                                eth_contract_abi.clone(),
+                            );
                         }
                         _ => {}
                     }
@@ -275,7 +284,10 @@ async fn main() {
     let pending_transactions_worker = tokio::spawn({
         let s = {
             let s = settings.lock().unwrap();
-            (s.eth.rpc_url.clone(), s.eth.pending_transaction_poll_delay_sec)
+            (
+                s.eth.rpc_url.clone(),
+                s.eth.pending_transaction_poll_delay_sec,
+            )
         };
         let eth_keypair = eth_keypair.clone();
         let redis = async_redis.lock().unwrap().clone();
@@ -288,12 +300,9 @@ async fn main() {
                 eth_contract_abi.as_ref().clone(),
                 web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
                 redis,
-                if s.1 > 0 {
-                    s.1 as u64
-                } else {
-                    5
-                },
-            ).await
+                if s.1 > 0 { s.1 as u64 } else { 5 },
+            )
+            .await
         }
     });
 
@@ -312,29 +321,29 @@ async fn main() {
         .mount(
             "/v1",
             routes![
-                        health,
-                        transactions,
-                        set_threshold,
-                        set_allowed_tokens,
-                        profit,
-                        set_mapped_tokens,
-                        get_mapped_tokens,
-                        insert_mapped_tokens,
-                        remove_mapped_tokens,
-                    ],
+                health,
+                transactions,
+                set_threshold,
+                set_allowed_tokens,
+                profit,
+                set_mapped_tokens,
+                get_mapped_tokens,
+                insert_mapped_tokens,
+                remove_mapped_tokens,
+            ],
         )
         .manage(settings)
         .manage(storage)
         .manage(async_redis);
 
     tokio::join!(
-                    near_worker,
-                    subscriber,
-                    pending_transactions_worker,
-                    last_block_number_worker,
-                    unlock_tokens_worker,
-                    rocket.launch()
-                );
+        near_worker,
+        subscriber,
+        pending_transactions_worker,
+        last_block_number_worker,
+        unlock_tokens_worker,
+        rocket.launch()
+    );
 }
 
 #[cfg(test)]
@@ -352,9 +361,9 @@ pub mod tests {
             .await;
         assert!(
             matches!(
-                            status,
-                            Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
-                        ),
+                status,
+                Ok(near_jsonrpc_client::methods::status::RpcStatusResponse { .. })
+            ),
             "expected an Ok(RpcStatusResponse), found [{:?}]",
             status
         );

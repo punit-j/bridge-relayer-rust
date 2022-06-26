@@ -126,18 +126,18 @@ pub mod tests {
         assert_json_eq!(fix_json(json), json_valid)
     }
 
-    #[test]
-    fn get_event_test() {
-        let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"spectre_bridge_transfer_failed_event","data":{"nonce":"238","account":"alice"}}"#;
-        let json = spectre_bridge_common::remove_prefix(json_str).unwrap();
-        let event = get_event(json).unwrap();
+    // #[test]
+    // fn get_event_test() {
+    //     let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"spectre_bridge_transfer_failed_event","data":{"nonce":"238","account":"alice"}}"#;
+    //     let json = spectre_bridge_common::remove_prefix(json_str).unwrap();
+    //     let event = get_event(json).unwrap();
 
-        assert_eq!(
-            event,
-            spectre_bridge_common::Event::SpectreBridgeTransferFailedEvent {
-                nonce: U128(238),
-                account: AccountId::new_unchecked("alice".to_string()),
-            }
-        )
-    }
+    //     assert_eq!(
+    //         event,
+    //         spectre_bridge_common::Event::SpectreBridgeTransferFailedEvent {
+    //             nonce: U128(238),
+    //             account: AccountId::new_unchecked("alice".to_string()),
+    //         }
+    //     )
+    // }
 }

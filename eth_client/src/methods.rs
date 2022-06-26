@@ -40,12 +40,7 @@ pub async fn change(
 ) -> web3::contract::Result<web3::types::H256> {
     let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
     Ok(abi
-        .signed_call(
-            method_name,
-            args,
-            web3::contract::Options::default(),
-            key,
-        )
+        .signed_call(method_name, args, web3::contract::Options::default(), key)
         .await?)
 }
 
@@ -101,26 +96,15 @@ pub async fn token_price(coin_id: String) -> Result<Option<f64>, reqwest::Error>
     match client.ping().await {
         Ok(_) => {
             let token_price = client
-                .price(
-                    &[&coin_id],
-                    &["usd"],
-                    true,
-                    true,
-                    true,
-                    true,
-                )
+                .price(&[&coin_id], &["usd"], true, true, true, true)
                 .await;
-                match token_price {
-                    Ok(hashmap) => {
-                        match hashmap.get(&coin_id) {
-                            Some(entry) => {
-                                Ok(entry.usd)
-                            },
-                            None => Ok(None),
-                        }
-                    },
-                    Err(error) => Err(error),
-                }
+            match token_price {
+                Ok(hashmap) => match hashmap.get(&coin_id) {
+                    Some(entry) => Ok(entry.usd),
+                    None => Ok(None),
+                },
+                Err(error) => Err(error),
+            }
         }
         Err(error) => Err(error),
     }

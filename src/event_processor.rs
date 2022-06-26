@@ -1,23 +1,24 @@
-use std::sync::{Arc, Mutex};
+use crate::async_redis_wrapper::AsyncRedisWrapper;
+use crate::{async_redis_wrapper, Settings, ToHex};
 use near_sdk::json_types::U128;
 use redis::AsyncCommands;
 use secp256k1::SecretKey;
 use spectre_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
-use crate::{async_redis_wrapper, Settings, ToHex};
-use crate::async_redis_wrapper::AsyncRedisWrapper;
+use std::sync::{Arc, Mutex};
 
-pub fn process_transfer_event(nonce: near_sdk::json_types::U128,
-                              chain_id: u32,
-                              valid_till: u64,
-                              transfer: spectre_bridge_common::TransferDataEthereum,
-                              fee: spectre_bridge_common::TransferDataNear,
-                              recipient: spectre_bridge_common::EthAddress,
+pub fn process_transfer_event(
+    nonce: near_sdk::json_types::U128,
+    chain_id: u32,
+    valid_till: u64,
+    transfer: spectre_bridge_common::TransferDataEthereum,
+    fee: spectre_bridge_common::TransferDataNear,
+    recipient: spectre_bridge_common::EthAddress,
 
-                              settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
-                              redis: Arc<Mutex<AsyncRedisWrapper>>,
-                              eth_contract_address: web3::types::Address,
-                              eth_key: std::sync::Arc<secp256k1::SecretKey>,
-                              eth_contract_abi: std::sync::Arc<String>,
+    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
+    redis: Arc<Mutex<AsyncRedisWrapper>>,
+    eth_contract_address: web3::types::Address,
+    eth_key: std::sync::Arc<secp256k1::SecretKey>,
+    eth_contract_abi: std::sync::Arc<String>,
 ) {
     tokio::spawn({
         let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
@@ -41,7 +42,7 @@ pub fn process_transfer_event(nonce: near_sdk::json_types::U128,
                 0.0,
                 settings.clone(),
             )
-                .await;
+            .await;
 
             match tx_hash {
                 Ok(Some(hash)) => {

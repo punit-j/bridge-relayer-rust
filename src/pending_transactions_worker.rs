@@ -3,7 +3,7 @@ use crate::{async_redis_wrapper, ethereum, ToHex};
 use crate::redis::AsyncCommands;
 use std::str::FromStr;
 
-pub async fn run<'a> (
+pub async fn run<'a>(
     rpc_url: url::Url,
     eth_contract_address: web3::types::Address,
     eth_contract_abi: String,
@@ -57,8 +57,7 @@ pub async fn run<'a> (
                 .is_ok()
             {
                 transactions_to_remove.push(*item.0);
-            }
-            else {
+            } else {
                 match eth_client.transaction_status(*item.0).await {
                     Ok(status) => {
                         match status {

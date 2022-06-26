@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use spectre_bridge_common::Event;
+use std::sync::{Arc, Mutex};
 use web3::signing::Key;
 use web3::types::Address;
 
@@ -76,7 +76,11 @@ pub async fn execute_transfer(
     let fee_token = transfer_message.4.token;
     let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
 
-    let coin_id = settings.lock().unwrap().near_tokens_coin_id.get_coin_id(fee_token);
+    let coin_id = settings
+        .lock()
+        .unwrap()
+        .near_tokens_coin_id
+        .get_coin_id(fee_token);
     match coin_id {
         Some(_) => (),
         None => {
