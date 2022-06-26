@@ -1,3 +1,6 @@
+use std::sync::{Arc, Mutex};
+use web3::signing::Key;
+
 pub async fn execute_transfer(
     key: impl web3::signing::Key,
     transfer_message: spectre_bridge_common::Event,
@@ -5,8 +8,8 @@ pub async fn execute_transfer(
     rpc_url: &str,
     contract_addr: web3::types::Address,
     profit_threshold: f64,
-    near_tokens_coin_id: &crate::config::NearTokensCoinId,
-) -> Result<Option<web3::types::H256>, Box<dyn std::error::Error>> {
+    settings: Arc<Mutex<crate::Settings>>,
+) -> Result<Option<web3::types::H256>, String> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
         nonce,
@@ -38,13 +41,13 @@ pub async fn execute_transfer(
     .await;
     match estimated_gas_in_wei {
         Ok(_) => (),
-        Err(error) => return Err(format!("Failed to estimate gas in WEI: {}", error).into()),
+        Err(error) => return Err(format!("Failed to estimate gas in WEI: {}", error)),
     }
 
     let gas_price_in_wei = eth_client::methods::gas_price(rpc_url).await;
     match gas_price_in_wei {
         Ok(_) => (),
-        Err(error) => return Err(format!("Failed to fetch gas price in WEI: {}", error).into()),
+        Err(error) => return Err(format!("Failed to fetch gas price in WEI: {}", error)),
     }
 
     let eth_price_in_usd = eth_client::methods::eth_price().await;
@@ -53,12 +56,12 @@ pub async fn execute_transfer(
             Some(_) => (),
             None => {
                 return Err(
-                    format!("Failed to fetch Ethereum price in USD: Invalid coin id").into(),
+                    "Failed to fetch Ethereum price in USD: Invalid coin id".to_string(),
                 )
             }
         },
         Err(error) => {
-            return Err(format!("Failed to fetch Ethereum price in USD: {}", error).into())
+            return Err(format!("Failed to fetch Ethereum price in USD: {}", error))
         }
     }
 
@@ -71,11 +74,15 @@ pub async fn execute_transfer(
     let fee_token = transfer_message.4.token;
     let fee_amount = web3::types::U256::from(transfer_message.4.amount.0);
 
-    let coin_id = near_tokens_coin_id.get_coin_id(fee_token);
+    let coin_id = settings
+        .lock()
+        .unwrap()
+        .near_tokens_coin_id
+        .get_coin_id(fee_token);
     match coin_id {
         Some(_) => (),
         None => {
-            return Err(format!("Failed to get coin id ({}) by matching", coin_id.unwrap()).into())
+            return Err(format!("Failed to get coin id ({}) by matching", coin_id.unwrap()))
         }
     }
 
@@ -83,9 +90,9 @@ pub async fn execute_transfer(
     match fee_token_usd {
         Ok(price) => match price {
             Some(_) => (),
-            None => return Err(format!("Failed to get token price: Invalid coin id").into()),
+            None => return Err("Failed to get token price: Invalid coin id".to_string()),
         },
-        Err(error) => return Err(format!("Failed to get token price: {}", error).into()),
+        Err(error) => return Err(format!("Failed to get token price: {}", error)),
     }
 
     let is_profitable_tx = crate::profit_estimation::is_profitable(
@@ -110,7 +117,7 @@ pub async fn execute_transfer(
             match tx_hash {
                 Ok(hash) => Ok(Some(hash)),
                 Err(error) => {
-                    return Err(format!("Failed to execute tokens transfer: {}", error).into())
+                    return Err(format!("Failed to execute tokens transfer: {}", error))
                 }
             }
         }

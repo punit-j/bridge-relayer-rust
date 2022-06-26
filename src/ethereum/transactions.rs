@@ -1,7 +1,6 @@
 use secp256k1::SecretKey;
-use std::string;
 use web3::types::TransactionId;
-use web3::{api, contract::Contract, ethabi, types::Address};
+use web3::{api, contract::Contract, types::Address};
 
 pub async fn transfer_token<'a, T: web3::Transport>(
     contract: &'a Contract<T>,
@@ -34,7 +33,7 @@ pub async fn transaction_status<T: web3::Transport>(
     tx_hash: web3::types::H256,
 ) -> web3::error::Result<TransactionStatus> {
     let res = client
-        .transaction(TransactionId::from(tx_hash.clone()))
+        .transaction(TransactionId::from(tx_hash))
         .await?
         .ok_or(web3::error::Error::Unreachable)?;
     if res.block_number.is_none() {

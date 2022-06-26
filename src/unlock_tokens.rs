@@ -25,8 +25,7 @@ async fn unlock_tokens(
             return Err(format!(
                 "Failed to fetch response by calling lp_unlock contract method: {}",
                 error
-            )
-            .into())
+            ))
         }
     }
 }
@@ -53,7 +52,8 @@ pub async fn unlock_tokens_worker(
                     let tx_data = connection.get_tx_data(tx_hash.clone()).await;
                     match tx_data {
                         Ok(data) => {
-                            match data.block + unlock_tokens_worker_settings.blocks_for_tx_finalization
+                            match data.block
+                                + unlock_tokens_worker_settings.blocks_for_tx_finalization
                                 <= last_block_number
                             {
                                 true => {

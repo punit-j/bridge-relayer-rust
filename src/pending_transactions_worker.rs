@@ -3,20 +3,20 @@ use crate::{async_redis_wrapper, ethereum, ToHex};
 use crate::redis::AsyncCommands;
 use std::str::FromStr;
 
-pub async fn run(
+pub async fn run<'a>(
     rpc_url: url::Url,
     eth_contract_address: web3::types::Address,
     eth_contract_abi: String,
-    eth_keypair: &secp256k1::SecretKey,
+    eth_keypair: web3::signing::SecretKeyRef<'a>,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
-    delay_request_status_sec: u64,
+    _delay_request_status_sec: u64,
 ) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
         rpc_url.as_str(),
         "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
         eth_contract_address,
-        &eth_contract_abi.as_bytes(),
-        *eth_keypair,
+        eth_contract_abi.as_bytes(),
+        eth_keypair,
     )
     .unwrap();
 
@@ -41,8 +41,8 @@ pub async fn run(
             )
             .unwrap();
 
-            if !pending_transactions.contains_key(&hash) {
-                pending_transactions.insert(hash, data);
+            if let std::collections::hash_map::Entry::Vacant(e) = pending_transactions.entry(hash) {
+                e.insert(data);
                 println!("New pending transaction: {:#?}", hash)
             }
         }
@@ -57,12 +57,7 @@ pub async fn run(
                 .is_ok()
             {
                 transactions_to_remove.push(*item.0);
-            } else if (item.1.timestamp + delay_request_status_sec)
-                < std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-            {
+            } else {
                 match eth_client.transaction_status(*item.0).await {
                     Ok(status) => {
                         match status {
@@ -73,7 +68,7 @@ pub async fn run(
                                     .unwrap()
                                     .as_secs();
                             }
-                            ethereum::transactions::TransactionStatus::Failure(block_number) => {
+                            ethereum::transactions::TransactionStatus::Failure(_block_number) => {
                                 println!("Transfer token transaction is failed {:?}", item.0);
                                 transactions_to_remove.push(*item.0);
                             }
