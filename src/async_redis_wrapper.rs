@@ -102,15 +102,15 @@ impl AsyncRedisWrapper {
         match self.hget(TRANSACTIONS, &tx_hash).await {
             Ok(value) => {
                 let serialized_tx_data: String = redis::from_redis_value(&value)?;
-                return Ok(serde_json::from_str(&serialized_tx_data)
-                    .expect("REDIS: Failed to deserialize transaction data"));
+                Ok(serde_json::from_str(&serialized_tx_data)
+                    .expect("REDIS: Failed to deserialize transaction data"))
             }
             Err(error) => Err(error),
         }
     }
 
     pub async fn get_tx_hashes(&mut self, key: &str) -> redis::RedisResult<Vec<String>> {
-        Ok(self.connection.hkeys(key).await?)
+        self.connection.hkeys(key).await
     }
 
     async fn hsetnx(
@@ -119,15 +119,15 @@ impl AsyncRedisWrapper {
         field: &str,
         value: &str,
     ) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.hset_nx(key, field, value).await?)
+        self.connection.hset_nx(key, field, value).await
     }
 
     async fn hget(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.hget(key, field).await?)
+        self.connection.hget(key, field).await
     }
 
     async fn hdel(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
-        Ok(self.connection.hdel(key, field).await?)
+        self.connection.hdel(key, field).await
     }
 
     // TODO: review. Moved from the redis_wrapper
@@ -186,7 +186,7 @@ pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
 
         while let Some(s) = pubsub_stream.next().await {
             let pubsub_msg: T = s.get_payload().expect("Failed to fetch the message");
-            if let Err(e) = sender.send(pubsub_msg).await {
+            if let Err(_e) = sender.send(pubsub_msg).await {
                 break;
             }
         }
