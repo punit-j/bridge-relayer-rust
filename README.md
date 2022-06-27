@@ -4,7 +4,7 @@
 ### requirements
 
 ### dependencies
-* libssl-dev
 * pkg-config
+* make
+* libssl-dev
 * libclang-dev
-* libjemalloc-dev
