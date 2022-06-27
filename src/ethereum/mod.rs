@@ -43,26 +43,14 @@
 pub mod proof;
 pub mod transactions;
 
-use bytes::{BufMut, BytesMut};
-use core::time;
-use near_sdk::{
-    borsh::{self, BorshDeserialize, BorshSerialize},
-    serde::{Deserialize, Serialize},
-    BlockHeight,
-};
-use std::time::Duration;
-use std::{
-    borrow::Borrow, collections::HashMap, fs, process::Command, str::FromStr, string, thread::sleep,
-};
-use web3::{api::Namespace, contract::Contract, ethabi, transports::Http, types};
+use web3::{api::Namespace, contract::Contract, transports::Http};
 
-#[derive(Debug)]
 pub struct RainbowBridgeEthereumClient<'a> {
     api_url: &'a str,
     rainbow_bridge_index: &'a str,
     client: web3::api::Eth<Http>,
     contract: Contract<Http>,
-    key: secp256k1::SecretKey,
+    key: web3::signing::SecretKeyRef<'a>,
 }
 
 impl<'a> RainbowBridgeEthereumClient<'a> {
@@ -71,7 +59,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
         rainbow_bridge_index: &'a str,
         contract_addr: web3::ethabi::Address,
         abi_json: &[u8],
-        key: secp256k1::SecretKey,
+        key: web3::signing::SecretKeyRef<'a>,
     ) -> Result<Self, std::string::String> {
         let transport = web3::transports::Http::new(url).unwrap();
         let client = web3::api::Eth::new(transport);
@@ -115,7 +103,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
             self.api_url,
             &self.client,
             self.rainbow_bridge_index,
-            &tx_hash,
+            tx_hash,
         )
         .await
     }

@@ -23,14 +23,10 @@
 
 use serde_json::json;
 use spectre_bridge_common;
-use std::{process, string};
+use std::{process};
 use web3::{
     api,
-    contract::{Contract, Options},
-    ethabi::ParamType::String,
-    ethabi::Uint,
-    types::{TransactionReceipt, H256, U256},
-    Web3,
+    types::{H256, U256},
 };
 
 #[derive(Debug)]
@@ -47,7 +43,7 @@ pub async fn get_proof<'a, 'b, T: web3::Transport>(
     rb_bridge_index_js_url: &'a str,
     tx_hash: &'a H256,
 ) -> Result<spectre_bridge_common::Proof, Error<'b>> {
-    let log_index = get_transaction_log_index(&client, &tx_hash).await?;
+    let log_index = get_transaction_log_index(client, tx_hash).await?;
 
     let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tx_hash});
 
@@ -61,17 +57,17 @@ pub async fn get_proof<'a, 'b, T: web3::Transport>(
 
     let rr = command
         .output()
-        .map_err(|e| Error::Other("Unable to unwrap output"))?
+        .map_err(|_e| Error::Other("Unable to unwrap output"))?
         .stdout;
-    let mut out = std::str::from_utf8(&rr).map_err(|e| Error::Other("Unable to parse output"))?;
+    let out = std::str::from_utf8(&rr).map_err(|_e| Error::Other("Unable to parse output"))?;
 
-    let json = serde_json::from_str::<serde_json::Value>(out).map_err(|e| Error::Json(e))?;
+    let json = serde_json::from_str::<serde_json::Value>(out).map_err(Error::Json)?;
     let json = json
         .get("proof_locker")
         .ok_or(Error::Other("JSON doesnt contain the proof_locker"))?;
 
     let res = serde_json::from_value::<spectre_bridge_common::Proof>(json.clone())
-        .map_err(|e| Error::Json(e))?;
+        .map_err(Error::Json)?;
     Ok(res)
 }
 
@@ -80,9 +76,9 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(
     tx_hash: &'a H256,
 ) -> Result<U256, Error<'b>> {
     let receipt = client
-        .transaction_receipt(tx_hash.clone())
+        .transaction_receipt(*tx_hash)
         .await
-        .map_err(|e| Error::Web3(e))?
+        .map_err(Error::Web3)?
         .ok_or(Error::Other("Unable to unwrap receipt"))?;
 
     // get log of block contains this transaction
@@ -100,7 +96,7 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(
                 .build(),
         )
         .await
-        .map_err(|e| Error::Web3(e))?;
+        .map_err(Error::Web3)?;
 
     let log = logs
         .iter()

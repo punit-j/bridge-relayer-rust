@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -14,10 +14,30 @@ jobs:
           export AWS_REGION="${{secrets.AWS_REGION_VALUE}}"
           terraform init; 
           terraform apply -var ssh_pub_key="${{secrets.SPECTRESSHPUB}}" --auto-approve
-      
+          new_instance_ip=$(terraform output instance_public_ip | xargs )
+          echo "instance_ip=$(terraform output instance_public_ip | xargs )" >> $GITHUB_ENV
+          curl -u "${{secrets.SPECTRE_DNS_USERNAME}}:${{secrets.SPECTRE_DNS_PASSWORD}}" "https://dynupdate.no-ip.com/nic/update?hostname=${{secrets.SPECTRE_DNS_HOST}}&myip="$new_instance_ip
+          export key="ssh-key-spectre"
+          echo "${{secrets.spectressh}}" > "${key}"
+          chmod 600 "${key}"
+          echo "${{secrets.SPECTRESSLFULLCHAIN}}" > "fullchain.pem"
+          echo "${{secrets.SPECTRESSLPRIVKEY}}" > "privkey.pem"
+          for i in 1 2 3 4 5; do ssh -i ${key} -o "StrictHostKeyChecking no" ${{secrets.SPECTRE_SSH_USER}}@$new_instance_ip 'date' && break || sleep 60; done
+          scp -i ${key} -o "StrictHostKeyChecking no" fullchain.pem ${{secrets.SPECTRE_SSH_USER}}@$new_instance_ip:fullchain.pem
+          scp -i ${key} -o "StrictHostKeyChecking no" privkey.pem ${{secrets.SPECTRE_SSH_USER}}@$new_instance_ip:privkey.pem          
+          scp -i ${key} -o "StrictHostKeyChecking no" bridge-nginx ${{secrets.SPECTRE_SSH_USER}}@$new_instance_ip:bridge-nginx
+          ssh -i ${key} -o "StrictHostKeyChecking no" ${{secrets.SPECTRE_SSH_USER}}@$new_instance_ip 'sudo chmod 600 fullchain.pem privkey.pem; sudo cp bridge-nginx /etc/nginx/sites-enabled/bridge-nginx; sudo service nginx reload'
             
       - uses: stefanzweifel/git-auto-commit-action@v4
+        if: always()
         with:
           commit_message: "[Bot] Terraform store tfstate"
           branch: "feature/tf"
           file_pattern: "*.tfstate"
+        
+      - uses: gliech/create-github-secret-action@v1
+        with:
+          location: spectrebridge/spectre-bridge-service
+          name: SPECTRE_SSH_IP
+          value: ${{ env.instance_ip }}
+          pa_token: ${{ secrets.SECRETS_TOKEN }}

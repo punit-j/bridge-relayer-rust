@@ -1,6 +1,7 @@
 mod async_redis_wrapper;
 mod config;
 mod ethereum;
+mod event_processor;
 mod last_block;
 mod near;
 mod pending_transactions_worker;
@@ -14,29 +15,13 @@ mod utils;
 extern crate rocket;
 
 use crate::config::Settings;
-use crate::ethereum::proof::Error;
-use borsh::BorshSerialize;
 use clap::Parser;
-use near_crypto;
-use near_primitives::types::TransactionOrReceiptId::Transaction;
 use near_sdk::AccountId;
-use redis::{AsyncCommands, RedisResult, Value};
+use redis::{AsyncCommands};
 use rocket::State;
-use secp256k1::ffi::PublicKey;
 use serde_json::json;
-use spectre_bridge_common::Proof;
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::os::linux::raw::stat;
 use std::str::FromStr;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
-use std::{default, env};
-use tokio::task::JoinHandle;
 use uint::rustc_hex::ToHex;
-use url::quirks::hash;
-use web3::signing::Key;
-use web3::types::H256;
 
 #[get("/health")]
 fn health() -> String {
@@ -187,28 +172,30 @@ async fn main() {
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
     // If args.eth_secret is valid then get key from it else from settings
-    let eth_keypair = {
+    let eth_keypair = std::sync::Arc::new({
         if let Some(path) = args.eth_secret {
-            secp256k1::SecretKey::from_str(&path.as_str())
+            secp256k1::SecretKey::from_str(path.as_str())
         } else {
             secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
         }
         .expect("Unable to get an Eth key")
-    };
-    let eth_keypair = web3::signing::SecretKeyRef::new(&eth_keypair);
+    });
 
-    let eth_contract_address = settings.lock().unwrap().clone().eth.bridge_proxy_address;
+    let eth_contract_address =
+        std::sync::Arc::new(settings.lock().unwrap().clone().eth.bridge_proxy_address);
 
     let eth_contract_abi = {
         let s = settings.lock().unwrap();
-        eth_client::methods::get_contract_abi(
-            &s.etherscan_api.endpoint_url.to_string(),
-            s.eth.bridge_impl_address,
-            &s.etherscan_api.api_key,
+        std::sync::Arc::new(
+            eth_client::methods::get_contract_abi(
+                &s.etherscan_api.endpoint_url.to_string(),
+                s.eth.bridge_impl_address,
+                &s.etherscan_api.api_key,
+            )
+            .await
+            .expect("Failed to get contract abi"),
         )
-        .await
-    }
-    .expect("Failed to get contract abi");
+    };
 
     let near_account = if let Some(path) = args.near_credentials {
         near_client::read_private_key::read_private_key_from_file(path.as_str())
@@ -236,17 +223,17 @@ async fn main() {
     )
     .unwrap();
     let subscriber = {
-        let settings = settings.clone();
-        let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-        let eth_keypair = eth_keypair.clone();
-        let redis = async_redis.clone();
-        let eth_contract_abi = &eth_contract_abi;
+        let settings = std::sync::Arc::clone(&settings);
+        let eth_keypair = std::sync::Arc::clone(&eth_keypair);
+        let redis = std::sync::Arc::clone(&async_redis);
+        let eth_contract_abi = std::sync::Arc::clone(&eth_contract_abi);
+        let eth_contract_address = std::sync::Arc::clone(&eth_contract_address);
         async move {
             while let Some(msg) = stream.recv().await {
                 if let Ok(event) =
                     serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
                 {
-                    println!("event {:?}", event);
+                    println!("Process event {:?}", event);
 
                     match event {
                         spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -257,62 +244,19 @@ async fn main() {
                             fee,
                             recipient,
                         } => {
-                            let near_tokens_coin_id = &settings.lock().unwrap().near_tokens_coin_id;
-                            let near_addr = transfer.token_near.clone();
-
-                            let tx_hash = transfer::execute_transfer(
-                                &eth_keypair,
-                                spectre_bridge_common::Event::SpectreBridgeTransferEvent {
-                                    nonce,
-                                    chain_id,
-                                    valid_till,
-                                    transfer,
-                                    fee,
-                                    recipient,
-                                },
-                                eth_contract_abi.as_bytes(),
-                                rpc_url.as_str(),
-                                eth_contract_address.clone(),
-                                0.0,
-                                near_tokens_coin_id,
-                            )
-                            .await;
-
-                            match tx_hash {
-                                Ok(Some(hash)) => {
-                                    let d = crate::async_redis_wrapper::PendingTransactionData {
-                                        timestamp: std::time::SystemTime::now()
-                                            .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap()
-                                            .as_secs(),
-                                        nonce: u128::from(nonce),
-                                    };
-
-                                    let res: redis::RedisResult<()> = redis
-                                        .lock()
-                                        .unwrap()
-                                        .connection
-                                        .hset(
-                                            async_redis_wrapper::PENDING_TRANSACTIONS,
-                                            hash.as_bytes().to_hex::<String>(),
-                                            serde_json::to_string(&d).unwrap(),
-                                        )
-                                        .await;
-                                    if let Err(e) = res {
-                                        eprintln!("Unable to store pending transaction: {}", e);
-                                    }
-                                }
-                                Ok(None) => {
-                                    println!(
-                                        "Transaction {} is not profitable: {}",
-                                        u128::from(nonce),
-                                        near_addr
-                                    );
-                                }
-                                Err(error) => {
-                                    eprint!("Failed to execute transferTokens: {}", error)
-                                }
-                            }
+                            event_processor::process_transfer_event(
+                                nonce,
+                                chain_id,
+                                valid_till,
+                                transfer,
+                                fee,
+                                recipient,
+                                settings.clone(),
+                                redis.clone(),
+                                *eth_contract_address.as_ref(),
+                                eth_keypair.clone(),
+                                eth_contract_abi.clone(),
+                            );
                         }
                         _ => {}
                     }
@@ -321,21 +265,30 @@ async fn main() {
         }
     };
 
-    let pending_transactions_worker = {
-        let s = settings.lock().unwrap();
-        pending_transactions_worker::run(
-            s.eth.rpc_url.clone(),
-            eth_contract_address,
-            eth_contract_abi.clone(),
-            &eth_keypair,
-            async_redis.lock().unwrap().clone(),
-            if s.eth.pending_transaction_poll_delay_sec > 0 {
-                s.eth.pending_transaction_poll_delay_sec as u64
-            } else {
-                5
-            },
-        )
-    };
+    let pending_transactions_worker = tokio::spawn({
+        let s = {
+            let s = settings.lock().unwrap();
+            (
+                s.eth.rpc_url.clone(),
+                s.eth.pending_transaction_poll_delay_sec,
+            )
+        };
+        let eth_keypair = eth_keypair.clone();
+        let redis = async_redis.lock().unwrap().clone();
+        let eth_contract_abi = eth_contract_abi.clone();
+
+        async move {
+            pending_transactions_worker::run(
+                s.0,
+                *eth_contract_address.as_ref(),
+                eth_contract_abi.as_ref().clone(),
+                web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
+                redis,
+                if s.1 > 0 { s.1 as u64 } else { 5 },
+            )
+            .await
+        }
+    });
 
     let last_block_number_worker =
         last_block::last_block_number_worker(settings.clone(), storage.clone());

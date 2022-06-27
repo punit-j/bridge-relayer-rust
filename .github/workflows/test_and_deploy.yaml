@@ -2,9 +2,9 @@ name: spectre-bridge-service test and deploy automatically
 
 on:
   push:
-    branches: ["feature/deploy"]
+    branches: [main]
   pull_request:
-    branches: ["feature/deploy"]
+    branches: ["!main"]
   workflow_dispatch:
 
 jobs:
@@ -30,15 +30,22 @@ jobs:
       - run: cargo test
   deploy:
     runs-on: ubuntu-latest
+    #needs: test
     steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.submodulessh }}
       - run: |
           export name=${GITHUB_REPOSITORY#*/}"-"${GITHUB_REF##*/}
           export key="ssh-key-spectre"
           export timestamp=$(date +%s)
           export host=${{secrets.spectrehost}}
-          docker build . -t localhost:5000/${name}-${timestamp}
+          docker build . -t "localhost:5031/${name}:latest"
           echo "${{secrets.spectressh}}" > ${key}
           chmod 600 ${key}
-          ssh -f -N -i ${key} -o "StrictHostKeyChecking no" ${host} -L 5000:127.0.0.1:5000
-          docker push localhost:5000/${name}-${timestamp}
-          ssh -i ${key} --o "StrictHostKeyChecking no" ${host} 'docker load -i '${name}'-'${timestamp}'.tar; docker stop '${name}' || true; docker run -d --restart always -p 4012:80 --name '${name}'-new '${name}'-'${timestamp}'; docker rm '${name}' || true; docker rmi $(docker images -q) || true; docker rename '${name}'-new '${name}'; rm '${name}'-'${timestamp}'.tar'
+          ssh -f -N -i ${key} -o "StrictHostKeyChecking no" ${{secrets.SPECTRE_SSH_USER}}@${{secrets.SPECTRE_SSH_IP}} -L 5031:127.0.0.1:5031
+          docker push localhost:5031/${name}:latest          
+          scp -i ${key} -o "StrictHostKeyChecking no" docker-compose.yaml ${{secrets.SPECTRE_SSH_USER}}@${{secrets.SPECTRE_SSH_IP}}:docker-compose.yaml
+          ssh -i ${key} -o "StrictHostKeyChecking no" ${{secrets.SPECTRE_SSH_USER}}@${{secrets.SPECTRE_SSH_IP}} 'sudo docker pull localhost:5031/'${name}':latest ; sudo docker-compose down; sudo docker-compose up -d'
+
