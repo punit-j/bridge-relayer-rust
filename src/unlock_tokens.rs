@@ -43,10 +43,11 @@ pub async fn unlock_tokens_worker(
         loop {
             let unlock_tokens_worker_settings =
                 settings.lock().unwrap().clone().unlock_tokens_worker;
-            crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
-                .await
-                .tick()
-                .await;
+            let mut interval =
+                crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
+                    .await;
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            interval.tick().await;
             let tx_hashes_queue = connection
                 .get_tx_hashes(crate::async_redis_wrapper::TRANSACTIONS)
                 .await;
