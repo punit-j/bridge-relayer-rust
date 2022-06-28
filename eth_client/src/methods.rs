@@ -19,14 +19,28 @@ pub async fn get_contract_abi(
     endpoint_url: &str,
     contract_addr: web3::types::Address,
     api_key_token: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, String> {
     let response = reqwest::get(format!(
         "{}/api?module=contract&action=getabi&address={:?}&apikey={}&format=raw",
         endpoint_url, contract_addr, api_key_token
     ))
-    .await?
+    .await.map_err(|e| e.to_string())?
     .text()
-    .await?;
+    .await.map_err(|e| e.to_string())?;
+
+    #[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+    struct ErrResponse {
+        message: String,
+        result: String,
+    };
+
+    // try to get error
+    if let Ok(res) = serde_json::from_str::<ErrResponse>(response.as_str()) {
+        if res.message == "NOTOK" {
+            return Err(res.result)
+        }
+    }
+
     Ok(response)
 }
 
