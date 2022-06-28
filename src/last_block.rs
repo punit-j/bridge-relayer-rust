@@ -21,10 +21,12 @@ pub async fn last_block_number_worker(
         loop {
             let last_block_number_worker_settings =
                 settings.lock().unwrap().clone().last_block_number_worker;
-            crate::utils::request_interval(last_block_number_worker_settings.request_interval_secs)
-                .await
-                .tick()
-                .await;
+            let mut interval = crate::utils::request_interval(
+                last_block_number_worker_settings.request_interval_secs,
+            )
+            .await;
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            interval.tick().await;
             let number = last_block_number(
                 last_block_number_worker_settings.server_addr,
                 last_block_number_worker_settings.contract_account_id,
@@ -35,7 +37,7 @@ pub async fn last_block_number_worker(
                     Some(block_number) => storage.lock().unwrap().last_block_number = block_number,
                     None => (),
                 },
-                Err(error) => eprint!(
+                Err(error) => eprintln!(
                     "Failed to fetch result by calling last_block_number view contract method: {}",
                     error
                 ),

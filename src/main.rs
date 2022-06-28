@@ -23,7 +23,6 @@ use serde_json::json;
 use std::str::FromStr;
 use uint::rustc_hex::ToHex;
 
-
 #[get("/health")]
 fn health() -> String {
     "OK".to_string()
@@ -267,11 +266,12 @@ async fn main() {
     };
 
     let pending_transactions_worker = tokio::spawn({
-        let s = {
+        let (rpc_url, pending_transaction_poll_delay_sec,rainbow_bridge_index_js_path) = {
             let s = settings.lock().unwrap();
             (
                 s.eth.rpc_url.clone(),
                 s.eth.pending_transaction_poll_delay_sec,
+                s.eth.rainbow_bridge_index_js_path.clone(),
             )
         };
         let eth_keypair = eth_keypair.clone();
@@ -280,12 +280,13 @@ async fn main() {
 
         async move {
             pending_transactions_worker::run(
-                s.0,
+                rpc_url,
                 *eth_contract_address.as_ref(),
                 eth_contract_abi.as_ref().clone(),
                 web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
+                rainbow_bridge_index_js_path,
                 redis,
-                if s.1 > 0 { s.1 as u64 } else { 5 },
+                pending_transaction_poll_delay_sec as u64,
             )
             .await
         }
@@ -303,6 +304,7 @@ async fn main() {
     );
 
     let rocket = rocket::build()
+        .configure(rocket::Config::release_default())
         .mount(
             "/v1",
             routes![
