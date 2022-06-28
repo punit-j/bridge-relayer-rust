@@ -23,7 +23,6 @@ use serde_json::json;
 use std::str::FromStr;
 use uint::rustc_hex::ToHex;
 
-
 #[get("/health")]
 fn health() -> String {
     "OK".to_string()

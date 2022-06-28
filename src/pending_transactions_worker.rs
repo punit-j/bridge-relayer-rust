@@ -77,12 +77,11 @@ pub async fn run<'a>(
                                 let proof = eth_client.get_proof(item.0).await;
                                 match proof {
                                     Ok(proof) => {
-                                        let data = async_redis_wrapper::TransactionData {
+                                        let data = async_redis_wrapper::TxData {
                                             block: u64::try_from(block_number).unwrap(),
                                             proof,
                                             nonce: item.1.nonce,
                                         };
-
                                         let _: () = redis
                                             .store_tx(item.0.as_bytes().to_hex::<String>(), data)
                                             .await
