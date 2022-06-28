@@ -3,12 +3,12 @@
     "bridge_impl_address": "0xBa78AE6A68DB5784e26a7DdCccd3939BB6cd5F57",
     "bridge_proxy_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
     "pending_transaction_poll_delay_sec": 5,
-    "private_key": "",
-    "rpc_url": "",
-    "rainbow_bridge_index_js_path": "/home/misha/trash/rr/rainbow-bridge/cli/index.js"
+    "private_key": "${SPECTRE_BRIDGE_ETH_PRIVATE_KEY}",
+    "rpc_url": "https://goerli.infura.io/v3/${SPECTRE_BRIDGE_INFURA_PROJECT_ID}",
+    "rainbow_bridge_index_js_path": "./rainbow-bridge/cli/index.js"
   },
   "etherscan_api": {
-    "api_key": "",
+    "api_key": "${SPECTRE_BRIDGE_ETHERSCAN_API_KEY}",
     "endpoint_url": "https://api-goerli.etherscan.io"
   },
   "last_block_number_worker": {
@@ -18,11 +18,11 @@
   },
   "near": {
     "allowed_tokens": [
-      "token8.spectrebridge.testnet",
-      "token16.spectrebridge.testnet"
+      "token.spectrebridge.testnet",
+      "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near"
     ],
     "contract_address": "transfer.spectrebridge.testnet",
-    "near_credentials_path": "",
+    "near_credentials_path": "~/.near-credentials/testnet/spectrebridge.testnet.json",
     "near_lake_init_block": 90753143,
     "rpc_url": "https://rpc.testnet.near.org"
   },
