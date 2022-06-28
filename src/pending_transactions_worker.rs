@@ -8,12 +8,13 @@ pub async fn run<'a>(
     eth_contract_address: web3::types::Address,
     eth_contract_abi: String,
     eth_keypair: web3::signing::SecretKeyRef<'a>,
+    rainbow_bridge_index_js_path: String,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
     _delay_request_status_sec: u64,
 ) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
         rpc_url.as_str(),
-        "/home/misha/trash/rr/rainbow-bridge/cli/index.js",
+        rainbow_bridge_index_js_path.as_str(),
         eth_contract_address,
         eth_contract_abi.as_bytes(),
         eth_keypair,
