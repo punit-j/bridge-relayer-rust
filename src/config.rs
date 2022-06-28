@@ -44,6 +44,7 @@ pub struct EthSettings {
     pub rpc_url: Url,
     #[serde(default)]
     pub pending_transaction_poll_delay_sec: u32,
+    pub rainbow_bridge_index_js_path: String
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
