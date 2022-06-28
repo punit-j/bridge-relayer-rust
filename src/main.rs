@@ -287,7 +287,7 @@ async fn main() {
                 web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
                 rainbow_bridge_index_js_path,
                 redis,
-                pending_transaction_poll_delay_sec,
+                pending_transaction_poll_delay_sec as u64,
             )
             .await
         }
