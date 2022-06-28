@@ -45,9 +45,10 @@ async fn transactions_traversal(
         let tx_data = connection.get_tx_data(tx_hash.clone()).await;
         match tx_data {
             Ok(data) => {
-                if data.block + unlock_tokens_worker_settings.blocks_for_tx_finalization
-                    <= last_block_number
-                {
+                let unlock_tokens_execution_condition = data.block
+                    + unlock_tokens_worker_settings.blocks_for_tx_finalization
+                    <= last_block_number;
+                if unlock_tokens_execution_condition {
                     let tx_execution_status = crate::unlock_tokens::unlock_tokens(
                         unlock_tokens_worker_settings.server_addr.clone(),
                         account.clone(),
