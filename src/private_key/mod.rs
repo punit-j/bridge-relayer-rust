@@ -1,5 +1,5 @@
 use crate::Settings;
-use serde_json::{json};
+use serde_json::json;
 use std::fs;
 use std::ops::Deref;
 use std::path::Path;
@@ -51,7 +51,7 @@ async fn read_secret_key(settings: &Settings, vault_token: &String, prefix: &str
 
 #[allow(unused)]
 impl NearKey {
-    pub fn local_private_key(file_path: Box<&Path>) -> String {
+    pub fn local_private_key(file_path: &Path) -> String {
         let credential_data =
             fs::read_to_string(file_path.deref().to_str().unwrap()).expect("Unable to read file");
         let json: serde_json::Value = serde_json::from_str(&credential_data).unwrap();
@@ -74,7 +74,7 @@ pub struct EthKey {}
 
 #[allow(unused)]
 impl EthKey {
-    pub fn local_private_key(file_path: Box<&Path>) -> String {
+    pub fn local_private_key(file_path: &Path) -> String {
         fs::read_to_string(file_path.deref().to_str().unwrap()).expect("Unable to read file")
     }
 

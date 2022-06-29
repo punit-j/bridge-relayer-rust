@@ -3,6 +3,7 @@ use crate::{async_redis_wrapper, ethereum, ToHex};
 use crate::redis::AsyncCommands;
 use std::str::FromStr;
 
+#[allow(clippy::needless_lifetimes)]
 pub async fn run<'a>(
     rpc_url: url::Url,
     eth_contract_address: web3::types::Address,
@@ -82,7 +83,7 @@ pub async fn run<'a>(
                                             proof,
                                             nonce: item.1.nonce,
                                         };
-                                        let _: () = redis
+                                        redis
                                             .store_tx(item.0.as_bytes().to_hex::<String>(), data)
                                             .await
                                             .unwrap();

@@ -4,7 +4,7 @@ use std::borrow::BorrowMut;
 use std::fs;
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NearTokensCoinId {
     pub mapping: std::collections::HashMap<near_sdk::AccountId, String>,
 }
@@ -15,20 +15,20 @@ impl NearTokensCoinId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EtherscanAPISettings {
     pub endpoint_url: url::Url,
     pub api_key: String,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LastBlockNumberWorkerSettings {
     pub server_addr: url::Url,
     pub contract_account_id: String,
     pub request_interval_secs: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UnlockTokensWorkerSettings {
     pub server_addr: url::Url,
     pub contract_account_id: String,
@@ -36,7 +36,7 @@ pub struct UnlockTokensWorkerSettings {
     pub blocks_for_tx_finalization: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EthSettings {
     pub bridge_proxy_address: web3::types::Address,
     pub bridge_impl_address: web3::types::Address,
@@ -44,10 +44,10 @@ pub struct EthSettings {
     pub rpc_url: Url,
     #[serde(default)]
     pub pending_transaction_poll_delay_sec: u32,
-    pub rainbow_bridge_index_js_path: String
+    pub rainbow_bridge_index_js_path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NearSettings {
     pub near_credentials_path: String,
     pub rpc_url: Url,
@@ -56,12 +56,12 @@ pub struct NearSettings {
     pub near_lake_init_block: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RedisSettings {
     pub url: Url,
 }
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
     pub eth: EthSettings,
     pub near: NearSettings,

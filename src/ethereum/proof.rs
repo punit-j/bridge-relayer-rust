@@ -23,7 +23,7 @@
 
 use serde_json::json;
 use spectre_bridge_common;
-use std::{process};
+use std::process;
 use web3::{
     api,
     types::{H256, U256},

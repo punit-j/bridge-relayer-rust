@@ -1,9 +1,9 @@
-use near_lake_framework::near_indexer_primitives::types::{AccountId};
-use near_lake_framework::{LakeConfigBuilder};
-
+use near_lake_framework::near_indexer_primitives::types::AccountId;
+use near_lake_framework::LakeConfigBuilder;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
+#[allow(clippy::await_holding_lock)]
 pub async fn run_worker(
     contract_name: AccountId,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
@@ -44,16 +44,16 @@ pub async fn run_worker(
         }
         let mut r = redis.lock().unwrap();
         // store block number to redis
-        let _: () = r
-            .option_set(
-                OPTION_START_BLOCK,
-                streamer_message.block.header.height as u64 + 1,
-            )
-            .await
-            .unwrap();
+        r.option_set(
+            OPTION_START_BLOCK,
+            streamer_message.block.header.height as u64 + 1,
+        )
+        .await
+        .unwrap();
     }
 }
 
+#[allow(dead_code)]
 pub struct JsonError(pub serde_json::Error);
 
 #[derive(Debug)]
@@ -61,7 +61,6 @@ pub enum ParceError {
     Json(serde_json::Error),
     WrongVersion(String),
     NotEvent,
-    Other,
 }
 
 /// In case if the "data" is array (with 1 item) it converts to object
@@ -100,12 +99,10 @@ pub fn get_event(json: serde_json::Value) -> Result<spectre_bridge_common::Event
 
 #[cfg(test)]
 pub mod tests {
-    use crate::near::{fix_json};
+    use crate::near::fix_json;
     use assert_json_diff::assert_json_eq;
-    
-    
+
     use serde_json::json;
-    
 
     #[test]
     fn fix_json_test() {

@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use std::str::FromStr;
 
 pub fn construct_contract_interface(
@@ -32,7 +33,7 @@ pub async fn get_contract_abi(
     struct ErrResponse {
         message: String,
         result: String,
-    };
+    }
 
     // try to get error
     if let Ok(res) = serde_json::from_str::<ErrResponse>(response.as_str()) {
