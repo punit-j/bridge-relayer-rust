@@ -27,7 +27,7 @@ pub async fn run_worker(
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
                                 Ok(r) => {
-                                    println!("Push event: {:?}", r);
+                                    println!("New event: {:?}", r);
                                     let mut redis = redis.lock().unwrap();
                                     redis.event_pub(r).await;
                                 }
