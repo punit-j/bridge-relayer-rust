@@ -25,9 +25,11 @@ pub async fn get_contract_abi(
         "{}/api?module=contract&action=getabi&address={:?}&apikey={}&format=raw",
         endpoint_url, contract_addr, api_key_token
     ))
-    .await.map_err(|e| e.to_string())?
+    .await
+    .map_err(|e| e.to_string())?
     .text()
-    .await.map_err(|e| e.to_string())?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     #[derive(Clone, Debug, PartialEq, serde::Deserialize)]
     struct ErrResponse {
@@ -38,7 +40,7 @@ pub async fn get_contract_abi(
     // try to get error
     if let Ok(res) = serde_json::from_str::<ErrResponse>(response.as_str()) {
         if res.message == "NOTOK" {
-            return Err(res.result)
+            return Err(res.result);
         }
     }
 
@@ -73,14 +75,13 @@ pub async fn estimate_gas(
     args: impl web3::contract::tokens::Tokenize,
 ) -> web3::contract::Result<web3::types::U256> {
     let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
-    Ok(abi
-        .estimate_gas(
-            method_name,
-            args,
-            contract_addr,
-            web3::contract::Options::default(),
-        )
-        .await?)
+    abi.estimate_gas(
+        method_name,
+        args,
+        contract_addr,
+        web3::contract::Options::default(),
+    )
+    .await
 }
 
 pub fn estimate_transfer_execution(
@@ -103,7 +104,7 @@ pub fn estimate_transfer_execution(
 }
 
 pub async fn eth_price() -> Result<Option<f64>, reqwest::Error> {
-    Ok(token_price("ethereum".to_string()).await?)
+    token_price("ethereum".to_string()).await
 }
 
 pub async fn token_price(coin_id: String) -> Result<Option<f64>, reqwest::Error> {
