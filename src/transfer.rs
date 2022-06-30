@@ -8,7 +8,7 @@ pub async fn execute_transfer(
     contract_addr: web3::types::Address,
     profit_threshold: f64,
     settings: Arc<Mutex<crate::Settings>>,
-) -> Result<Option<web3::types::H256>, String> {
+) -> Result<Option<web3::types::H256>, crate::errors::CustomError> {
     let method_name = "transferTokens";
     let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
         nonce,
@@ -21,7 +21,7 @@ pub async fn execute_transfer(
     {
         (nonce, chain_id, valid_till, transfer, fee, recipient)
     } else {
-        return Err("Received invalid Event".into());
+        return Err(crate::errors::CustomError::ReceivedInvalidEvent);
     };
 
     let token = web3::types::Address::from(transfer_message.3.token_eth);
@@ -40,24 +40,22 @@ pub async fn execute_transfer(
     .await;
     match estimated_gas_in_wei {
         Ok(_) => (),
-        Err(error) => return Err(format!("Failed to estimate gas in WEI: {}", error)),
+        Err(error) => return Err(crate::errors::CustomError::FailedEstimateGas(error)),
     }
 
     let gas_price_in_wei = eth_client::methods::gas_price(rpc_url).await;
     match gas_price_in_wei {
         Ok(_) => (),
-        Err(error) => return Err(format!("Failed to fetch gas price in WEI: {}", error)),
+        Err(error) => return Err(crate::errors::CustomError::FailedFetchGasPrice(error)),
     }
 
     let eth_price_in_usd = eth_client::methods::eth_price().await;
     match eth_price_in_usd {
         Ok(price) => match price {
             Some(_) => (),
-            None => {
-                return Err("Failed to fetch Ethereum price in USD: Invalid coin id".to_string())
-            }
+            None => return Err(crate::errors::CustomError::FailedFetchEthereumPriceInvalidCoinId),
         },
-        Err(error) => return Err(format!("Failed to fetch Ethereum price in USD: {}", error)),
+        Err(error) => return Err(crate::errors::CustomError::FailedFetchEthereumPrice(error)),
     }
 
     let estimated_transfer_execution_price = eth_client::methods::estimate_transfer_execution(
@@ -77,9 +75,8 @@ pub async fn execute_transfer(
     match coin_id {
         Some(_) => (),
         None => {
-            return Err(format!(
-                "Failed to get coin id ({}) by matching",
-                coin_id.unwrap()
+            return Err(crate::errors::CustomError::FailedGetCoinIdByMatching(
+                coin_id.unwrap(),
             ))
         }
     }
@@ -88,9 +85,9 @@ pub async fn execute_transfer(
     match fee_token_usd {
         Ok(price) => match price {
             Some(_) => (),
-            None => return Err("Failed to get token price: Invalid coin id".to_string()),
+            None => return Err(crate::errors::CustomError::FailedGetTokenPriceInvalidCoinId),
         },
-        Err(error) => return Err(format!("Failed to get token price: {}", error)),
+        Err(error) => return Err(crate::errors::CustomError::FailedGetTokenPrice(error)),
     }
 
     let profit = crate::profit_estimation::get_profit(
@@ -99,28 +96,28 @@ pub async fn execute_transfer(
         estimated_transfer_execution_price,
     )
     .await;
-
     println!(
         "Profit for nonce {:?} is {}, threshold: {}",
         nonce, profit, profit_threshold
     );
 
-    match profit > profit_threshold {
-        true => {
-            let tx_hash = eth_client::methods::change(
-                rpc_url,
-                contract_addr,
-                contract_abi,
-                method_name,
-                method_args,
-                key,
-            )
-            .await;
-            match tx_hash {
-                Ok(hash) => Ok(Some(hash)),
-                Err(error) => Err(format!("Failed to execute tokens transfer: {}", error)),
-            }
+    if profit > profit_threshold {
+        let tx_hash = eth_client::methods::change(
+            rpc_url,
+            contract_addr,
+            contract_abi,
+            method_name,
+            method_args,
+            key,
+        )
+        .await;
+        match tx_hash {
+            Ok(hash) => Ok(Some(hash)),
+            Err(error) => Err(crate::errors::CustomError::FailedExecuteTransferTokens(
+                error,
+            )),
         }
-        false => Ok(None),
+    } else {
+        Ok(None)
     }
 }

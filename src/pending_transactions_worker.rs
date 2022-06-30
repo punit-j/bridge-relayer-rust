@@ -71,7 +71,13 @@ pub async fn run<'a>(
                                     .as_secs();
                             }
                             ethereum::transactions::TransactionStatus::Failure(_block_number) => {
-                                println!("Transfer token transaction is failed {:?}", item.0);
+                                eprintln!(
+                                    "{}",
+                                    crate::errors::CustomError::FailedTxStatus(format!(
+                                        "{:?}",
+                                        item.0
+                                    ))
+                                );
                                 transactions_to_remove.push(*item.0);
                             }
                             ethereum::transactions::TransactionStatus::Sucess(block_number) => {
@@ -89,15 +95,20 @@ pub async fn run<'a>(
                                             .unwrap();
                                         transactions_to_remove.push(*item.0);
                                     }
-                                    Err(e) => {
-                                        println!("Error on request proof: {:?}", e)
+                                    Err(error) => {
+                                        eprintln!(
+                                            "{}",
+                                            crate::errors::CustomError::FailedFetchProof(
+                                                error.to_string()
+                                            )
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                    Err(e) => {
-                        println!("Error on request transaction status: {:?}", e)
+                    Err(error) => {
+                        eprintln!("{}", crate::errors::CustomError::FailedFetchTxStatus(error))
                     }
                 }
             }
@@ -111,8 +122,11 @@ pub async fn run<'a>(
                     item.as_bytes().to_hex::<String>(),
                 )
                 .await;
-            if let Err(e) = res {
-                eprintln!("Error on remove pending transaction {}", e);
+            if let Err(error) = res {
+                eprintln!(
+                    "{}",
+                    crate::errors::CustomError::FailedUnstorePendingTx(error)
+                );
             }
             pending_transactions.remove(&item);
         }

@@ -5,7 +5,7 @@ async fn unlock_tokens(
     proof: spectre_bridge_common::Proof,
     nonce: u128,
     gas: u64,
-) -> Result<near_primitives::views::FinalExecutionStatus, String> {
+) -> Result<near_primitives::views::FinalExecutionStatus, crate::errors::CustomError> {
     let response = near_client::methods::change(
         server_addr,
         account,
@@ -21,9 +21,8 @@ async fn unlock_tokens(
     .await;
     match response {
         Ok(result) => Ok(result.status),
-        Err(error) => Err(format!(
-            "Failed to fetch response by calling lp_unlock contract method: {}",
-            error
+        Err(error) => Err(crate::errors::CustomError::FailedExecuteUnlockTokens(
+            error.to_string(),
         )),
     }
 }
@@ -64,23 +63,20 @@ async fn transactions_traversal(
                                 println!("Tokens successfully unlocked (nonce: {})", data.nonce)
                             }
                             Err(error) => {
-                                eprintln!("REDIS: Failed to unstore transaction: {}", error)
+                                eprintln!(
+                                    "{}",
+                                    crate::errors::CustomError::FailedUnstoreTransaction(error)
+                                )
                             }
                         }
                     } else {
-                        eprintln!(
-                            "Failed to unlock tokens: {}",
-                            tx_execution_status.unwrap_err()
-                        )
+                        eprintln!("{}", tx_execution_status.unwrap_err())
                     }
                 } else {
                     continue;
                 }
             }
-            Err(error) => eprintln!(
-                "REDIS: Failed to get transaction data by hash from set: {}",
-                error
-            ),
+            Err(error) => eprintln!("{}", crate::errors::CustomError::FailedGetTxData(error)),
         }
     }
 }
@@ -117,7 +113,10 @@ pub async fn unlock_tokens_worker(
                     )
                     .await;
                 }
-                Err(error) => eprintln!("REDIS: Failed to get queue of tx_hashes: {}", error),
+                Err(error) => eprintln!(
+                    "{}",
+                    crate::errors::CustomError::FailedGetTxHashesQueue(error)
+                ),
             }
         }
     });

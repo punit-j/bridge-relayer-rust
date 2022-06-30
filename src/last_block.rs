@@ -37,10 +37,7 @@ pub async fn last_block_number_worker(
                     Some(block_number) => storage.lock().unwrap().last_block_number = block_number,
                     None => (),
                 },
-                Err(error) => eprintln!(
-                    "Failed to fetch result by calling last_block_number view contract method: {}",
-                    error
-                ),
+                Err(error) => eprintln!("{}", error),
             }
         }
     });
@@ -49,7 +46,7 @@ pub async fn last_block_number_worker(
 pub async fn last_block_number(
     server_addr: url::Url,
     contract_account_id: String,
-) -> Result<Option<u64>, Box<dyn std::error::Error>> {
+) -> Result<Option<u64>, crate::errors::CustomError> {
     let response = near_client::methods::view(
         server_addr,
         contract_account_id,
@@ -67,10 +64,8 @@ pub async fn last_block_number(
                 Ok(None)
             }
         }
-        Err(error) => Err(format!(
-            "Failed to fetch response by calling last_block_number contract method: {}",
-            error
-        )
-        .into()),
+        Err(error) => Err(crate::errors::CustomError::FailedExecuteLastBlockNumber(
+            error.to_string(),
+        )),
     }
 }

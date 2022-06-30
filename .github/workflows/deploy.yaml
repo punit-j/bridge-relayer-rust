@@ -1,0 +1,25 @@
+name: spectre-bridge-service deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          ssh-key: ${{ secrets.submodulessh }}
+      - run: |
+          export name=${GITHUB_REPOSITORY#*/}"-"${GITHUB_REF##*/}
+          export key="ssh-key-spectre"
+          export timestamp=$(date +%s)
+          export host=${{secrets.spectrehost}}
+          docker build . -t "localhost:5031/${name}:latest"
+          echo "${{secrets.spectressh}}" > ${key}
+          chmod 600 ${key}
+          ssh -f -N -i ${key} -o "StrictHostKeyChecking no" ${{secrets.SPECTRE_SSH_USER}}@${{secrets.SPECTRE_SSH_IP}} -L 5031:127.0.0.1:5031
+          docker push localhost:5031/${name}:latest          
+          scp -i ${key} -o "StrictHostKeyChecking no" docker-compose.yaml ${{secrets.SPECTRE_SSH_USER}}@${{secrets.SPECTRE_SSH_IP}}:docker-compose.yaml
+          ssh -i ${key} -o "StrictHostKeyChecking no" ${{secrets.SPECTRE_SSH_USER}}@${{secrets.SPECTRE_SSH_IP}} 'sudo docker pull localhost:5031/'${name}':latest ; sudo docker-compose down; sudo docker-compose up -d'

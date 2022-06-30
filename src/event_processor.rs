@@ -11,7 +11,6 @@ pub fn process_transfer_event(
     transfer: spectre_bridge_common::TransferDataEthereum,
     fee: spectre_bridge_common::TransferDataNear,
     recipient: spectre_bridge_common::EthAddress,
-
     settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
     redis: Arc<Mutex<AsyncRedisWrapper>>,
     eth_contract_address: web3::types::Address,
@@ -63,8 +62,11 @@ pub fn process_transfer_event(
                             serde_json::to_string(&d).unwrap(),
                         )
                         .await;
-                    if let Err(e) = res {
-                        eprintln!("Unable to store pending transaction: {}", e);
+                    if let Err(error) = res {
+                        eprintln!(
+                            "{}",
+                            crate::errors::CustomError::FailedStorePendingTx(error)
+                        );
                     }
                 }
                 Ok(None) => {
@@ -75,7 +77,7 @@ pub fn process_transfer_event(
                     );
                 }
                 Err(error) => {
-                    eprintln!("Failed to execute transferTokens: {}", error)
+                    eprintln!("{}", error)
                 }
             }
         }

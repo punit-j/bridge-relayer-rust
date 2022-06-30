@@ -112,3 +112,10 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(
 
     log.log_index.ok_or(Error::Empty)
 }
+
+impl ToString for Error<'_> {
+    #[allow(unconditional_recursion)]
+    fn to_string(&self) -> std::string::String {
+        format!("{:?}", self)
+    }
+}

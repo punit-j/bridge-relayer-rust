@@ -1,5 +1,6 @@
 mod async_redis_wrapper;
 mod config;
+mod errors;
 mod ethereum;
 mod event_processor;
 mod last_block;
