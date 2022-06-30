@@ -45,6 +45,7 @@ pub mod transactions;
 
 use web3::{api::Namespace, contract::Contract, transports::Http};
 
+#[allow(dead_code)]
 pub struct RainbowBridgeEthereumClient<'a> {
     api_url: &'a str,
     rainbow_bridge_index: &'a str,
@@ -64,9 +65,8 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
         let transport = web3::transports::Http::new(url).unwrap();
         let client = web3::api::Eth::new(transport);
 
-        let contract =
-            web3::contract::Contract::from_json(client.clone(), contract_addr, &*abi_json)
-                .map_err(|e| e.to_string())?;
+        let contract = web3::contract::Contract::from_json(client.clone(), contract_addr, abi_json)
+            .map_err(|e| e.to_string())?;
 
         Ok(Self {
             api_url: url,
@@ -77,6 +77,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
         })
     }
 
+    #[allow(dead_code)]
     pub async fn transfer_token(
         &self,
         token: web3::ethabi::Address,

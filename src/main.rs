@@ -17,7 +17,6 @@ extern crate rocket;
 use crate::config::Settings;
 use clap::Parser;
 use near_sdk::AccountId;
-use redis::{AsyncCommands};
 use rocket::State;
 use serde_json::json;
 use std::str::FromStr;
@@ -45,27 +44,23 @@ fn set_threshold(input: String, settings: &State<std::sync::Arc<std::sync::Mutex
         .unwrap()
         .as_u64()
         .expect("Cannot parse unsigned int");
-
-    settings.lock().unwrap().set_threshold(new_threshold);
+    settings.lock().unwrap().set_threshold(new_threshold)
 }
 
 #[post("/set_allowed_tokens", data = "<input>")]
 fn set_allowed_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
     let json_data: serde_json::Value =
         serde_json::from_str(input.as_str()).expect("Cannot parse JSON request body");
-
     let json_data_allowed_tokens = json_data.as_array().unwrap();
-
     let mut new_allowed_token_accounts: Vec<AccountId> = Vec::new();
     for val in json_data_allowed_tokens {
         let corrected_string = val.to_string().replace(&['\"'], "");
         new_allowed_token_accounts.push(AccountId::try_from(corrected_string).unwrap());
     }
-
     settings
         .lock()
         .unwrap()
-        .set_allowed_tokens(new_allowed_token_accounts);
+        .set_allowed_tokens(new_allowed_token_accounts)
 }
 
 #[get("/profit")]
@@ -128,6 +123,7 @@ async fn insert_mapped_tokens(
 //     ...
 // ]
 //
+
 #[post("/remove_mapped_tokens", data = "<input>")]
 async fn remove_mapped_tokens(
     input: String,
@@ -156,6 +152,7 @@ struct Args {
     near_credentials: Option<String>,
 }
 
+#[allow(unused_must_use)]
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -184,18 +181,19 @@ async fn main() {
     let eth_contract_address =
         std::sync::Arc::new(settings.lock().unwrap().clone().eth.bridge_proxy_address);
 
-    let eth_contract_abi = {
-        let s = settings.lock().unwrap();
-        std::sync::Arc::new(
-            eth_client::methods::get_contract_abi(
-                &s.etherscan_api.endpoint_url.to_string(),
-                s.eth.bridge_impl_address,
-                &s.etherscan_api.api_key,
-            )
-            .await
-            .expect("Failed to get contract abi"),
+    let eth_contract_abi_settings = settings.lock().unwrap().clone();
+    let eth_contract_abi = std::sync::Arc::new(
+        eth_client::methods::get_contract_abi(
+            eth_contract_abi_settings
+                .etherscan_api
+                .endpoint_url
+                .as_ref(),
+            eth_contract_abi_settings.eth.bridge_impl_address,
+            &eth_contract_abi_settings.etherscan_api.api_key,
         )
-    };
+        .await
+        .expect("Failed to get contract abi"),
+    );
 
     let near_account = if let Some(path) = args.near_credentials {
         near_client::read_private_key::read_private_key_from_file(path.as_str())
@@ -235,30 +233,28 @@ async fn main() {
                 {
                     println!("Process event {:?}", event);
 
-                    match event {
-                        spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                    if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                        nonce,
+                        chain_id,
+                        valid_till,
+                        transfer,
+                        fee,
+                        recipient,
+                    } = event
+                    {
+                        event_processor::process_transfer_event(
                             nonce,
                             chain_id,
                             valid_till,
                             transfer,
                             fee,
                             recipient,
-                        } => {
-                            event_processor::process_transfer_event(
-                                nonce,
-                                chain_id,
-                                valid_till,
-                                transfer,
-                                fee,
-                                recipient,
-                                settings.clone(),
-                                redis.clone(),
-                                *eth_contract_address.as_ref(),
-                                eth_keypair.clone(),
-                                eth_contract_abi.clone(),
-                            );
-                        }
-                        _ => {}
+                            settings.clone(),
+                            redis.clone(),
+                            *eth_contract_address.as_ref(),
+                            eth_keypair.clone(),
+                            eth_contract_abi.clone(),
+                        );
                     }
                 }
             }
@@ -266,7 +262,7 @@ async fn main() {
     };
 
     let pending_transactions_worker = tokio::spawn({
-        let (rpc_url, pending_transaction_poll_delay_sec,rainbow_bridge_index_js_path) = {
+        let (rpc_url, pending_transaction_poll_delay_sec, rainbow_bridge_index_js_path) = {
             let s = settings.lock().unwrap();
             (
                 s.eth.rpc_url.clone(),

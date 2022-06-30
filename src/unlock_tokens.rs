@@ -21,13 +21,10 @@ async fn unlock_tokens(
     .await;
     match response {
         Ok(result) => Ok(result.status),
-        Err(error) => {
-            return Err(format!(
-                "Failed to fetch response by calling lp_unlock contract method: {}",
-                error
-            )
-            .into())
-        }
+        Err(error) => Err(format!(
+            "Failed to fetch response by calling lp_unlock contract method: {}",
+            error
+        )),
     }
 }
 

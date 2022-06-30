@@ -1,8 +1,9 @@
-use crate::{async_redis_wrapper, ToHex};
 use crate::async_redis_wrapper::AsyncRedisWrapper;
+use crate::{async_redis_wrapper, ToHex};
 use redis::AsyncCommands;
 use std::sync::{Arc, Mutex};
 
+#[allow(clippy::too_many_arguments)]
 pub fn process_transfer_event(
     nonce: near_sdk::json_types::U128,
     chain_id: u32,

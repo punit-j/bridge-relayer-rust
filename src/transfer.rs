@@ -1,5 +1,4 @@
 use std::sync::{Arc, Mutex};
-use web3::signing::Key;
 
 pub async fn execute_transfer(
     key: impl web3::signing::Key,
@@ -55,14 +54,10 @@ pub async fn execute_transfer(
         Ok(price) => match price {
             Some(_) => (),
             None => {
-                return Err(
-                    "Failed to fetch Ethereum price in USD: Invalid coin id".to_string(),
-                )
+                return Err("Failed to fetch Ethereum price in USD: Invalid coin id".to_string())
             }
         },
-        Err(error) => {
-            return Err(format!("Failed to fetch Ethereum price in USD: {}", error))
-        }
+        Err(error) => return Err(format!("Failed to fetch Ethereum price in USD: {}", error)),
     }
 
     let estimated_transfer_execution_price = eth_client::methods::estimate_transfer_execution(
@@ -82,7 +77,10 @@ pub async fn execute_transfer(
     match coin_id {
         Some(_) => (),
         None => {
-            return Err(format!("Failed to get coin id ({}) by matching", coin_id.unwrap()))
+            return Err(format!(
+                "Failed to get coin id ({}) by matching",
+                coin_id.unwrap()
+            ))
         }
     }
 
@@ -102,7 +100,10 @@ pub async fn execute_transfer(
     )
     .await;
 
-    println!("Profit for nonce {:?} is {}, threshold: {}", nonce, profit, profit_threshold);
+    println!(
+        "Profit for nonce {:?} is {}, threshold: {}",
+        nonce, profit, profit_threshold
+    );
 
     match profit > profit_threshold {
         true => {
@@ -117,9 +118,7 @@ pub async fn execute_transfer(
             .await;
             match tx_hash {
                 Ok(hash) => Ok(Some(hash)),
-                Err(error) => {
-                    return Err(format!("Failed to execute tokens transfer: {}", error))
-                }
+                Err(error) => Err(format!("Failed to execute tokens transfer: {}", error)),
             }
         }
         false => Ok(None),

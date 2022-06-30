@@ -30,8 +30,6 @@ pub const EVENTS: &str = "events";
 
 pub const PENDING_TRANSACTIONS: &str = "pending_transactions";
 
-pub const ABOUT_TO_UNLOCK_TRANSACTIONS: &str = "about_to_proving_transactions";
-
 // TODO: review. Moved from the redis_wrapper
 const REDIS_TRANSACTION_HASH: &str = "myhash";
 const REDIS_PROFIT_HASH: &str = "myprofit";
@@ -68,6 +66,7 @@ impl AsyncRedisWrapper {
         Ok(val)
     }
 
+    #[allow(clippy::let_unit_value)]
     pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
         let _: () = self
             .connection
@@ -86,18 +85,18 @@ impl AsyncRedisWrapper {
             )
             .await;
         if let Ok(redis::Value::Int(1)) = storing_status {
-            return Ok(());
+            Ok(())
         } else {
-            return Err(storing_status.unwrap_err());
+            Err(storing_status.unwrap_err())
         }
     }
 
     pub async fn unstore_tx(&mut self, tx_hash: String) -> redis::RedisResult<()> {
         let unstoring_status = self.hdel(TRANSACTIONS, &tx_hash).await;
         if let Ok(redis::Value::Int(1)) = unstoring_status {
-            return Ok(());
+            Ok(())
         } else {
-            return Err(unstoring_status.unwrap_err());
+            Err(unstoring_status.unwrap_err())
         }
     }
 
