@@ -300,7 +300,10 @@ async fn main() {
     );
 
     let rocket_conf = rocket::Config::release_default();
-    println!("Starting rocket {:#?}:{}", &rocket_conf.address, &rocket_conf.port);
+    println!(
+        "Starting rocket {:#?}:{}",
+        &rocket_conf.address, &rocket_conf.port
+    );
 
     let rocket = rocket::build()
         .configure(rocket_conf)
