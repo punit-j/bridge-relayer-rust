@@ -303,8 +303,11 @@ async fn main() {
         async_redis.clone(),
     );
 
+    let rocket_conf = rocket::Config::release_default();
+    println!("Starting rocket {:#?}:{}", &rocket_conf.address, &rocket_conf.port);
+
     let rocket = rocket::build()
-        .configure(rocket::Config::release_default())
+        .configure(rocket_conf)
         .mount(
             "/v1",
             routes![
