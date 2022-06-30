@@ -1,4 +1,4 @@
-pub async fn get_profit (
+pub async fn get_profit(
     fee_token_usd: f64,
     fee_amount: web3::types::U256,
     estimated_transfer_execution_price: f64,

@@ -100,7 +100,10 @@ pub async fn execute_transfer(
     )
     .await;
 
-    println!("Profit for nonce {:?} is {}, threshold: {}", nonce, profit, profit_threshold);
+    println!(
+        "Profit for nonce {:?} is {}, threshold: {}",
+        nonce, profit, profit_threshold
+    );
 
     match profit > profit_threshold {
         true => {
