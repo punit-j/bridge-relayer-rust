@@ -93,15 +93,16 @@ pub async fn execute_transfer(
         Err(error) => return Err(format!("Failed to get token price: {}", error)),
     }
 
-    let is_profitable_tx = crate::profit_estimation::is_profitable(
+    let profit = crate::profit_estimation::get_profit(
         fee_token_usd.unwrap().unwrap(),
         fee_amount,
         estimated_transfer_execution_price,
-        profit_threshold,
     )
     .await;
 
-    match is_profitable_tx {
+    println!("Profit for nonce {:?} is {}, threshold: {}", nonce, profit, profit_threshold);
+
+    match profit > profit_threshold {
         true => {
             let tx_hash = eth_client::methods::change(
                 rpc_url,

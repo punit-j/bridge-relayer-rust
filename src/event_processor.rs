@@ -24,6 +24,7 @@ pub fn process_transfer_event(
         let eth_contract_abi = std::sync::Arc::clone(&eth_contract_abi);
         async move {
             let mut redis = redis.lock().unwrap().clone();
+            println!("Execute transfer on eth with nonce {:?}", nonce);
             let tx_hash = crate::transfer::execute_transfer(
                 eth_key.clone().as_ref(),
                 spectre_bridge_common::Event::SpectreBridgeTransferEvent {
@@ -74,7 +75,7 @@ pub fn process_transfer_event(
                     );
                 }
                 Err(error) => {
-                    eprint!("Failed to execute transferTokens: {}", error)
+                    eprintln!("Failed to execute transferTokens: {}", error)
                 }
             }
         }
