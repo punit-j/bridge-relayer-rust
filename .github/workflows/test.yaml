@@ -1,4 +1,4 @@
-name: spectre-bridge-service test and deploy automatically
+name: spectre-bridge-service test
 
 on:
   push:
