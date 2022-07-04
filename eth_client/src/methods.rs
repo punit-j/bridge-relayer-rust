@@ -91,7 +91,7 @@ pub fn estimate_transfer_execution(
 ) -> f64 {
     let precision = f64::powf(10.0, 4.0);
     let ether_in_wei = web3::types::U256::from(1_000_000_000_000_000_000u64);
-    let ether_price = web3::types::U256::from((ether_price * precision) as u64);
+    let ether_price = web3::types::U256::from((ether_price * precision) as u128);
     estimated_gas
         .checked_mul(gas_price)
         .unwrap()
