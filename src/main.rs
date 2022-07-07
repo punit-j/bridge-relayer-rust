@@ -12,128 +12,10 @@ mod transfer;
 mod unlock_tokens;
 mod utils;
 
-#[macro_use]
-extern crate rocket;
-
 use crate::config::Settings;
 use clap::Parser;
-use near_sdk::AccountId;
-use rocket::State;
-use serde_json::json;
 use std::str::FromStr;
 use uint::rustc_hex::ToHex;
-
-#[get("/health")]
-fn health() -> String {
-    "OK".to_string()
-}
-
-#[get("/transactions")]
-async fn transactions(
-    redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>,
-) -> String {
-    let mut r = redis.lock().unwrap().clone();
-    json!(r.get_all().await).to_string()
-}
-
-#[post("/set_threshold", data = "<input>")]
-fn set_threshold(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
-    let json_data: serde_json::Value =
-        serde_json::from_str(input.as_str()).expect("Cannot parse JSON request body");
-    let new_threshold = json_data
-        .get("profit_threshold")
-        .unwrap()
-        .as_u64()
-        .expect("Cannot parse unsigned int");
-    settings.lock().unwrap().set_threshold(new_threshold)
-}
-
-#[post("/set_allowed_tokens", data = "<input>")]
-fn set_allowed_tokens(input: String, settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) {
-    let json_data: serde_json::Value =
-        serde_json::from_str(input.as_str()).expect("Cannot parse JSON request body");
-    let json_data_allowed_tokens = json_data.as_array().unwrap();
-    let mut new_allowed_token_accounts: Vec<AccountId> = Vec::new();
-    for val in json_data_allowed_tokens {
-        let corrected_string = val.to_string().replace(&['\"'], "");
-        new_allowed_token_accounts.push(AccountId::try_from(corrected_string).unwrap());
-    }
-    settings
-        .lock()
-        .unwrap()
-        .set_allowed_tokens(new_allowed_token_accounts)
-}
-
-#[get("/profit")]
-async fn profit(
-    redis: &State<std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>>,
-) -> String {
-    let mut r = redis.lock().unwrap().clone();
-    json!(r.get_profit().await).to_string()
-}
-
-//
-// Example of body request
-//
-// {
-//     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
-//      ...
-// }
-//
-#[post("/set_mapped_tokens", data = "<input>")]
-async fn set_mapped_tokens(
-    input: String,
-    settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>,
-) {
-    settings
-        .lock()
-        .unwrap()
-        .clone()
-        .set_mapped_tokens(serde_json::from_str(&input).expect("Failed to parse JSON request body"))
-}
-
-#[get("/get_mapped_tokens")]
-async fn get_mapped_tokens(settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>) -> String {
-    serde_json::to_string_pretty(&settings.lock().unwrap().clone().near_tokens_coin_id.mapping)
-        .expect("Failed to parse to string mapped tokens")
-}
-
-//
-// Example of body request
-//
-// {
-//     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": "dai",
-//      ...
-// }
-//
-#[post("/insert_mapped_tokens", data = "<input>")]
-async fn insert_mapped_tokens(
-    input: String,
-    settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>,
-) {
-    settings.lock().unwrap().clone().insert_mapped_tokens(
-        serde_json::from_str(&input).expect("Failed to parse JSON request body"),
-    )
-}
-
-//
-// Example of body request
-//
-// [
-//     "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near",
-//     ...
-// ]
-//
-
-#[post("/remove_mapped_tokens", data = "<input>")]
-async fn remove_mapped_tokens(
-    input: String,
-    settings: &State<std::sync::Arc<std::sync::Mutex<Settings>>>,
-) {
-    settings.lock().unwrap().clone().remove_mapped_tokens(
-        serde_json::from_str(&input).expect("Failed to parse JSON request body"),
-    )
-}
 
 extern crate redis;
 
@@ -216,78 +98,28 @@ async fn main() {
         }
     });
 
-    let mut stream = async_redis_wrapper::subscribe::<String>(
+    let stream = async_redis_wrapper::subscribe::<String>(
         async_redis_wrapper::EVENTS.to_string(),
         async_redis.clone(),
     )
     .unwrap();
-    let subscriber = {
-        let settings = std::sync::Arc::clone(&settings);
-        let eth_keypair = std::sync::Arc::clone(&eth_keypair);
-        let redis = std::sync::Arc::clone(&async_redis);
-        let eth_contract_abi = std::sync::Arc::clone(&eth_contract_abi);
-        let eth_contract_address = std::sync::Arc::clone(&eth_contract_address);
-        async move {
-            while let Some(msg) = stream.recv().await {
-                if let Ok(event) =
-                    serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str())
-                {
-                    println!("Process event {:?}", event);
 
-                    if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
-                        nonce,
-                        chain_id,
-                        valid_till,
-                        transfer,
-                        fee,
-                        recipient,
-                    } = event
-                    {
-                        event_processor::process_transfer_event(
-                            nonce,
-                            chain_id,
-                            valid_till,
-                            transfer,
-                            fee,
-                            recipient,
-                            settings.clone(),
-                            redis.clone(),
-                            *eth_contract_address.as_ref(),
-                            eth_keypair.clone(),
-                            eth_contract_abi.clone(),
-                        );
-                    }
-                }
-            }
-        }
-    };
+    let subscriber = utils::build_near_events_subscriber(
+        settings.clone(),
+        eth_keypair.clone(),
+        async_redis.clone(),
+        eth_contract_abi.clone(),
+        eth_contract_address.clone(),
+        stream,
+    );
 
-    let pending_transactions_worker = tokio::spawn({
-        let (rpc_url, pending_transaction_poll_delay_sec, rainbow_bridge_index_js_path) = {
-            let s = settings.lock().unwrap();
-            (
-                s.eth.rpc_url.clone(),
-                s.eth.pending_transaction_poll_delay_sec,
-                s.eth.rainbow_bridge_index_js_path.clone(),
-            )
-        };
-        let eth_keypair = eth_keypair.clone();
-        let redis = async_redis.lock().unwrap().clone();
-        let eth_contract_abi = eth_contract_abi.clone();
-
-        async move {
-            pending_transactions_worker::run(
-                rpc_url,
-                *eth_contract_address.as_ref(),
-                eth_contract_abi.as_ref().clone(),
-                web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
-                rainbow_bridge_index_js_path,
-                redis,
-                pending_transaction_poll_delay_sec as u64,
-            )
-            .await
-        }
-    });
+    let pending_transactions_worker = utils::build_pending_transactions_worker(
+        settings.clone(),
+        eth_keypair.clone(),
+        async_redis.lock().unwrap().clone(),
+        eth_contract_abi.clone(),
+        eth_contract_address.clone(),
+    );
 
     let last_block_number_worker =
         last_block::last_block_number_worker(settings.clone(), storage.clone());
@@ -305,26 +137,7 @@ async fn main() {
         "Starting rocket {:#?}:{}",
         &rocket_conf.address, &rocket_conf.port
     );
-
-    let rocket = rocket::build()
-        .configure(rocket_conf)
-        .mount(
-            "/v1",
-            routes![
-                health,
-                transactions,
-                set_threshold,
-                set_allowed_tokens,
-                profit,
-                set_mapped_tokens,
-                get_mapped_tokens,
-                insert_mapped_tokens,
-                remove_mapped_tokens,
-            ],
-        )
-        .manage(settings)
-        .manage(storage)
-        .manage(async_redis);
+    let rocket = utils::build_rocket(rocket_conf, settings, storage, async_redis);
 
     tokio::join!(
         near_worker,
