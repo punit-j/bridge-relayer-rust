@@ -338,6 +338,7 @@ async fn main() {
 
 #[cfg(test)]
 pub mod tests {
+    const APP_USER_AGENT: &str = "spectre-bridge-service/0.1.0";
     const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
     const ETH_RPC_ENDPOINT_URL: &str =
         "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";
@@ -362,13 +363,17 @@ pub mod tests {
     #[tokio::test]
     pub async fn eth_rpc_status() {
         let transport = web3::transports::Http::new(ETH_RPC_ENDPOINT_URL);
-        assert!(transport.is_ok());
+        assert!(transport.is_ok(), "{:?}", transport.unwrap_err());
     }
 
     #[tokio::test]
     pub async fn etherscan_rpc_status() {
-        let status = reqwest::get(ETHERSCAN_RPC_ENDPOINT_URL).await;
-        assert!(status.is_ok());
-        assert_eq!(reqwest::StatusCode::OK, status.unwrap().status());
+        let client = reqwest::Client::builder()
+            .user_agent(APP_USER_AGENT)
+            .build();
+        assert!(client.is_ok(), "{:?}", client.unwrap_err());
+        let res = client.unwrap().get(ETHERSCAN_RPC_ENDPOINT_URL).send().await;
+        assert!(res.is_ok(), "{:?}", res.unwrap_err());
+        assert_eq!(reqwest::StatusCode::OK, res.unwrap().status());
     }
 }
