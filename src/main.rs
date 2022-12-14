@@ -151,6 +151,8 @@ async fn main() {
 
 #[cfg(test)]
 pub mod tests {
+    use crate::last_block;
+
     const APP_USER_AGENT: &str = "spectre-bridge-service/0.1.0";
     const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
     const ETH_RPC_ENDPOINT_URL: &str =
@@ -188,5 +190,16 @@ pub mod tests {
         let res = client.unwrap().get(ETHERSCAN_RPC_ENDPOINT_URL).send().await;
         assert!(res.is_ok(), "{:?}", res.unwrap_err());
         assert_eq!(reqwest::StatusCode::OK, res.unwrap().status());
+    }
+
+    #[tokio::test]
+    pub async fn last_block_number() {
+        let result = last_block::last_block_number(
+            NEAR_RPC_ENDPOINT_URL.try_into().unwrap(),
+            "client-eth2.goerli.testnet".to_string(),
+        )
+        .await;
+
+        assert!(result.unwrap().unwrap() >= 8129711);
     }
 }

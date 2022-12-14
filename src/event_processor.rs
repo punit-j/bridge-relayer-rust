@@ -26,7 +26,7 @@ pub fn process_transfer_event(
             println!("Execute transfer on eth with nonce {:?}", nonce);
             let tx_hash = crate::transfer::execute_transfer(
                 eth_key.clone().as_ref(),
-                spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
                     nonce,
                     chain_id,
                     valid_till,

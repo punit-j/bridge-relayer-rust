@@ -10,7 +10,7 @@ pub async fn execute_transfer(
     settings: Arc<Mutex<crate::Settings>>,
 ) -> Result<Option<web3::types::H256>, crate::errors::CustomError> {
     let method_name = "transferTokens";
-    let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+    let transfer_message = if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
         nonce,
         chain_id,
         valid_till,

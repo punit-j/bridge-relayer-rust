@@ -82,7 +82,7 @@ pub async fn build_near_events_subscriber(
             if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
                 println!("Process event {:?}", event);
 
-                if let spectre_bridge_common::Event::SpectreBridgeTransferEvent {
+                if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
                     nonce,
                     chain_id,
                     valid_till,

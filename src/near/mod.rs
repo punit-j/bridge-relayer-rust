@@ -15,9 +15,9 @@ pub async fn run_worker(
         .build()
         .expect("Failed to build LakeConfig");
 
-    println!("NEAR lake starts from block {}", config.start_block_height);
+    println!("NEAR lake starts from block {}", start_block);
 
-    let mut stream = near_lake_framework::streamer(config);
+    let (_, mut stream) = near_lake_framework::streamer(config);
 
     while let Some(streamer_message) = stream.recv().await {
         for shard in streamer_message.shards {
