@@ -1,4 +1,4 @@
-use crate::Settings;
+use crate::config::Settings;
 use serde_json::json;
 use std::fs;
 use std::ops::Deref;

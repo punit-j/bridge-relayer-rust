@@ -119,3 +119,55 @@ impl ToString for Error<'_> {
         format!("{:?}", self)
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use crate::ethereum::proof;
+    use crate::ethereum::proof::get_transaction_log_index;
+    use crate::test_utils::get_rb_index_path_str;
+    use eth_client::test_utils::get_eth_rpc_url;
+    use web3::api::Namespace;
+
+    #[tokio::test]
+    async fn smoke_get_transaction_log_index_test() {
+        let tx_hash = web3::types::H256::from_slice(
+            &hex::decode("cb50c668e750650fc53d0027112d0580b42f3b658780598cb6899344e2b94183")
+                .unwrap(),
+        );
+
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let transport = web3::transports::Http::new(&eth1_endpoint).unwrap();
+        let client = web3::api::Eth::new(transport);
+
+        let _log_index = get_transaction_log_index(&client, &tx_hash).await.unwrap();
+    }
+
+    // cd PATH_TO_RAINBOW_BRIDGE_REP
+    // yarn install
+    #[tokio::test]
+    async fn smoke_get_proof_test() {
+        let tx_hash = web3::types::H256::from_slice(
+            &hex::decode("cb50c668e750650fc53d0027112d0580b42f3b658780598cb6899344e2b94183")
+                .unwrap(),
+        );
+
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let transport = web3::transports::Http::new(&eth1_endpoint).unwrap();
+        let client = web3::api::Eth::new(transport);
+
+        let rb_index_path_str = get_rb_index_path_str();
+
+        let res = proof::get_proof(
+            &eth1_endpoint.to_string(),
+            &client,
+            &rb_index_path_str,
+            &tx_hash,
+        )
+        .await
+        .unwrap();
+
+        println!("res {:?}", res);
+    }
+}

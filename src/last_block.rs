@@ -1,20 +1,21 @@
 use near_sdk::borsh::BorshDeserialize;
+use crate::config::Settings;
 
 #[derive(Clone, Debug)]
 pub struct Storage {
-    pub last_block_number: u64,
+    pub eth_last_block_number_on_near: u64,
 }
 
 impl Storage {
     pub fn new() -> Self {
         Storage {
-            last_block_number: 0,
+            eth_last_block_number_on_near: 0,
         }
     }
 }
 
 pub async fn last_block_number_worker(
-    settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>,
+    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
     storage: std::sync::Arc<std::sync::Mutex<Storage>>,
 ) {
     tokio::spawn(async move {
@@ -34,7 +35,9 @@ pub async fn last_block_number_worker(
             .await;
             match number {
                 Ok(result) => match result {
-                    Some(block_number) => storage.lock().unwrap().last_block_number = block_number,
+                    Some(block_number) => {
+                        storage.lock().unwrap().eth_last_block_number_on_near = block_number
+                    }
                     None => (),
                 },
                 Err(error) => eprintln!("{}", error),
@@ -67,5 +70,42 @@ pub async fn last_block_number(
         Err(error) => Err(crate::errors::CustomError::FailedExecuteLastBlockNumber(
             error.to_string(),
         )),
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use crate::last_block::{last_block_number, last_block_number_worker, Storage};
+    use crate::test_utils::get_settings;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn smoke_last_block_number_test() {
+        let server_addr = url::Url::parse("https://rpc.testnet.near.org").unwrap();
+        let contract_account_id = "client6.goerli.testnet".to_string();
+
+        let last_block_number = last_block_number(server_addr, contract_account_id)
+            .await
+            .unwrap()
+            .unwrap();
+        println!("last_block_number = {}", last_block_number);
+    }
+
+    #[tokio::test]
+    async fn smoke_last_block_number_worker_test() {
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));
+
+        let _last_block_worker = last_block_number_worker(settings.clone(), storage.clone()).await;
+        tokio::time::sleep(Duration::from_secs(16)).await;
+
+        let new_last_block_number = storage
+            .clone()
+            .lock()
+            .unwrap()
+            .eth_last_block_number_on_near;
+        assert_ne!(new_last_block_number, 0u64);
+        println!("new last block number = {}", new_last_block_number);
     }
 }

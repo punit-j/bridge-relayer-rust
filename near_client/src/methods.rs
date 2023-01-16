@@ -111,3 +111,58 @@ pub async fn change(
         }
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use crate::methods::{change, view};
+    use serde_json::json;
+    use near_sdk::borsh::BorshDeserialize;
+    use crate::read_private_key::read_private_key_from_file;
+    use std::path::Path;
+    use std::ffi::OsStr;
+    use near_primitives::views::FinalExecutionStatus;
+    use crate::test_utils::{get_near_signer, get_near_token, get_server_addr};
+
+    fn abspath(p: &str) -> Option<String> {
+        shellexpand::full(p)
+            .ok()
+            .and_then(|x| Path::new(OsStr::new(x.as_ref())).canonicalize().ok())
+            .and_then(|p| p.into_os_string().into_string().ok())
+    }
+
+    #[tokio::test]
+    async fn smoke_view_test() {
+        let server_addr = get_server_addr();
+        let contract_account_id = "client6.goerli.testnet".to_string();
+        let method_name = "last_block_number".to_string();
+        let args = json!({});
+
+        let response = view(server_addr, contract_account_id, method_name, args).await.unwrap();
+
+        if let near_jsonrpc_primitives::types::query::QueryResponseKind::CallResult(result) = response.kind {
+            let value = u64::try_from_slice(&result.result).unwrap();
+
+            println!("last block number = {}", value);
+        } else {
+            panic!("Error on unwraping view result")
+        }
+    }
+
+    #[tokio::test]
+    async fn smoke_change_test() {
+        let server_addr = get_server_addr();
+        let contract_account_id = get_near_token();
+        let method_name = "mint".to_string();
+        let signer = get_near_signer();
+
+        let args = json!({"account_id": signer.account_id, "amount": "100"});
+
+        let response = change(server_addr, signer, contract_account_id, method_name, args, 4_000_000_000_000, 0).await.unwrap();
+
+        if let FinalExecutionStatus::SuccessValue(_) = response.status {
+            println!("change response = {:?}", response);
+        } else {
+            panic!("Response status not success: {:?}", response)
+        }
+    }
+}

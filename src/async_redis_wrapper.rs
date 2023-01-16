@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use redis::{AsyncCommands, RedisResult};
+use crate::config::Settings;
 
 #[derive(Clone)]
 pub struct AsyncRedisWrapper {
@@ -30,12 +31,8 @@ pub const EVENTS: &str = "events";
 
 pub const PENDING_TRANSACTIONS: &str = "pending_transactions";
 
-// TODO: review. Moved from the redis_wrapper
-const REDIS_TRANSACTION_HASH: &str = "myhash";
-const REDIS_PROFIT_HASH: &str = "myprofit";
-
 impl AsyncRedisWrapper {
-    pub async fn connect(settings: std::sync::Arc<std::sync::Mutex<crate::Settings>>) -> Self {
+    pub async fn connect(settings: std::sync::Arc<std::sync::Mutex<Settings>>) -> Self {
         let redis_settings = settings.lock().unwrap().redis.clone();
         let client = redis::Client::open(redis_settings.url.clone())
             .expect("REDIS: Failed to establish connection");
@@ -109,8 +106,8 @@ impl AsyncRedisWrapper {
         }
     }
 
-    pub async fn get_tx_hashes(&mut self, key: &str) -> redis::RedisResult<Vec<String>> {
-        self.connection.hkeys(key).await
+    pub async fn get_tx_hashes(&mut self) -> redis::RedisResult<Vec<String>> {
+        self.connection.hkeys(TRANSACTIONS).await
     }
 
     async fn hsetnx(
@@ -128,41 +125,6 @@ impl AsyncRedisWrapper {
 
     async fn hdel(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
         self.connection.hdel(key, field).await
-    }
-
-    // TODO: review. Moved from the redis_wrapper
-    pub async fn get_all(&mut self) -> Vec<String> {
-        let result: Vec<String> = self.connection.hvals(REDIS_TRANSACTION_HASH).await.unwrap();
-        result
-    }
-
-    // TODO: review. Moved from the redis_wrapper
-    pub async fn _increase_profit(&mut self, add_to: u64) -> RedisResult<()> {
-        let profit: i32 = self
-            .connection
-            .hget(REDIS_PROFIT_HASH, "profit".to_string())
-            .await
-            .ok()
-            .unwrap_or(0); // In case we don't have initial value in DB
-
-        self.connection
-            .hset(
-                REDIS_PROFIT_HASH,
-                "profit".to_string(),
-                add_to + profit as u64,
-            )
-            .await?;
-
-        Ok(())
-    }
-
-    // TODO: review. Moved from the redis_wrapper
-    pub async fn get_profit(&mut self) -> u64 {
-        self.connection
-            .hget(REDIS_PROFIT_HASH, "profit".to_string())
-            .await
-            .ok()
-            .unwrap()
     }
 }
 
@@ -192,4 +154,110 @@ pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
         }
     });
     Ok(receiver)
+}
+
+#[cfg(test)]
+pub mod tests {
+    use eth_client::test_utils::{get_eth_token, get_recipient};
+    use near_client::test_utils::get_near_token;
+    use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, TxData, EVENTS, TRANSACTIONS};
+    use crate::test_utils::{get_settings, remove_all};
+    use near_sdk::json_types::U128;
+    use spectre_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage};
+    use tokio::time::Duration;
+
+    // run `redis-server` in the terminal
+    #[tokio::test]
+    async fn smoke_connect_test() {
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let _redis = AsyncRedisWrapper::connect(settings).await;
+    }
+
+    #[tokio::test]
+    async fn smoke_option_set_test() {
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let mut redis = AsyncRedisWrapper::connect(settings).await;
+        redis.option_set("START_BLOCK", 10).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn smoke_option_get_test() {
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let mut redis = AsyncRedisWrapper::connect(settings).await;
+
+        redis.option_set("START_BLOCK", 10u64).await.unwrap();
+        let start_block: u64 = redis.option_get("START_BLOCK").await.unwrap().unwrap();
+
+        assert_eq!(10u64, start_block);
+    }
+
+    #[tokio::test]
+    async fn smoke_tx_test() {
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let mut redis = AsyncRedisWrapper::connect(settings).await;
+
+        remove_all(redis.clone(), TRANSACTIONS).await;
+
+        let tx_hash = "test_tx_hash".to_string();
+        let tx_data = TxData {
+            block: 126u64,
+            proof: spectre_bridge_common::Proof::default(),
+            nonce: 15u128,
+        };
+
+        redis
+            .store_tx(tx_hash.clone(), tx_data.clone())
+            .await
+            .unwrap();
+
+        let extracted_tx_data = redis.get_tx_data(tx_hash.clone()).await.unwrap();
+        assert_eq!(extracted_tx_data.nonce, tx_data.nonce);
+
+        let tx_list = redis.get_tx_hashes().await.unwrap();
+        assert_eq!(tx_list.len(), 1);
+        assert_eq!(tx_list[0], tx_hash.clone());
+
+        redis.unstore_tx(tx_hash.clone()).await.unwrap();
+        assert!(redis.get_tx_data(tx_hash).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn smoke_subscribe_test() {
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let redis = AsyncRedisWrapper::connect(settings).await;
+        let arc_redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+
+        let mut stream = subscribe::<String>(EVENTS.to_string(), arc_redis.clone()).unwrap();
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        let mut redis = arc_redis.lock().unwrap().clone();
+        redis
+            .event_pub(spectre_bridge_common::Event::SpectreBridgeUnlockEvent {
+                nonce: U128::from(16u128),
+                recipient_id: "test.account".parse().unwrap(),
+                transfer_message: TransferMessage {
+                    valid_till: 0,
+                    transfer: TransferDataEthereum {
+                        token_near: get_near_token(),
+                        token_eth: EthAddress::from(get_eth_token()),
+                        amount: U128(1)
+                    },
+                    fee: TransferDataNear { token: get_near_token(), amount: U128(1) },
+                    recipient: EthAddress::from(get_recipient()),
+                    valid_till_block_height: None
+                }
+            })
+            .await;
+
+        let recv_event =
+            serde_json::from_str::<spectre_bridge_common::Event>(&stream.recv().await.unwrap())
+                .unwrap();
+        println!("recv event: {:?}", recv_event);
+    }
 }

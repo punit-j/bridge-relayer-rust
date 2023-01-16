@@ -32,6 +32,8 @@ near-jsonrpc-primitives = "0.15.0"
 near-crypto = "0.15.0"
 tokio = { version = "1.1", features = ["rt", "macros"] }
 
+shellexpand = "3.0.0"
+
 [features]
 any = []
 sandbox = []

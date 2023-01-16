@@ -15,8 +15,8 @@ pub enum CustomError {
     #[error("Failed to fetch Ethereum price in USD: {0:?}")]
     FailedFetchEthereumPrice(reqwest::Error),
 
-    #[error("Failed to get coin id ({0}) by matching")]
-    FailedGetCoinIdByMatching(String),
+    #[error("Failed to get near token info from whitelist ({0}) by matching")]
+    FailedGetNearTokenInfoByMatching(String),
 
     #[error("Failed to get token price: invalid coin id")]
     FailedGetTokenPriceInvalidCoinId,
@@ -56,4 +56,22 @@ pub enum CustomError {
 
     #[error("transferTokens transaction status [Failure]: {0}")]
     FailedTxStatus(String),
+
+    #[error("Failed to calculate fee")]
+    FailedFeeCalculation,
+
+    #[error("Failed to estimate profit")]
+    FailedProfitEstimation,
+
+    #[error("Invalid fee token")]
+    InvalidFeeToken,
+
+    #[error("Invalid eth token address")]
+    InvalidEthTokenAddress,
+
+    #[error("The fee amount: {0} is lower than the min allowed fee: {1}")]
+    NotEnoughFeeToken(u128, u128),
+
+    #[error("The profit: {0}, is lower than the min allowed profit: {1}")]
+    TxNotProfitable(f64, f64),
 }

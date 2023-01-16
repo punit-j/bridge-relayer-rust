@@ -1,8 +1,5 @@
-use crate::{pending_transactions_worker, Settings};
-use rocket::Rocket;
+use crate::{config::Settings, pending_transactions_worker};
 use tokio::task::JoinHandle;
-
-mod rocket_endpoints;
 
 pub async fn request_interval(seconds: u64) -> tokio::time::Interval {
     tokio::time::interval_at(
@@ -11,32 +8,6 @@ pub async fn request_interval(seconds: u64) -> tokio::time::Interval {
     )
 }
 
-pub fn build_rocket(
-    conf: rocket::Config,
-    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
-    storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
-    async_redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
-) -> Rocket<rocket::Build> {
-    rocket::build()
-        .configure(conf)
-        .mount(
-            "/v1",
-            rocket::routes![
-                rocket_endpoints::health,
-                rocket_endpoints::transactions,
-                rocket_endpoints::set_threshold,
-                rocket_endpoints::set_allowed_tokens,
-                rocket_endpoints::profit,
-                rocket_endpoints::set_mapped_tokens,
-                rocket_endpoints::get_mapped_tokens,
-                rocket_endpoints::insert_mapped_tokens,
-                rocket_endpoints::remove_mapped_tokens,
-            ],
-        )
-        .manage(settings)
-        .manage(storage)
-        .manage(async_redis)
-}
 pub async fn build_pending_transactions_worker(
     settings: std::sync::Arc<std::sync::Mutex<Settings>>,
     eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
@@ -76,35 +47,29 @@ pub async fn build_near_events_subscriber(
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
     mut stream: tokio::sync::mpsc::Receiver<String>,
-) -> impl futures_util::Future<Output = ()> {
-    async move {
-        while let Some(msg) = stream.recv().await {
-            if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
-                println!("Process event {:?}", event);
+    near_relay_account_id: String,
+) {
+    while let Some(msg) = stream.recv().await {
+        if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+            println!("Process event {:?}", event);
 
-                if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+            if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+                nonce,
+                sender_id,
+                transfer_message,
+            } = event
+            {
+                crate::event_processor::process_transfer_event(
                     nonce,
-                    chain_id,
-                    valid_till,
-                    transfer,
-                    fee,
-                    recipient,
-                } = event
-                {
-                    crate::event_processor::process_transfer_event(
-                        nonce,
-                        chain_id,
-                        valid_till,
-                        transfer,
-                        fee,
-                        recipient,
-                        settings.clone(),
-                        redis.clone(),
-                        *eth_contract_address.as_ref(),
-                        eth_keypair.clone(),
-                        eth_contract_abi.clone(),
-                    );
-                }
+                    sender_id,
+                    transfer_message,
+                    settings.clone(),
+                    redis.clone(),
+                    *eth_contract_address.as_ref(),
+                    eth_keypair.clone(),
+                    eth_contract_abi.clone(),
+                    near_relay_account_id.clone(),
+                );
             }
         }
     }

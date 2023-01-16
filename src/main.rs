@@ -12,10 +12,12 @@ mod transfer;
 mod unlock_tokens;
 mod utils;
 
+#[cfg(test)]
+mod test_utils;
+
 use crate::config::Settings;
 use clap::Parser;
 use std::str::FromStr;
-use uint::rustc_hex::ToHex;
 
 extern crate redis;
 
@@ -89,14 +91,24 @@ async fn main() {
 
     let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
 
-    let near_worker = near::run_worker(near_contract_address, async_redis.clone(), {
-        let mut r = async_redis.lock().unwrap().clone();
-        if let Some(b) = r.option_get::<u64>(near::OPTION_START_BLOCK).await.unwrap() {
-            b
-        } else {
-            settings.lock().unwrap().near.near_lake_init_block
-        }
-    });
+    let near_worker = near::run_worker(
+        near_contract_address,
+        async_redis.clone(),
+        {
+            if let Some(start_block) = async_redis
+                .lock()
+                .unwrap()
+                .option_get::<u64>(near::OPTION_START_BLOCK)
+                .await
+                .unwrap()
+            {
+                start_block
+            } else {
+                settings.lock().unwrap().near.near_lake_init_block
+            }
+        },
+        settings.lock().unwrap().clone().near.near_network,
+    );
 
     let stream = async_redis_wrapper::subscribe::<String>(
         async_redis_wrapper::EVENTS.to_string(),
@@ -111,6 +123,7 @@ async fn main() {
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
         stream,
+        near_account.account_id.to_string(),
     );
 
     let pending_transactions_worker = utils::build_pending_transactions_worker(
@@ -132,20 +145,12 @@ async fn main() {
         async_redis.clone(),
     );
 
-    let rocket_conf = rocket::Config::release_default();
-    println!(
-        "Starting rocket {:#?}:{}",
-        &rocket_conf.address, &rocket_conf.port
-    );
-    let rocket = utils::build_rocket(rocket_conf, settings, storage, async_redis);
-
     tokio::join!(
         near_worker,
         subscriber,
         pending_transactions_worker,
         last_block_number_worker,
-        unlock_tokens_worker,
-        rocket.launch()
+        unlock_tokens_worker//,
     );
 }
 

@@ -1,23 +1,30 @@
 use near_lake_framework::near_indexer_primitives::types::AccountId;
 use near_lake_framework::LakeConfigBuilder;
 
+use crate::config::NearNetwork;
+
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
 #[allow(clippy::await_holding_lock)]
+// extract all events produced by contract_name on NEAR
+// since start_block and save it to redis.
 pub async fn run_worker(
     contract_name: AccountId,
     redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
     start_block: u64,
+    near_network: NearNetwork,
 ) {
-    let config = LakeConfigBuilder::default()
-        .testnet()
-        .start_block_height(start_block)
-        .build()
-        .expect("Failed to build LakeConfig");
+    let mut lake_config = LakeConfigBuilder::default().start_block_height(start_block);
+
+    lake_config = match near_network {
+        NearNetwork::Mainnet => lake_config.mainnet(),
+        NearNetwork::Testnet => lake_config.testnet(),
+    };
 
     println!("NEAR lake starts from block {}", start_block);
 
-    let (_, mut stream) = near_lake_framework::streamer(config);
+    let (_, mut stream) =
+        near_lake_framework::streamer(lake_config.build().expect("Failed to build LakeConfig"));
 
     while let Some(streamer_message) = stream.recv().await {
         for shard in streamer_message.shards {
@@ -51,6 +58,8 @@ pub async fn run_worker(
         .await
         .unwrap();
     }
+
+    // ![TODO] In that place we should submit some kind of alert and restart relayer.
 }
 
 #[allow(dead_code)]
@@ -67,8 +76,10 @@ pub enum ParceError {
 pub fn fix_json(mut json: serde_json::Value) -> serde_json::Value {
     if let Some(data) = json.get_mut("data") {
         if let Some(arr) = data.as_array_mut() {
-            if let Some(item) = arr.get_mut(0) {
-                *data = item.take();
+            if arr.len() == 1 {
+                if let Some(item) = arr.get_mut(0) {
+                    *data = item.take();
+                }
             }
         }
     }
@@ -99,34 +110,76 @@ pub fn get_event(json: serde_json::Value) -> Result<spectre_bridge_common::Event
 
 #[cfg(test)]
 pub mod tests {
-    use crate::near::fix_json;
+    use crate::config::NearNetwork;
+    use crate::near::{fix_json, get_event, run_worker};
     use assert_json_diff::assert_json_eq;
+    use near_sdk::json_types::U128;
+    use near_sdk::AccountId;
+    use spectre_bridge_common;
 
+    use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, EVENTS};
+    use crate::test_utils::get_settings;
     use serde_json::json;
+    use tokio::time::timeout;
 
     #[test]
     fn fix_json_test() {
         let json_valid = json!({"data": 1});
 
         let json = json!({"data": 1});
-        assert_json_eq!(fix_json(json), json_valid.clone());
+        assert_json_eq!(fix_json(json), json_valid);
 
         let json = json!({"data": [1]});
-        assert_json_eq!(fix_json(json), json_valid)
+        assert_json_eq!(fix_json(json), json_valid);
+
+        let json = json!({"data": [1, 2]});
+        assert_json_eq!(fix_json(json.clone()), json);
     }
 
-    // #[test]
-    // fn get_event_test() {
-    //     let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"spectre_bridge_transfer_failed_event","data":{"nonce":"238","account":"alice"}}"#;
-    //     let json = spectre_bridge_common::remove_prefix(json_str).unwrap();
-    //     let event = get_event(json).unwrap();
+    #[test]
+    fn get_event_test() {
+        let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"spectre_bridge_deposit_event","data":{"amount":"179","sender_id":"alice","token":"token"}}"#;
+        let json = spectre_bridge_common::remove_prefix(json_str).unwrap();
+        let event = get_event(json).unwrap();
 
-    //     assert_eq!(
-    //         event,
-    //         spectre_bridge_common::Event::SpectreBridgeTransferFailedEvent {
-    //             nonce: U128(238),
-    //             account: AccountId::new_unchecked("alice".to_string()),
-    //         }
-    //     )
-    // }
+        assert_eq!(
+            event,
+            spectre_bridge_common::Event::SpectreBridgeDepositEvent {
+                sender_id: AccountId::new_unchecked("alice".to_string()),
+                token: AccountId::new_unchecked("token".to_string()),
+                amount: U128(179)
+            }
+        )
+    }
+
+    #[tokio::test]
+    // Should be created AWS account and key saved to ~/.aws/credentials
+    async fn smoke_run_worker_test() {
+        let settings = get_settings();
+        let contract_address =
+            crate::near::AccountId::try_from("fast-bridge2.olga24912_3.testnet".to_string())
+                .unwrap();
+        let init_block = 112480111;
+        let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
+
+        let redis = AsyncRedisWrapper::connect(settings).await;
+        let redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+
+        let worker = run_worker(
+            contract_address,
+            redis.clone(),
+            init_block,
+            NearNetwork::Testnet,
+        );
+
+        let mut stream = subscribe::<String>(EVENTS.to_string(), redis.clone()).unwrap();
+
+        let timeout_duration = std::time::Duration::from_secs(60);
+        let _result = timeout(timeout_duration, worker).await;
+
+        let recv_event =
+            serde_json::from_str::<spectre_bridge_common::Event>(&stream.recv().await.unwrap())
+                .unwrap();
+        println!("recv event: {:?}", recv_event);
+    }
 }
