@@ -13,9 +13,25 @@ pub async fn execute_transfer(
     profit_threshold: Option<f64>,
     settings: Arc<Mutex<Settings>>,
     near_relay_account_id: String,
+    transaction_count: web3::types::U256,
 ) -> Result<web3::types::H256, crate::errors::CustomError> {
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
+
+    let estimated_gas = eth_client::methods::estimate_gas(
+        eth1_rpc_url,
+        relay_key_on_eth.address(),
+        eth_erc20_fast_bridge_proxy_contract_addr,
+        eth_erc20_fast_bridge_contract_abi,
+        method_name.as_str(),
+        method_args.clone(),
+    )
+    .await;
+
+    let estimated_gas = match estimated_gas {
+        Ok(gas) => gas,
+        Err(error) => return Err(crate::errors::CustomError::FailedEstimateGas(error)),
+    };
 
     if transfer_message.fee.token != transfer_message.transfer.token_near {
         return Err(crate::errors::CustomError::InvalidFeeToken);
@@ -40,13 +56,9 @@ pub async fn execute_transfer(
     if let Some(profit_threshold) = profit_threshold {
         let profit = estimate_profit(
             eth1_rpc_url,
-            relay_key_on_eth.address(),
-            eth_erc20_fast_bridge_proxy_contract_addr,
-            eth_erc20_fast_bridge_contract_abi,
-            &method_name,
-            method_args.clone(),
             token_info.clone(),
             transfer_message.fee.amount.0.into(),
+            estimated_gas,
         )
         .await?
         .ok_or(crate::errors::CustomError::FailedProfitEstimation)?;
@@ -64,25 +76,21 @@ pub async fn execute_transfer(
         }
     }
 
-    let num_of_confirmations = &settings
-        .lock()
-        .unwrap()
-        .eth
-        .num_of_confirmations
-        .try_into()
-        .unwrap();
-    let tx_receipt = eth_client::methods::change_with_confirmations(
+    let tx_hash = eth_client::methods::change(
         eth1_rpc_url,
         eth_erc20_fast_bridge_proxy_contract_addr,
         eth_erc20_fast_bridge_contract_abi,
         &method_name,
         method_args,
-        *num_of_confirmations,
         relay_key_on_eth,
+        true,
+        Some(transaction_count),
+        Some(estimated_gas),
     )
     .await;
-    match tx_receipt {
-        Ok(receipt) => Ok(receipt.transaction_hash),
+
+    match tx_hash {
+        Ok(hash) => Ok(hash),
         Err(error) => Err(crate::errors::CustomError::FailedExecuteTransferTokens(
             error,
         )),
@@ -103,29 +111,10 @@ fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u1
 
 async fn estimate_profit(
     eth1_rpc_url: &str,
-    relay_on_eth_addr: web3::types::Address,
-    eth_erc20_fast_bridge_proxy_contract_addr: web3::types::Address,
-    eth_erc20_fast_bridge_contract_abi: &[u8],
-    method_name: &str,
-    method_args: impl web3::contract::tokens::Tokenize,
     token_info: NearTokenInfo,
     fee_amount: U256,
+    estimated_gas: U256,
 ) -> Result<Option<f64>, crate::errors::CustomError> {
-    let estimated_gas = eth_client::methods::estimate_gas(
-        eth1_rpc_url,
-        relay_on_eth_addr,
-        eth_erc20_fast_bridge_proxy_contract_addr,
-        eth_erc20_fast_bridge_contract_abi,
-        method_name,
-        method_args,
-    )
-    .await;
-
-    match estimated_gas {
-        Ok(_) => (),
-        Err(error) => return Err(crate::errors::CustomError::FailedEstimateGas(error)),
-    }
-
     let gas_price_in_wei = eth_client::methods::gas_price_wei(eth1_rpc_url).await;
     match gas_price_in_wei {
         Ok(_) => (),
@@ -142,7 +131,7 @@ async fn estimate_profit(
     }
 
     let estimated_transfer_execution_price = eth_client::methods::estimate_transfer_execution_usd(
-        estimated_gas.unwrap(),
+        estimated_gas,
         gas_price_in_wei.unwrap(),
         eth_price_in_usd.unwrap().unwrap(),
     );
@@ -221,7 +210,7 @@ fn get_near_token_info(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::test_utils::get_settings;
+    use crate::test_utils::{get_settings, get_tx_count};
     use crate::transfer::execute_transfer;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
@@ -233,14 +222,19 @@ pub mod tests {
     use spectre_bridge_common::{
         EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
     };
+    use web3::signing::Key;
+    use crate::async_redis_wrapper::AsyncRedisWrapper;
 
     #[tokio::test]
     async fn smoke_execute_transfer_test() {
         let eth1_rpc_url = get_eth_rpc_url();
-        let relay_key_on_eth = get_relay_eth_key();
+        let relay_key_on_eth = std::sync::Arc::new(get_relay_eth_key());
         let eth_erc20_fast_bridge_contract_abi = get_eth_erc20_fast_bridge_contract_abi().await;
         let profit_threshold = 0f64;
         let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+
+        let redis = AsyncRedisWrapper::connect(settings.clone()).await;
+        let arc_redis = redis.new_safe();
 
         let current_nonce: u128 = rand::thread_rng().gen_range(0..1000000000);
         let near_relay_account_id = get_near_signer().account_id.to_string();
@@ -265,14 +259,15 @@ pub mod tests {
         };
 
         execute_transfer(
-            &relay_key_on_eth,
+            relay_key_on_eth.clone().as_ref(),
             transfer_message,
             eth_erc20_fast_bridge_contract_abi.as_bytes(),
             eth1_rpc_url.as_str(),
             get_eth_erc20_fast_bridge_proxy_contract_address(),
             Some(profit_threshold),
             settings,
-            near_relay_account_id
+            near_relay_account_id,
+            get_tx_count(arc_redis, eth1_rpc_url.clone(), relay_key_on_eth.address()).await,
         )
         .await
         .unwrap();

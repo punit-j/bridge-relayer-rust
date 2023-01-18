@@ -35,6 +35,10 @@ struct Args {
     /// path to json file
     #[clap(long)]
     near_credentials: Option<String>,
+
+    /// to override the value from redis
+    #[clap(long)]
+    near_lake_init_block: Option<u64>,
 }
 
 #[allow(unused_must_use)]
@@ -47,9 +51,9 @@ async fn main() {
         Err(msg) => panic!("{}", msg),
     };
 
-    let async_redis = std::sync::Arc::new(std::sync::Mutex::new(
-        async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await,
-    ));
+    let async_redis = async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone())
+        .await
+        .new_safe();
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
 
@@ -95,9 +99,12 @@ async fn main() {
         near_contract_address,
         async_redis.clone(),
         {
-            if let Some(start_block) = async_redis
+            if let Some(start_block) = args.near_lake_init_block {
+                start_block
+            } else if let Some(start_block) = async_redis
                 .lock()
-                .unwrap()
+                .clone()
+                .get_mut()
                 .option_get::<u64>(near::OPTION_START_BLOCK)
                 .await
                 .unwrap()
@@ -129,7 +136,7 @@ async fn main() {
     let pending_transactions_worker = utils::build_pending_transactions_worker(
         settings.clone(),
         eth_keypair.clone(),
-        async_redis.lock().unwrap().clone(),
+        async_redis.lock().clone().get_mut().clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
     );
@@ -150,7 +157,7 @@ async fn main() {
         subscriber,
         pending_transactions_worker,
         last_block_number_worker,
-        unlock_tokens_worker//,
+        unlock_tokens_worker //,
     );
 }
 

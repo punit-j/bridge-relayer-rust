@@ -1,5 +1,5 @@
+use crate::{async_redis_wrapper::SafeAsyncRedisWrapper, config::Settings};
 use near_primitives::views::ExecutionStatusView::Failure;
-use crate::config::Settings;
 
 async fn unlock_tokens(
     server_addr: url::Url,
@@ -24,15 +24,17 @@ async fn unlock_tokens(
     .await;
 
     match response {
-        Ok(result) =>  {
+        Ok(result) => {
             for receipt_outcome in result.receipts_outcome {
                 if let Failure(tx_error) = receipt_outcome.outcome.status {
-                    return Ok(near_primitives::views::FinalExecutionStatus::Failure(tx_error))
+                    return Ok(near_primitives::views::FinalExecutionStatus::Failure(
+                        tx_error,
+                    ));
                 }
             }
 
             Ok(result.status)
-        },
+        }
         Err(error) => Err(crate::errors::CustomError::FailedExecuteUnlockTokens(
             error.to_string(),
         )),
@@ -45,9 +47,9 @@ async fn transactions_traversal(
     unlock_tokens_worker_settings: crate::config::UnlockTokensWorkerSettings,
     tx_hashes_queue: Vec<String>,
     storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
-    redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
 ) {
-    let mut connection = redis.lock().unwrap().clone();
+    let mut connection = redis.lock().clone().get_mut().clone();
     for tx_hash in tx_hashes_queue {
         println!("Handling transaction {}", tx_hash);
 
@@ -90,7 +92,8 @@ async fn transactions_traversal(
                         Err(err) => eprintln!("{}", err),
                     }
                 } else {
-                    println!("Skip tx; Current eth last block = {}, proof block = {}, blocks for tx finalization = {}", eth_last_block_number_on_near, data.block, unlock_tokens_worker_settings.blocks_for_tx_finalization);
+                    println!("Skip tx; Current eth last block = {}, proof block = {}, blocks for tx finalization = {}, nonce = {}", 
+                             eth_last_block_number_on_near, data.block, unlock_tokens_worker_settings.blocks_for_tx_finalization, data.nonce);
                     continue;
                 }
             }
@@ -123,13 +126,15 @@ pub async fn unlock_tokens_worker(
     gas: u64,
     settings: std::sync::Arc<std::sync::Mutex<Settings>>,
     storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
-    redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
 ) {
     tokio::spawn(async move {
-        let mut connection = redis.lock().unwrap().clone();
+        let mut connection = redis.lock().clone().get_mut().clone();
         loop {
             let unlock_tokens_worker_settings =
                 settings.lock().unwrap().clone().unlock_tokens_worker;
+
+            println!("unlock_tokens_worker: sleep for {} secs", unlock_tokens_worker_settings.request_interval_secs);
             let mut interval =
                 crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
                     .await;
@@ -169,6 +174,8 @@ pub mod tests {
         get_eth_rpc_url, get_relay_eth_key,
     };
     use near_client::test_utils::get_near_signer;
+    use parking_lot::ReentrantMutex;
+    use std::cell::RefCell;
     use std::str::FromStr;
     use std::time::Duration;
 
@@ -215,7 +222,7 @@ pub mod tests {
         let redis = AsyncRedisWrapper::connect(settings.clone()).await;
         add_transaction(redis.clone()).await;
 
-        let arc_redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+        let arc_redis = std::sync::Arc::new(ReentrantMutex::new(RefCell::new(redis)));
 
         let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));
         storage.lock().unwrap().eth_last_block_number_on_near = 8249163;

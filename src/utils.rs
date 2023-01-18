@@ -1,4 +1,4 @@
-use crate::{config::Settings, pending_transactions_worker};
+use crate::{config::Settings, pending_transactions_worker, async_redis_wrapper::SafeAsyncRedisWrapper};
 use tokio::task::JoinHandle;
 
 pub async fn request_interval(seconds: u64) -> tokio::time::Interval {
@@ -43,7 +43,7 @@ pub async fn build_pending_transactions_worker(
 pub async fn build_near_events_subscriber(
     settings: std::sync::Arc<std::sync::Mutex<Settings>>,
     eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
-    redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
     mut stream: tokio::sync::mpsc::Receiver<String>,
@@ -59,7 +59,7 @@ pub async fn build_near_events_subscriber(
                 transfer_message,
             } = event
             {
-                crate::event_processor::process_transfer_event(
+                let res = crate::event_processor::process_transfer_event(
                     nonce,
                     sender_id,
                     transfer_message,
@@ -69,7 +69,15 @@ pub async fn build_near_events_subscriber(
                     eth_keypair.clone(),
                     eth_contract_abi.clone(),
                     near_relay_account_id.clone(),
-                );
+                )
+                .await;
+
+                if let Err(error) = res {
+                    eprintln!(
+                        "Failed to process tx with nonce {}, err: {}",
+                        nonce.0, error
+                    );
+                }
             }
         }
     }

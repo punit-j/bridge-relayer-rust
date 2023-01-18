@@ -64,7 +64,6 @@ pub struct EthSettings {
     #[serde(default)]
     pub pending_transaction_poll_delay_sec: u32,
     pub rainbow_bridge_index_js_path: String,
-    pub num_of_confirmations: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

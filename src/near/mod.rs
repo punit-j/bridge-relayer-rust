@@ -1,6 +1,7 @@
 use near_lake_framework::near_indexer_primitives::types::AccountId;
 use near_lake_framework::LakeConfigBuilder;
 
+use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
 use crate::config::NearNetwork;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
@@ -10,7 +11,7 @@ pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 // since start_block and save it to redis.
 pub async fn run_worker(
     contract_name: AccountId,
-    redis: std::sync::Arc<std::sync::Mutex<crate::async_redis_wrapper::AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
     start_block: u64,
     near_network: NearNetwork,
 ) {
@@ -35,8 +36,7 @@ pub async fn run_worker(
                             match get_event(json) {
                                 Ok(r) => {
                                     println!("New event: {:?}", r);
-                                    let mut redis = redis.lock().unwrap();
-                                    redis.event_pub(r).await;
+                                    redis.lock().clone().get_mut().event_pub(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {
@@ -49,14 +49,18 @@ pub async fn run_worker(
                 }
             }
         }
-        let mut r = redis.lock().unwrap();
+
         // store block number to redis
-        r.option_set(
-            OPTION_START_BLOCK,
-            streamer_message.block.header.height as u64 + 1,
-        )
-        .await
-        .unwrap();
+        redis
+            .lock()
+            .clone()
+            .get_mut()
+            .option_set(
+                OPTION_START_BLOCK,
+                streamer_message.block.header.height as u64 + 1,
+            )
+            .await
+            .unwrap();
     }
 
     // ![TODO] In that place we should submit some kind of alert and restart relayer.
@@ -110,11 +114,14 @@ pub fn get_event(json: serde_json::Value) -> Result<spectre_bridge_common::Event
 
 #[cfg(test)]
 pub mod tests {
+    use std::cell::RefCell;
+
     use crate::config::NearNetwork;
     use crate::near::{fix_json, get_event, run_worker};
     use assert_json_diff::assert_json_eq;
     use near_sdk::json_types::U128;
     use near_sdk::AccountId;
+    use parking_lot::ReentrantMutex;
     use spectre_bridge_common;
 
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, EVENTS};
@@ -163,7 +170,7 @@ pub mod tests {
         let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
 
         let redis = AsyncRedisWrapper::connect(settings).await;
-        let redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+        let redis = std::sync::Arc::new(ReentrantMutex::new(RefCell::new(redis)));
 
         let worker = run_worker(
             contract_address,

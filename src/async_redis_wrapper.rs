@@ -1,6 +1,13 @@
-use futures_util::StreamExt;
-use redis::{AsyncCommands, RedisResult};
+use std::{cell::RefCell, sync::Arc};
+
 use crate::config::Settings;
+use futures_util::StreamExt;
+use parking_lot::ReentrantMutex;
+use redis::{AsyncCommands, RedisResult};
+use web3::types::U256;
+
+pub type SafeAsyncRedisWrapper =
+    Arc<ReentrantMutex<RefCell<crate::async_redis_wrapper::AsyncRedisWrapper>>>;
 
 #[derive(Clone)]
 pub struct AsyncRedisWrapper {
@@ -31,7 +38,13 @@ pub const EVENTS: &str = "events";
 
 pub const PENDING_TRANSACTIONS: &str = "pending_transactions";
 
+pub const ETH_TRANSACTION_COUNT: &str = "eth_transaction_count";
+
 impl AsyncRedisWrapper {
+    pub fn new_safe(self) -> SafeAsyncRedisWrapper {
+        std::sync::Arc::new(ReentrantMutex::new(RefCell::new(self)))
+    }
+
     pub async fn connect(settings: std::sync::Arc<std::sync::Mutex<Settings>>) -> Self {
         let redis_settings = settings.lock().unwrap().redis.clone();
         let client = redis::Client::open(redis_settings.url.clone())
@@ -110,6 +123,32 @@ impl AsyncRedisWrapper {
         self.connection.hkeys(TRANSACTIONS).await
     }
 
+    pub async fn set_transaction_count(
+        &mut self,
+        tx_count: web3::types::U256,
+    ) -> redis::RedisResult<()> {
+        let storing_status = self
+            .connection
+            .set(ETH_TRANSACTION_COUNT, &tx_count.to_string())
+            .await;
+        if let Ok(redis::Value::Okay) = storing_status {
+            Ok(())
+        } else {
+            Err(storing_status.unwrap_err())
+        }
+    }
+
+    pub async fn get_transaction_count(&mut self) -> redis::RedisResult<U256> {
+        match self.connection.get(ETH_TRANSACTION_COUNT).await {
+            Ok(value) => {
+                let tx_count_data: String = redis::from_redis_value(&value)?;
+                Ok(U256::from_dec_str(tx_count_data.as_str())
+                    .expect("REDIS: Failed to deserialize the transaction count"))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     async fn hsetnx(
         &mut self,
         key: &str,
@@ -130,11 +169,11 @@ impl AsyncRedisWrapper {
 
 pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
     channel: String,
-    redis: std::sync::Arc<std::sync::Mutex<AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
 ) -> RedisResult<tokio::sync::mpsc::Receiver<T>> {
     let (sender, receiver) = tokio::sync::mpsc::channel::<T>(100);
     tokio::spawn(async move {
-        let client = redis.lock().unwrap().client.clone();
+        let client = redis.lock().clone().get_mut().client.clone();
         let mut pubsub_connection = client
             .get_async_connection()
             .await
@@ -158,12 +197,14 @@ pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
 
 #[cfg(test)]
 pub mod tests {
-    use eth_client::test_utils::{get_eth_token, get_recipient};
-    use near_client::test_utils::get_near_token;
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, TxData, EVENTS, TRANSACTIONS};
     use crate::test_utils::{get_settings, remove_all};
+    use eth_client::test_utils::{get_eth_token, get_recipient};
+    use near_client::test_utils::get_near_token;
     use near_sdk::json_types::U128;
-    use spectre_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage};
+    use spectre_bridge_common::{
+        EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
+    };
     use tokio::time::Duration;
 
     // run `redis-server` in the terminal
@@ -230,13 +271,13 @@ pub mod tests {
         let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
 
         let redis = AsyncRedisWrapper::connect(settings).await;
-        let arc_redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+        let arc_redis = redis.new_safe();
 
         let mut stream = subscribe::<String>(EVENTS.to_string(), arc_redis.clone()).unwrap();
 
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        let mut redis = arc_redis.lock().unwrap().clone();
+        let mut redis = arc_redis.lock().clone().get_mut().clone();
         redis
             .event_pub(spectre_bridge_common::Event::SpectreBridgeUnlockEvent {
                 nonce: U128::from(16u128),
@@ -246,12 +287,15 @@ pub mod tests {
                     transfer: TransferDataEthereum {
                         token_near: get_near_token(),
                         token_eth: EthAddress::from(get_eth_token()),
-                        amount: U128(1)
+                        amount: U128(1),
                     },
-                    fee: TransferDataNear { token: get_near_token(), amount: U128(1) },
+                    fee: TransferDataNear {
+                        token: get_near_token(),
+                        amount: U128(1),
+                    },
                     recipient: EthAddress::from(get_recipient()),
-                    valid_till_block_height: None
-                }
+                    valid_till_block_height: None,
+                },
             })
             .await;
 

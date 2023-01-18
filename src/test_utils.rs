@@ -2,6 +2,10 @@ use redis::AsyncCommands;
 use std::env;
 use crate::config::{NearTokenInfo, Settings};
 use std::path::Path;
+use url::Url;
+use web3::signing::Key;
+use web3::types::U256;
+use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
 
 pub async fn remove_all(redis: crate::async_redis_wrapper::AsyncRedisWrapper, key: &str) {
     let mut redis_connection = redis.connection;
@@ -27,7 +31,6 @@ pub fn get_rb_index_path_str() -> String {
 pub fn get_settings() -> Settings {
     let config_path = "config.json.example";
     let mut settings = crate::config::Settings::init(config_path.to_string()).unwrap();
-    settings.eth.num_of_confirmations = 1;
     settings.near_tokens_whitelist.mapping.insert(near_client::test_utils::NEAR_TOKEN_ADDRESS.parse().unwrap(),
                                                   NearTokenInfo{
                                                       exchange_id: "wrapped-near".to_string(),
@@ -38,4 +41,22 @@ pub fn get_settings() -> Settings {
                                                   }
     );
     settings
+}
+
+pub async fn get_tx_count(redis: SafeAsyncRedisWrapper,
+                          rpc_url: Url,
+                          relay_eth_address: web3::types::Address) -> U256 {
+    let mut transaction_count = redis
+        .lock()
+        .clone()
+        .get_mut()
+        .get_transaction_count()
+        .await
+        .unwrap_or(0.into());
+
+    let transaction_count_rpc =
+        eth_client::methods::get_transaction_count(rpc_url.as_str(), relay_eth_address)
+            .await.unwrap();
+
+    std::cmp::max(transaction_count, transaction_count_rpc)
 }

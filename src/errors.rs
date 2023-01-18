@@ -30,6 +30,12 @@ pub enum CustomError {
     #[error("Failed to execute lp_unlock contract method: {0}")]
     FailedExecuteUnlockTokens(String),
 
+    #[error("Failed to get transaction count: {0:?}")]
+    FailedGetTxCount(web3::Error),
+
+    #[error("Failed to set transaction count: {0:?}")]
+    FailedSetTxCount(redis::RedisError),
+
     #[error("Failed to unstore transaction: {0:?}")]
     FailedUnstoreTransaction(redis::RedisError),
 

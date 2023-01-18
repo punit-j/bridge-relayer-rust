@@ -5,8 +5,7 @@
     "pending_transaction_poll_delay_sec": 5,
     "private_key": "${SPECTRE_BRIDGE_ETH_PRIVATE_KEY}",
     "rpc_url": "https://goerli.infura.io/v3/${SPECTRE_BRIDGE_INFURA_PROJECT_ID}",
-    "rainbow_bridge_index_js_path": "./rainbow-bridge/cli/index.js",
-    "num_of_confirmations": 14
+    "rainbow_bridge_index_js_path": "./rainbow-bridge/cli/index.js"
   },
   "etherscan_api": {
     "api_key": "${SPECTRE_BRIDGE_ETHERSCAN_API_KEY}",

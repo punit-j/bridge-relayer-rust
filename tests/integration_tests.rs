@@ -16,7 +16,7 @@ use eth_client::methods::get_contract_abi;
 use redis::AsyncCommands;
 use tokio::time::timeout;
 use url::Url;
-use spectre_bridge_service_lib::async_redis_wrapper;
+use spectre_bridge_service_lib::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
 use spectre_bridge_service_lib::async_redis_wrapper::{EVENTS, PENDING_TRANSACTIONS, subscribe, TRANSACTIONS};
 use spectre_bridge_service_lib::config::{NearNetwork, Settings, NearTokenInfo};
 use spectre_bridge_service_lib::last_block::{last_block_number_worker, Storage};
@@ -44,7 +44,7 @@ async fn main_integration_test() {
     let redis = spectre_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await;
     remove_all(redis.clone(), PENDING_TRANSACTIONS).await;
     remove_all(redis.clone(), TRANSACTIONS).await;
-    let redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+    let redis = redis.new_safe();
 
     let stream = subscribe::<String>(EVENTS.to_string(), redis.clone()).unwrap();
 
@@ -70,7 +70,7 @@ async fn main_integration_test() {
     handle_pending_transaction(
         settings.clone(),
         relay_eth_key.clone(),
-        redis.lock().unwrap().clone(),
+        redis.lock().clone().into_inner(),
         eth_contract_abi.clone(),
         eth_contract_address.clone()).await;
 
@@ -94,8 +94,8 @@ async fn main_integration_test() {
 }
 
 async fn wait_correct_last_block_number(storage: std::sync::Arc<std::sync::Mutex<Storage>>,
-                                  redis: std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>) {
-    let mut connection = redis.lock().unwrap().clone();
+                                  redis: SafeAsyncRedisWrapper) {
+    let mut connection = redis.lock().clone().into_inner();
     let tx_hashes_queue = connection.get_tx_hashes().await.unwrap();
     let tx_hash = tx_hashes_queue[0].clone();
     let tx_block = connection.get_tx_data(tx_hash.clone()).await.unwrap().block;
@@ -177,7 +177,6 @@ fn get_settings() -> spectre_bridge_service_lib::config::Settings {
     );
     settings.unlock_tokens_worker.contract_account_id = NEAR_CONTRACT_ADDRESS.to_string();
     settings.unlock_tokens_worker.blocks_for_tx_finalization = 0;
-    settings.eth.num_of_confirmations = 1;
     settings
 }
 
@@ -305,7 +304,7 @@ async fn get_finality_block_height() -> u64 {
     block.height()
 }
 
-async fn detect_new_near_event(redis: std::sync::Arc<std::sync::Mutex<spectre_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper>>, init_block: u64, wait_time_sec: u64) {
+async fn detect_new_near_event(redis: SafeAsyncRedisWrapper, init_block: u64, wait_time_sec: u64) {
     let contract_address= near_lake_framework::near_indexer_primitives::types::AccountId::from_str(NEAR_CONTRACT_ADDRESS).unwrap();
 
     let worker = spectre_bridge_service_lib::near::run_worker(contract_address, redis.clone(), init_block, NearNetwork::Testnet);
@@ -316,7 +315,7 @@ async fn detect_new_near_event(redis: std::sync::Arc<std::sync::Mutex<spectre_br
 async fn process_events(
     settings: std::sync::Arc<std::sync::Mutex<Settings>>,
     eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
-    redis: std::sync::Arc<std::sync::Mutex<async_redis_wrapper::AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
     stream: tokio::sync::mpsc::Receiver<String>,
@@ -332,7 +331,7 @@ async fn process_events(
     let timeout_duration = std::time::Duration::from_secs(120);
     let _result = timeout(timeout_duration, worker).await;
 
-    let pending_transactions: Vec<String> = redis.lock().unwrap()
+    let pending_transactions: Vec<String> = redis.lock().clone().get_mut()
         .connection
         .hkeys(PENDING_TRANSACTIONS)
         .await
@@ -383,7 +382,7 @@ async fn mint_eth_tokens() {
 
     let priv_key = secp256k1::SecretKey::from_str(&(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64]).unwrap();
 
-    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key).await.unwrap();
+    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key, true, None, None).await.unwrap();
 
     println!("transaction hash: {:?}", res);
 }
@@ -405,7 +404,7 @@ async fn increase_allowance() {
 
     let priv_key = secp256k1::SecretKey::from_str(&(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64]).unwrap();
 
-    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, method_args, &priv_key).await.unwrap();
+    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, method_args, &priv_key, true, None, None).await.unwrap();
 
     println!("transaction hash: {:?}", res);
 }

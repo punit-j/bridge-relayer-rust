@@ -1,82 +1,86 @@
-use crate::async_redis_wrapper;
-use crate::async_redis_wrapper::AsyncRedisWrapper;
+use crate::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
 use crate::config::Settings;
+use crate::errors::CustomError;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
-use std::sync::{Arc, Mutex};
 use uint::rustc_hex::ToHex;
+use web3::signing::*;
 
 #[allow(clippy::too_many_arguments)]
-pub fn process_transfer_event(
+pub async fn process_transfer_event(
     nonce: near_sdk::json_types::U128,
     sender_id: AccountId,
     transfer_message: spectre_bridge_common::TransferMessage,
     settings: std::sync::Arc<std::sync::Mutex<Settings>>,
-    redis: Arc<Mutex<AsyncRedisWrapper>>,
+    redis: SafeAsyncRedisWrapper,
     eth_erc20_fast_bridge_proxy_contract_address: web3::types::Address,
     relay_eth_key: std::sync::Arc<secp256k1::SecretKey>,
     eth_erc20_fast_bridge_contract_abi: std::sync::Arc<String>,
     near_relay_account_id: String,
-) {
-    tokio::spawn({
-        let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-        let profit_thershold = settings.lock().unwrap().profit_thershold;
-        let eth_contract_abi = std::sync::Arc::clone(&eth_erc20_fast_bridge_contract_abi);
-        async move {
-            let mut redis = redis.lock().unwrap().clone();
-            println!("Execute transfer on eth with nonce {:?}", nonce);
-            let tx_hash = crate::transfer::execute_transfer(
-                relay_eth_key.clone().as_ref(),
-                spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
-                    nonce,
-                    sender_id,
-                    transfer_message,
-                },
-                eth_contract_abi.as_bytes(),
-                rpc_url.as_str(),
-                eth_erc20_fast_bridge_proxy_contract_address,
-                profit_thershold,
-                settings.clone(),
-                near_relay_account_id,
-            )
-            .await;
+) -> Result<(), CustomError> {
+    let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
+    let profit_thershold = settings.lock().unwrap().profit_thershold;
 
-            match tx_hash {
-                Ok(hash) => {
-                    println!("New eth transaction: {:#?}", hash);
+    let mut transaction_count = redis
+        .lock()
+        .clone()
+        .get_mut()
+        .get_transaction_count()
+        .await
+        .unwrap_or(0.into());
 
-                    let d = crate::async_redis_wrapper::PendingTransactionData {
-                        timestamp: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                        nonce: u128::from(nonce),
-                    };
+    let transaction_count_rpc =
+        eth_client::methods::get_transaction_count(rpc_url.as_str(), relay_eth_key.address())
+            .await
+            .map_err(|e| crate::errors::CustomError::FailedGetTxCount(e))?;
 
-                    let res: redis::RedisResult<()> = redis
-                        .connection
-                        .hset(
-                            async_redis_wrapper::PENDING_TRANSACTIONS,
-                            hash.as_bytes().to_hex::<String>(),
-                            serde_json::to_string(&d).unwrap(),
-                        )
-                        .await;
-                    if let Err(error) = res {
-                        eprintln!(
-                            "{}",
-                            crate::errors::CustomError::FailedStorePendingTx(error)
-                        );
-                    }
-                }
-                Err(error) => {
-                    eprintln!(
-                        "Failed to process tx with nonce {}, err: {}",
-                        nonce.0, error
-                    )
-                }
-            }
-        }
-    });
+    transaction_count = std::cmp::max(transaction_count, transaction_count_rpc);
+
+    let mut redis = redis.lock().clone().get_mut().clone();
+    let tx_hash = crate::transfer::execute_transfer(
+        relay_eth_key.clone().as_ref(),
+        spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+            nonce,
+            sender_id,
+            transfer_message,
+        },
+        eth_erc20_fast_bridge_contract_abi.as_bytes(),
+        rpc_url.as_str(),
+        eth_erc20_fast_bridge_proxy_contract_address,
+        profit_thershold,
+        settings.clone(),
+        near_relay_account_id,
+        transaction_count,
+    )
+    .await?;
+
+    println!("New eth transaction: {:#?}", tx_hash);
+
+    let pending_transaction_data = crate::async_redis_wrapper::PendingTransactionData {
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+        nonce: u128::from(nonce),
+    };
+
+    let res: redis::RedisResult<()> = redis
+        .connection
+        .hset(
+            async_redis_wrapper::PENDING_TRANSACTIONS,
+            tx_hash.as_bytes().to_hex::<String>(),
+            serde_json::to_string(&pending_transaction_data).unwrap(),
+        )
+        .await;
+    res.map_err(|e| crate::errors::CustomError::FailedStorePendingTx(e))?;
+
+    transaction_count += 1.into();
+    redis
+        .set_transaction_count(transaction_count)
+        .await
+        .map_err(|e| crate::errors::CustomError::FailedSetTxCount(e))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -117,7 +121,7 @@ pub mod tests {
         let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
         let redis = AsyncRedisWrapper::connect(settings.clone()).await;
 
-        let arc_redis = std::sync::Arc::new(std::sync::Mutex::new(redis));
+        let arc_redis = redis.new_safe();
 
         let relay_eth_key = std::sync::Arc::new(get_relay_eth_key());
         let eth_erc20_fast_bridge_contract_abi =
@@ -127,17 +131,18 @@ pub mod tests {
 
         let pending_transactions: Vec<String> = arc_redis
             .lock()
-            .unwrap()
+            .clone()
+            .get_mut()
             .connection
             .hkeys(PENDING_TRANSACTIONS)
             .await
             .unwrap();
 
-        process_transfer_event(
+        let _res = process_transfer_event(
             nonce,
             near_account.parse().unwrap(),
             TransferMessage {
-                valid_till: valid_till,
+                valid_till,
                 transfer,
                 fee,
                 recipient,
@@ -149,13 +154,15 @@ pub mod tests {
             relay_eth_key.clone(),
             eth_erc20_fast_bridge_contract_abi.clone(),
             near_account,
-        );
+        )
+        .await;
 
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         let new_pending_transactions: Vec<String> = arc_redis
             .lock()
-            .unwrap()
+            .clone()
+            .get_mut()
             .connection
             .hkeys(PENDING_TRANSACTIONS)
             .await

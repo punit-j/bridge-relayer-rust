@@ -47,6 +47,53 @@ pub async fn get_contract_abi(
     Ok(response)
 }
 
+struct FeeData {
+    base_fee_per_gas: web3::types::U256,
+    max_priority_fee_per_gas: web3::types::U256,
+    max_fee_per_gas: web3::types::U256,
+}
+
+async fn get_fee_data(server_address: &str) -> web3::contract::Result<FeeData> {
+    let transport = web3::transports::Http::new(server_address)?;
+    let client = web3::Web3::new(transport);
+
+    let last_block = client
+        .eth()
+        .block(web3::types::BlockId::Number(
+            web3::types::BlockNumber::Latest,
+        ))
+        .await?
+        .ok_or("Failed to get last block".to_string())?;
+
+    let base_fee_per_gas = last_block
+        .base_fee_per_gas
+        .ok_or("Failed to get `base_fee_per_gas`".to_string())?;
+    let max_priority_fee_per_gas: web3::types::U256 = 1500000000.into();
+    let max_fee_per_gas = base_fee_per_gas
+        .checked_mul(2.into())
+        .ok_or("Failed to calculate `max_fee_per_gas`".to_string())?
+        .checked_add(max_priority_fee_per_gas)
+        .ok_or("Failed to calculate `max_fee_per_gas`".to_string())?;
+
+    Ok(FeeData {
+        base_fee_per_gas,
+        max_priority_fee_per_gas,
+        max_fee_per_gas,
+    })
+}
+
+pub async fn get_transaction_count(
+    server_address: &str,
+    account_address: web3::types::Address,
+) -> web3::error::Result<web3::types::U256> {
+    let transport = web3::transports::Http::new(server_address)?;
+    let client = web3::Web3::new(transport);
+    client
+        .eth()
+        .transaction_count(account_address, Some(web3::types::BlockNumber::Pending))
+        .await
+}
+
 pub async fn change(
     server_addr: &str,
     contract_addr: web3::types::Address,
@@ -54,26 +101,23 @@ pub async fn change(
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
     key: impl web3::signing::Key,
+    use_eip_1559: bool,
+    transaction_count: Option<web3::types::U256>,
+    gas: Option<web3::types::U256>,
 ) -> web3::contract::Result<web3::types::H256> {
-    let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
-    Ok(abi
-        .signed_call(method_name, args, web3::contract::Options::default(), key)
-        .await?)
-}
+    let mut options = web3::contract::Options::default();
+    options.nonce = transaction_count;
 
-pub async fn change_with_confirmations(
-    server_addr: &str,
-    contract_addr: web3::types::Address,
-    contract_abi: &[u8],
-    method_name: &str,
-    args: impl web3::contract::tokens::Tokenize,
-    confirmations: usize,
-    key: impl web3::signing::Key,
-) -> web3::contract::Result<web3::types::TransactionReceipt> {
+    if use_eip_1559 {
+        let fee_data = get_fee_data(server_addr).await?;
+        options.max_fee_per_gas = Some(fee_data.max_fee_per_gas);
+        options.max_priority_fee_per_gas = Some(fee_data.max_priority_fee_per_gas);
+        options.transaction_type = Some(2.into());
+        options.gas = gas;
+    }
+
     let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
-    Ok(abi
-        .signed_call_with_confirmations(method_name, args, web3::contract::Options::default(), confirmations, key)
-        .await?)
+    Ok(abi.signed_call(method_name, args, options, key).await?)
 }
 
 pub async fn gas_price_wei(server_addr: &str) -> web3::contract::Result<web3::types::U256> {
@@ -144,11 +188,18 @@ pub async fn token_price_usd(coin_id: String) -> Result<Option<f64>, reqwest::Er
 
 #[cfg(test)]
 pub mod tests {
-    use crate::methods::{estimate_transfer_execution_usd, eth_price_usd, gas_price_wei, token_price_usd, get_contract_abi, estimate_gas, change};
-    use std::str::FromStr;
-    use std::env;
+    use crate::methods::{
+        change, estimate_gas, estimate_transfer_execution_usd, eth_price_usd, gas_price_wei,
+        get_contract_abi, token_price_usd,
+    };
     use crate::test_utils;
-    use crate::test_utils::{get_eth_contract_abi, get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address, get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key};
+    use crate::test_utils::{
+        get_eth_contract_abi, get_eth_erc20_fast_bridge_contract_abi,
+        get_eth_erc20_fast_bridge_proxy_contract_address, get_eth_rpc_url, get_eth_token,
+        get_recipient, get_relay_eth_key,
+    };
+    use std::env;
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn smoke_estimate_gas_test() {
@@ -168,8 +219,10 @@ pub mod tests {
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             method_name,
-            method_args
-        ).await.unwrap();
+            method_args,
+        )
+        .await
+        .unwrap();
 
         println!("Estimated gas = {}", estimated_gas);
     }
@@ -198,7 +251,8 @@ pub mod tests {
         let gas_price: web3::types::U256 = web3::types::U256::from(13_088_907_561 as i64);
         let ether_price: f64 = 1208.69;
 
-        let estimated_price = estimate_transfer_execution_usd(estimated_gas, gas_price, ether_price);
+        let estimated_price =
+            estimate_transfer_execution_usd(estimated_gas, gas_price, ether_price);
 
         println!("Estimated transfer execution = {}$", estimated_price);
         assert!(estimated_price > 1.8);
@@ -208,7 +262,10 @@ pub mod tests {
     #[tokio::test]
     async fn smoke_token_price_test() {
         let token_name = "aurora-near";
-        let token_price = token_price_usd(token_name.to_string()).await.unwrap().unwrap();
+        let token_price = token_price_usd(token_name.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         println!("{} token price usd = {}", token_name, token_price);
         assert!(token_price > 0.);
         assert!(token_price < 1_000_000.);
@@ -243,7 +300,17 @@ pub mod tests {
 
         let priv_key = get_relay_eth_key();
 
-        let res = change(&eth1_endpoint, bridge_proxy_addres, contract_abi.as_bytes(), &method_name, method_args, &priv_key).await.unwrap();
+        let res = change(
+            &eth1_endpoint,
+            bridge_proxy_addres,
+            contract_abi.as_bytes(),
+            &method_name,
+            method_args,
+            &priv_key,
+            true,
+        )
+        .await
+        .unwrap();
 
         println!("transaction hash: {:?}", res);
     }
@@ -260,7 +327,17 @@ pub mod tests {
 
         let priv_key = get_relay_eth_key();
 
-        let res = change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key).await.unwrap();
+        let res = change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+        )
+        .await
+        .unwrap();
 
         println!("transaction hash: {:?}", res);
     }
