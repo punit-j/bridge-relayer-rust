@@ -53,7 +53,7 @@ impl AsyncRedisWrapper {
             .get_multiplexed_tokio_connection()
             .await
             .expect("REDIS: Failed to get connection");
-        println!("Connected to the redis: {:?}", client.get_connection_info());
+        tracing::info!("Connected to the redis: {:?}", client.get_connection_info());
         AsyncRedisWrapper { client, connection }
     }
 

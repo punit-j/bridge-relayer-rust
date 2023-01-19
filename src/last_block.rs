@@ -1,5 +1,5 @@
-use near_sdk::borsh::BorshDeserialize;
 use crate::config::Settings;
+use near_sdk::borsh::BorshDeserialize;
 
 #[derive(Clone, Debug)]
 pub struct Storage {
@@ -40,7 +40,7 @@ pub async fn last_block_number_worker(
                     }
                     None => (),
                 },
-                Err(error) => eprintln!("{}", error),
+                Err(error) => tracing::error!("{}", error),
             }
         }
     });
@@ -76,11 +76,13 @@ pub async fn last_block_number(
 #[cfg(test)]
 pub mod tests {
     use crate::last_block::{last_block_number, last_block_number_worker, Storage};
+    use crate::logs::init_logger;
     use crate::test_utils::get_settings;
     use std::time::Duration;
 
     #[tokio::test]
     async fn smoke_last_block_number_test() {
+        init_logger();
         let server_addr = url::Url::parse("https://rpc.testnet.near.org").unwrap();
         let contract_account_id = "client6.goerli.testnet".to_string();
 
@@ -93,6 +95,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn smoke_last_block_number_worker_test() {
+        init_logger();
+
         let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
 
         let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));

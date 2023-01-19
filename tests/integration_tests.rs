@@ -1,25 +1,26 @@
 extern crate core;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+use eth_client::methods::get_contract_abi;
+use near_client::read_private_key::read_private_key_from_file;
+use near_crypto::InMemorySigner;
+use near_primitives::views::FinalExecutionStatus;
+use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use spectre_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
 use std::env;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
-use near_client::read_private_key::read_private_key_from_file;
-use near_crypto::InMemorySigner;
-use near_primitives::views::FinalExecutionStatus;
-use serde_json::json;
-use spectre_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
-use serde::{Serialize, Deserialize};
-use borsh::{BorshDeserialize, BorshSerialize};
-use eth_client::methods::get_contract_abi;
-use redis::AsyncCommands;
 use tokio::time::timeout;
 use url::Url;
 use spectre_bridge_service_lib::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
 use spectre_bridge_service_lib::async_redis_wrapper::{EVENTS, PENDING_TRANSACTIONS, subscribe, TRANSACTIONS};
 use spectre_bridge_service_lib::config::{NearNetwork, Settings, NearTokenInfo};
 use spectre_bridge_service_lib::last_block::{last_block_number_worker, Storage};
+use spectre_bridge_service_lib::logs::init_logger;
 use spectre_bridge_service_lib::unlock_tokens::unlock_tokens_worker;
 
 const ETH_CONTRACT_PROXY_ADDRESS: &str = "8AC4c4A1015A9A12A9DBA16234A3f7909b9396Eb";
@@ -32,16 +33,24 @@ const ONE_MINUTE_SEC: u64 = 60;
 
 #[tokio::test]
 async fn main_integration_test() {
+    init_logger();
+
     let near_relay_signer = get_near_signer();
     mint_near_tokens(near_relay_signer.clone()).await;
     increase_fast_bridge_token_balance(near_relay_signer.clone()).await;
     let block_hash = init_token_transfer(near_relay_signer.clone()).await;
 
-    let init_block = get_block_height(near_workspaces::CryptoHash::try_from(block_hash.as_bytes().as_slice()).unwrap()).await;
+    let init_block = get_block_height(
+        near_workspaces::CryptoHash::try_from(block_hash.as_bytes().as_slice()).unwrap(),
+    )
+    .await;
 
     let settings = get_settings();
     let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
-    let redis = spectre_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone()).await;
+    let redis = spectre_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(
+        settings.clone(),
+    )
+    .await;
     remove_all(redis.clone(), PENDING_TRANSACTIONS).await;
     remove_all(redis.clone(), TRANSACTIONS).await;
     let redis = redis.new_safe();
@@ -59,20 +68,25 @@ async fn main_integration_test() {
     mint_eth_tokens().await;
     tokio::time::sleep(Duration::from_secs(ONE_MINUTE_SEC)).await;
 
-    process_events(settings.clone(),
-                   relay_eth_key.clone(),
-                   redis.clone(),
-                   eth_contract_abi.clone(),
-                   eth_contract_address.clone(),
-                   stream,
-                   near_relay_signer.account_id.to_string()).await;
+    process_events(
+        settings.clone(),
+        relay_eth_key.clone(),
+        redis.clone(),
+        eth_contract_abi.clone(),
+        eth_contract_address.clone(),
+        stream,
+        near_relay_signer.account_id.to_string(),
+    )
+    .await;
 
     handle_pending_transaction(
         settings.clone(),
         relay_eth_key.clone(),
         redis.lock().clone().into_inner(),
         eth_contract_abi.clone(),
-        eth_contract_address.clone()).await;
+        eth_contract_address.clone(),
+    )
+    .await;
 
     let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));
     let _last_block_worker = last_block_number_worker(settings.clone(), storage.clone()).await;
@@ -86,7 +100,8 @@ async fn main_integration_test() {
         settings.clone(),
         storage.clone(),
         redis.clone(),
-    ).await;
+    )
+    .await;
 
     let stream = subscribe::<String>(EVENTS.to_string(), redis.clone()).unwrap();
     detect_new_near_event(redis.clone(), init_block, ONE_MINUTE_SEC).await;
@@ -175,6 +190,7 @@ fn get_settings() -> spectre_bridge_service_lib::config::Settings {
             eth_address: ETH_TOKEN_ADDRESS.parse().unwrap(),
         },
     );
+
     settings.unlock_tokens_worker.contract_account_id = NEAR_CONTRACT_ADDRESS.to_string();
     settings.unlock_tokens_worker.blocks_for_tx_finalization = 0;
     settings
@@ -193,7 +209,9 @@ pub async fn get_eth_erc20_fast_bridge_contract_abi() -> String {
         etherscan_endpoint_url,
         eth_bridge_impl_address,
         &etherscan_api_key,
-    ).await.unwrap()
+    )
+    .await
+    .unwrap()
 }
 
 async fn remove_all(mut redis: crate::async_redis_wrapper::AsyncRedisWrapper, key: &str) {
@@ -211,9 +229,13 @@ async fn remove_all(mut redis: crate::async_redis_wrapper::AsyncRedisWrapper, ke
 async fn check_unlock_event(mut stream: tokio::sync::mpsc::Receiver<String>) {
     let timeout_duration = std::time::Duration::from_secs(10);
 
-    let recv_event =
-        serde_json::from_str::<spectre_bridge_common::Event>(&timeout(timeout_duration, stream.recv()).await.unwrap().unwrap())
-            .unwrap();
+    let recv_event = serde_json::from_str::<spectre_bridge_common::Event>(
+        &timeout(timeout_duration, stream.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
 
     if let spectre_bridge_common::Event::SpectreBridgeLpUnlockEvent { .. } = recv_event {
         println!("Unlock event: {:?}", recv_event);
@@ -227,7 +249,17 @@ async fn mint_near_tokens(signer: InMemorySigner) {
     let contract_account_id = NEAR_TOKEN_ADDRESS.to_string();
     let method_name = "mint".to_string();
     let args = json!({"account_id": signer.account_id, "amount": "100"});
-    let response = near_client::methods::change(server_addr, signer, contract_account_id, method_name, args, 4_000_000_000_000, 0).await.unwrap();
+    let response = near_client::methods::change(
+        server_addr,
+        signer,
+        contract_account_id,
+        method_name,
+        args,
+        4_000_000_000_000,
+        0,
+    )
+    .await
+    .unwrap();
 
     if let FinalExecutionStatus::SuccessValue(_) = response.status {
         println!("Tokens on NEAR MINT successfully");
@@ -241,7 +273,17 @@ async fn increase_fast_bridge_token_balance(signer: InMemorySigner) {
     let contract_account_id = NEAR_TOKEN_ADDRESS.to_string();
     let method_name = "ft_transfer_call".to_string();
     let args = json!({"receiver_id": near_addr(NEAR_CONTRACT_ADDRESS), "amount": "100", "msg": ""});
-    let response = near_client::methods::change(server_addr, signer, contract_account_id, method_name, args, 300_000_000_000_000, 1).await.unwrap();
+    let response = near_client::methods::change(
+        server_addr,
+        signer,
+        contract_account_id,
+        method_name,
+        args,
+        300_000_000_000_000,
+        1,
+    )
+    .await
+    .unwrap();
 
     if let FinalExecutionStatus::SuccessValue(_) = response.status {
         println!("Tokens on NEAR moved to the Bridge Contract successfully");
@@ -271,15 +313,28 @@ async fn init_token_transfer(signer: InMemorySigner) -> near_primitives::hash::C
         transfer: TransferDataEthereum {
             token_near: near_addr(NEAR_TOKEN_ADDRESS),
             token_eth: EthAddress::from(eth_addr(ETH_TOKEN_ADDRESS)),
-            amount: near_sdk::json_types::U128(90u128)
+            amount: near_sdk::json_types::U128(90u128),
         },
-        fee: TransferDataNear { token: near_addr(NEAR_TOKEN_ADDRESS), amount: near_sdk::json_types::U128(5u128) },
+        fee: TransferDataNear {
+            token: near_addr(NEAR_TOKEN_ADDRESS),
+            amount: near_sdk::json_types::U128(5u128),
+        },
         recipient: EthAddress::from(get_recipient_eth_addr()),
-        valid_till_block_height: None
+        valid_till_block_height: None,
     };
 
-    let args = json!({"transfer_message": transfer_message});
-    let response = near_client::methods::change(server_addr, signer, contract_account_id, method_name, args, 300_000_000_000_000, 0).await.unwrap();
+    let args = json!({ "transfer_message": transfer_message });
+    let response = near_client::methods::change(
+        server_addr,
+        signer,
+        contract_account_id,
+        method_name,
+        args,
+        300_000_000_000_000,
+        0,
+    )
+    .await
+    .unwrap();
 
     if let FinalExecutionStatus::SuccessValue(_) = response.status {
         println!("Tokens transfer init successfully");
@@ -307,7 +362,12 @@ async fn get_finality_block_height() -> u64 {
 async fn detect_new_near_event(redis: SafeAsyncRedisWrapper, init_block: u64, wait_time_sec: u64) {
     let contract_address= near_lake_framework::near_indexer_primitives::types::AccountId::from_str(NEAR_CONTRACT_ADDRESS).unwrap();
 
-    let worker = spectre_bridge_service_lib::near::run_worker(contract_address, redis.clone(), init_block, NearNetwork::Testnet);
+    let worker = spectre_bridge_service_lib::near::run_worker(
+        contract_address,
+        redis.clone(),
+        init_block,
+        NearNetwork::Testnet,
+    );
     let timeout_duration = std::time::Duration::from_secs(wait_time_sec);
     let _result = timeout(timeout_duration, worker).await;
 }
@@ -319,15 +379,17 @@ async fn process_events(
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
     stream: tokio::sync::mpsc::Receiver<String>,
-    near_relay_account_id: String
+    near_relay_account_id: String,
 ) {
-    let worker = spectre_bridge_service_lib::utils::build_near_events_subscriber(settings.clone(),
-                                                                                 eth_keypair.clone(),
-                                                                                 redis.clone(),
-                                                                                 eth_contract_abi.clone(),
-                                                                                 eth_contract_address.clone(),
-                                                                                 stream,
-                                                                                 near_relay_account_id);
+    let worker = spectre_bridge_service_lib::utils::build_near_events_subscriber(
+        settings.clone(),
+        eth_keypair.clone(),
+        redis.clone(),
+        eth_contract_abi.clone(),
+        eth_contract_address.clone(),
+        stream,
+        near_relay_account_id,
+    );
     let timeout_duration = std::time::Duration::from_secs(120);
     let _result = timeout(timeout_duration, worker).await;
 
@@ -346,24 +408,24 @@ async fn handle_pending_transaction(
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
 ) {
-    spectre_bridge_service_lib::utils::build_pending_transactions_worker(settings.clone(),
-                                                                         eth_keypair.clone(),
-                                                                         redis.clone(),
-                                                                         eth_contract_abi.clone(),
-                                                                         eth_contract_address.clone()).await;
+    spectre_bridge_service_lib::utils::build_pending_transactions_worker(
+        settings.clone(),
+        eth_keypair.clone(),
+        redis.clone(),
+        eth_contract_abi.clone(),
+        eth_contract_address.clone(),
+    )
+    .await;
     tokio::time::sleep(Duration::from_secs(30)).await;
-    let pending_transactions: Vec<String> = redis.clone()
+    let pending_transactions: Vec<String> = redis
+        .clone()
         .connection
         .hkeys(PENDING_TRANSACTIONS)
         .await
         .unwrap();
     assert_eq!(pending_transactions.len(), 0);
 
-    let transactions: Vec<String> = redis.clone()
-        .connection
-        .hkeys(TRANSACTIONS)
-        .await
-        .unwrap();
+    let transactions: Vec<String> = redis.clone().connection.hkeys(TRANSACTIONS).await.unwrap();
     assert_eq!(transactions.len(), 1);
 }
 
@@ -375,12 +437,17 @@ async fn mint_eth_tokens() {
 
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
     let etherscan_api_key = env::var("ETHERSCAN_API_KEY").unwrap();
-    let contract_abi = get_contract_abi(etherscan_endpoint_url, token, &etherscan_api_key).await.unwrap();
+    let contract_abi = get_contract_abi(etherscan_endpoint_url, token, &etherscan_api_key)
+        .await
+        .unwrap();
 
     let method_name = "mint";
     let amount = web3::types::U256::from(110);
 
-    let priv_key = secp256k1::SecretKey::from_str(&(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64]).unwrap();
+    let priv_key = secp256k1::SecretKey::from_str(
+        &(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64],
+    )
+    .unwrap();
 
     let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key, true, None, None).await.unwrap();
 
@@ -395,14 +462,19 @@ async fn increase_allowance() {
 
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
     let etherscan_api_key = env::var("ETHERSCAN_API_KEY").unwrap();
-    let contract_abi = get_contract_abi(etherscan_endpoint_url, token, &etherscan_api_key).await.unwrap();
+    let contract_abi = get_contract_abi(etherscan_endpoint_url, token, &etherscan_api_key)
+        .await
+        .unwrap();
 
     let method_name = "increaseAllowance";
     let spender = eth_addr(ETH_CONTRACT_PROXY_ADDRESS);
     let amount = web3::types::U256::from(210);
     let method_args = (spender, amount);
 
-    let priv_key = secp256k1::SecretKey::from_str(&(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64]).unwrap();
+    let priv_key = secp256k1::SecretKey::from_str(
+        &(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64],
+    )
+    .unwrap();
 
     let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, method_args, &priv_key, true, None, None).await.unwrap();
 

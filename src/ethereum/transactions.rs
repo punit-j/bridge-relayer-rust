@@ -10,7 +10,7 @@ pub async fn transfer_token<'a, T: web3::Transport>(
     receiver: Address,
     amount: u64,
     nonce: web3::types::U256,
-    unlock_recipient: String
+    unlock_recipient: String,
 ) -> web3::error::Result<web3::types::H256> {
     contract
         .signed_call(
@@ -112,7 +112,7 @@ pub mod tests {
             get_recipient(),
             159,
             nonce,
-            "alice.testnet".to_string()
+            "alice.testnet".to_string(),
         )
         .await
         .unwrap();

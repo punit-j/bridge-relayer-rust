@@ -25,12 +25,20 @@ pub enum NearNetwork {
 }
 
 impl NearTokensWhitelist {
-    pub fn get_token_info(&self, near_token_account_id: near_sdk::AccountId) -> Option<NearTokenInfo> {
+    pub fn get_token_info(
+        &self,
+        near_token_account_id: near_sdk::AccountId,
+    ) -> Option<NearTokenInfo> {
         Some(self.mapping.get(&near_token_account_id)?.clone())
     }
 
     pub fn get_coin_id(&self, near_token_account_id: near_sdk::AccountId) -> Option<String> {
-        Some(self.mapping.get(&near_token_account_id)?.exchange_id.clone())
+        Some(
+            self.mapping
+                .get(&near_token_account_id)?
+                .exchange_id
+                .clone(),
+        )
     }
 }
 
@@ -167,7 +175,7 @@ impl Settings {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::config::{Settings, NearTokenInfo};
+    use crate::config::{NearTokenInfo, Settings};
     use crate::test_utils::get_settings;
     use near_sdk::AccountId;
     use std::collections::HashMap;
@@ -203,8 +211,16 @@ pub mod tests {
             settings.near.near_credentials_path,
             "~/.near-credentials/testnet/spectrebridge.testnet.json"
         );
-        let token_account: near_sdk::AccountId = "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near".parse().unwrap();
-        assert_eq!(settings.near_tokens_whitelist.mapping[&token_account].fixed_fee.0, 340282366920938463463374607431768211455u128);
+        let token_account: near_sdk::AccountId =
+            "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near"
+                .parse()
+                .unwrap();
+        assert_eq!(
+            settings.near_tokens_whitelist.mapping[&token_account]
+                .fixed_fee
+                .0,
+            340282366920938463463374607431768211455u128
+        );
     }
 
     #[tokio::test]
@@ -245,7 +261,8 @@ pub mod tests {
         assert_eq!(settings.near_tokens_whitelist.mapping.len(), 4);
         assert_eq!(
             settings.near_tokens_whitelist.mapping
-                [&AccountId::try_from("token.spectrebridge.testnet".to_string()).unwrap()].exchange_id,
+                [&AccountId::try_from("token.spectrebridge.testnet".to_string()).unwrap()]
+                .exchange_id,
             "wrapped-near".to_string()
         );
 
@@ -265,7 +282,8 @@ pub mod tests {
         assert_eq!(settings.near_tokens_whitelist.mapping.len(), 1);
         assert_eq!(
             settings.near_tokens_whitelist.mapping
-                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()].exchange_id
+                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()]
+                .exchange_id
                 .as_str(),
             "new_token"
         );
@@ -274,7 +292,8 @@ pub mod tests {
         assert_eq!(settings_new.near_tokens_whitelist.mapping.len(), 1);
         assert_eq!(
             settings_new.near_tokens_whitelist.mapping
-                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()].exchange_id
+                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()]
+                .exchange_id
                 .as_str(),
             "new_token"
         );
@@ -288,7 +307,8 @@ pub mod tests {
         assert_eq!(settings.near_tokens_whitelist.mapping.len(), 4);
         assert_eq!(
             settings.near_tokens_whitelist.mapping
-                [&AccountId::try_from("token.spectrebridge.testnet".to_string()).unwrap()].exchange_id,
+                [&AccountId::try_from("token.spectrebridge.testnet".to_string()).unwrap()]
+                .exchange_id,
             "wrapped-near".to_string()
         );
 
@@ -308,7 +328,8 @@ pub mod tests {
         assert_eq!(settings.near_tokens_whitelist.mapping.len(), 5);
         assert_eq!(
             settings.near_tokens_whitelist.mapping
-                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()].exchange_id
+                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()]
+                .exchange_id
                 .as_str(),
             "new_token"
         );
@@ -317,7 +338,8 @@ pub mod tests {
         assert_eq!(settings_new.near_tokens_whitelist.mapping.len(), 5);
         assert_eq!(
             settings_new.near_tokens_whitelist.mapping
-                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()].exchange_id
+                [&AccountId::try_from("new_token.bridge.near".to_string()).unwrap()]
+                .exchange_id
                 .as_str(),
             "new_token"
         );

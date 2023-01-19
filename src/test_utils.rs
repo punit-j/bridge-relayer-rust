@@ -1,6 +1,6 @@
+use crate::config::{NearTokenInfo, Settings};
 use redis::AsyncCommands;
 use std::env;
-use crate::config::{NearTokenInfo, Settings};
 use std::path::Path;
 use url::Url;
 use web3::signing::Key;

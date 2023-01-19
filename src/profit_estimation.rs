@@ -39,9 +39,10 @@ pub mod tests {
         const EPS: f64 = 0.0001;
         let one_token_amount = 1_000_000;
 
-        let profit_usd = get_profit_usd(0.5, web3::types::U256::from(10 * one_token_amount), 6, 2.0)
-            .await
-            .unwrap();
+        let profit_usd =
+            get_profit_usd(0.5, web3::types::U256::from(10 * one_token_amount), 6, 2.0)
+                .await
+                .unwrap();
         assert!(profit_usd - 3.0 < EPS && 3.0 - profit_usd < EPS);
     }
 

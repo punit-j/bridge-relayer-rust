@@ -1,8 +1,8 @@
+use crate::config::NearNetwork;
+use crate::logs::NEAR_EVENTS_TRACER_TARGET;
 use near_lake_framework::near_indexer_primitives::types::AccountId;
 use near_lake_framework::LakeConfigBuilder;
-
 use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
-use crate::config::NearNetwork;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
@@ -22,7 +22,11 @@ pub async fn run_worker(
         NearNetwork::Testnet => lake_config.testnet(),
     };
 
-    println!("NEAR lake starts from block {}", start_block);
+    tracing::info!(
+        target: NEAR_EVENTS_TRACER_TARGET,
+        "NEAR lake starts from block {}",
+        start_block
+    );
 
     let (_, mut stream) =
         near_lake_framework::streamer(lake_config.build().expect("Failed to build LakeConfig"));
@@ -35,12 +39,20 @@ pub async fn run_worker(
                         if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
                                 Ok(r) => {
-                                    println!("New event: {:?}", r);
+                                    tracing::info!(
+                                        target: NEAR_EVENTS_TRACER_TARGET,
+                                        "New event: {}",
+                                        serde_json::to_string(&r).unwrap_or(format!("{:?}", r))
+                                    );
                                     redis.lock().clone().get_mut().event_pub(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {
-                                        eprintln!("Log error: {:?}", e);
+                                        tracing::error!(
+                                            target: NEAR_EVENTS_TRACER_TARGET,
+                                            "Log error: {:?}",
+                                            e
+                                        );
                                     }
                                 }
                             }
@@ -125,6 +137,7 @@ pub mod tests {
     use spectre_bridge_common;
 
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, EVENTS};
+    use crate::logs::init_logger;
     use crate::test_utils::get_settings;
     use serde_json::json;
     use tokio::time::timeout;
@@ -162,6 +175,8 @@ pub mod tests {
     #[tokio::test]
     // Should be created AWS account and key saved to ~/.aws/credentials
     async fn smoke_run_worker_test() {
+        init_logger();
+
         let settings = get_settings();
         let contract_address =
             crate::near::AccountId::try_from("fast-bridge2.olga24912_3.testnet".to_string())

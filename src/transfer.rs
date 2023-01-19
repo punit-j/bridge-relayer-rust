@@ -1,4 +1,5 @@
 use crate::config::{NearTokenInfo, Settings};
+use crate::logs::EVENT_PROCESSOR_TARGET;
 use near_sdk::AccountId;
 use spectre_bridge_common::TransferMessage;
 use std::sync::{Arc, Mutex};
@@ -63,9 +64,12 @@ pub async fn execute_transfer(
         .await?
         .ok_or(crate::errors::CustomError::FailedProfitEstimation)?;
 
-        println!(
+        tracing::info!(
+            target: EVENT_PROCESSOR_TARGET,
             "Profit for nonce {:?} is {}, threshold: {}",
-            nonce, profit, profit_threshold
+            nonce,
+            profit,
+            profit_threshold
         );
 
         if profit < profit_threshold {
@@ -210,6 +214,7 @@ fn get_near_token_info(
 
 #[cfg(test)]
 pub mod tests {
+    use crate::logs::init_logger;
     use crate::test_utils::{get_settings, get_tx_count};
     use crate::transfer::execute_transfer;
     use eth_client::test_utils::{
@@ -227,6 +232,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn smoke_execute_transfer_test() {
+        init_logger();
+
         let eth1_rpc_url = get_eth_rpc_url();
         let relay_key_on_eth = std::sync::Arc::new(get_relay_eth_key());
         let eth_erc20_fast_bridge_contract_abi = get_eth_erc20_fast_bridge_contract_abi().await;
@@ -251,7 +258,7 @@ pub mod tests {
                 },
                 fee: TransferDataNear {
                     token: get_near_token(),
-                    amount: U128::from(10),
+                    amount: U128::from(1_000_000_000),
                 },
                 recipient: EthAddress::from(get_recipient()),
                 valid_till_block_height: Some(0),

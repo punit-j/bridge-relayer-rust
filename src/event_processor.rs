@@ -1,5 +1,6 @@
 use crate::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
 use crate::config::Settings;
+use crate::logs::EVENT_PROCESSOR_TARGET;
 use crate::errors::CustomError;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
@@ -37,6 +38,12 @@ pub async fn process_transfer_event(
     transaction_count = std::cmp::max(transaction_count, transaction_count_rpc);
 
     let mut redis = redis.lock().clone().get_mut().clone();
+    tracing::info!(
+        target: EVENT_PROCESSOR_TARGET,
+        "Execute transfer on eth with nonce {:?}",
+        nonce
+    );
+
     let tx_hash = crate::transfer::execute_transfer(
         relay_eth_key.clone().as_ref(),
         spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
@@ -54,7 +61,11 @@ pub async fn process_transfer_event(
     )
     .await?;
 
-    println!("New eth transaction: {:#?}", tx_hash);
+    tracing::info!(
+        target: EVENT_PROCESSOR_TARGET,
+        "New eth transaction: {:#?}",
+        tx_hash
+    );
 
     let pending_transaction_data = crate::async_redis_wrapper::PendingTransactionData {
         timestamp: std::time::SystemTime::now()
@@ -87,6 +98,7 @@ pub async fn process_transfer_event(
 pub mod tests {
     use crate::async_redis_wrapper::{AsyncRedisWrapper, PENDING_TRANSACTIONS};
     use crate::event_processor::process_transfer_event;
+    use crate::logs::init_logger;
     use crate::test_utils::get_settings;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
@@ -103,6 +115,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn smoke_process_transfer_event_test() {
+        init_logger();
+
         let nonce = U128::from(rand::thread_rng().gen_range(0..1000000000));
         let valid_till = 0;
         let transfer = TransferDataEthereum {
@@ -112,7 +126,7 @@ pub mod tests {
         };
         let fee = TransferDataNear {
             token: get_near_token(),
-            amount: U128::from(10),
+            amount: U128::from(1_000_000_000),
         };
         let recipient = EthAddress::from(get_recipient());
 

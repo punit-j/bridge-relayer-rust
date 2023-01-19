@@ -4,6 +4,7 @@ pub mod errors;
 pub mod ethereum;
 pub mod event_processor;
 pub mod last_block;
+pub mod logs;
 pub mod near;
 pub mod pending_transactions_worker;
 pub mod private_key;

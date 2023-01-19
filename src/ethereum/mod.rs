@@ -84,10 +84,18 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
         receiver: web3::ethabi::Address,
         amount: u64,
         nonce: web3::types::U256,
-        unlock_recipient: String
+        unlock_recipient: String,
     ) -> web3::error::Result<web3::types::H256> {
-        transactions::transfer_token(&self.contract, &self.key, token, receiver, amount, nonce, unlock_recipient)
-            .await
+        transactions::transfer_token(
+            &self.contract,
+            &self.key,
+            token,
+            receiver,
+            amount,
+            nonce,
+            unlock_recipient,
+        )
+        .await
     }
 
     pub async fn transaction_status(
@@ -115,11 +123,11 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
 pub mod tests {
     use crate::ethereum::transactions::TransactionStatus;
     use crate::ethereum::RainbowBridgeEthereumClient;
+    use crate::test_utils::get_rb_index_path_str;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
         get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
     };
-    use crate::test_utils::get_rb_index_path_str;
     use secp256k1::SecretKey;
     use web3::types::{H160, U64};
 
@@ -211,7 +219,7 @@ pub mod tests {
                 get_recipient(),
                 159,
                 web3::types::U256::from(200),
-                "alice.testnet".to_string()
+                "alice.testnet".to_string(),
             )
             .await
             .unwrap();

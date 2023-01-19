@@ -4,6 +4,7 @@ mod errors;
 mod ethereum;
 mod event_processor;
 mod last_block;
+mod logs;
 mod near;
 mod pending_transactions_worker;
 mod private_key;
@@ -16,6 +17,7 @@ mod utils;
 mod test_utils;
 
 use crate::config::Settings;
+use crate::logs::init_logger;
 use clap::Parser;
 use std::str::FromStr;
 
@@ -45,6 +47,8 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+
+    init_logger();
 
     let settings = match Settings::init(args.config) {
         Ok(settings) => std::sync::Arc::new(std::sync::Mutex::new(settings)),

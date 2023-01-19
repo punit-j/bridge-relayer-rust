@@ -1,7 +1,7 @@
+use crate::logs::PENDING_TRANSACTION_TARGET;
 use crate::{async_redis_wrapper, ethereum};
-
-use std::str::FromStr;
 use redis::AsyncCommands;
+use std::str::FromStr;
 use uint::rustc_hex::ToHex;
 
 #[allow(clippy::needless_lifetimes)]
@@ -46,7 +46,11 @@ pub async fn run<'a>(
 
             if let std::collections::hash_map::Entry::Vacant(e) = pending_transactions.entry(hash) {
                 e.insert(data);
-                println!("New pending transaction: {:#?}", hash)
+                tracing::info!(
+                    target: PENDING_TRANSACTION_TARGET,
+                    "New pending transaction: {:#?}",
+                    hash
+                )
             }
         }
 
@@ -72,7 +76,8 @@ pub async fn run<'a>(
                                     .as_secs();
                             }
                             ethereum::transactions::TransactionStatus::Failure(_block_number) => {
-                                eprintln!(
+                                tracing::error!(
+                                    target: PENDING_TRANSACTION_TARGET,
                                     "{}",
                                     crate::errors::CustomError::FailedTxStatus(format!(
                                         "{:?}",
@@ -97,7 +102,8 @@ pub async fn run<'a>(
                                         transactions_to_remove.push(*key);
                                     }
                                     Err(error) => {
-                                        eprintln!(
+                                        tracing::error!(
+                                            target: PENDING_TRANSACTION_TARGET,
                                             "{}",
                                             crate::errors::CustomError::FailedFetchProof(
                                                 error.to_string()
@@ -109,7 +115,11 @@ pub async fn run<'a>(
                         }
                     }
                     Err(error) => {
-                        eprintln!("{}", crate::errors::CustomError::FailedFetchTxStatus(error))
+                        tracing::error!(
+                            target: PENDING_TRANSACTION_TARGET,
+                            "{}",
+                            crate::errors::CustomError::FailedFetchTxStatus(error)
+                        )
                     }
                 }
             }
@@ -124,7 +134,8 @@ pub async fn run<'a>(
                 )
                 .await;
             if let Err(error) = res {
-                eprintln!(
+                tracing::error!(
+                    target: PENDING_TRANSACTION_TARGET,
                     "{}",
                     crate::errors::CustomError::FailedUnstorePendingTx(error)
                 );
@@ -140,17 +151,20 @@ pub async fn run<'a>(
 pub mod tests {
     use crate::async_redis_wrapper;
     use crate::async_redis_wrapper::{AsyncRedisWrapper, TRANSACTIONS};
+    use crate::logs::init_logger;
     use crate::pending_transactions_worker::run;
+    use crate::test_utils::{get_rb_index_path_str, get_settings, remove_all};
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
         get_eth_rpc_url, get_relay_eth_key,
     };
-    use crate::test_utils::{get_settings, remove_all, get_rb_index_path_str};
     use redis::AsyncCommands;
     use tokio::time::timeout;
 
     #[tokio::test]
     async fn smoke_pending_transactions_worker_test() {
+        init_logger();
+
         let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
         let mut redis = AsyncRedisWrapper::connect(settings.clone()).await;
         let eth_key = get_relay_eth_key();

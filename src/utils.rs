@@ -1,3 +1,4 @@
+use crate::logs::EVENT_PROCESSOR_TARGET;
 use crate::{config::Settings, pending_transactions_worker, async_redis_wrapper::SafeAsyncRedisWrapper};
 use tokio::task::JoinHandle;
 
@@ -51,7 +52,11 @@ pub async fn build_near_events_subscriber(
 ) {
     while let Some(msg) = stream.recv().await {
         if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
-            println!("Process event {:?}", event);
+            tracing::info!(
+                target: EVENT_PROCESSOR_TARGET,
+                "Process event: {}",
+                serde_json::to_string(&event).unwrap_or(format!("{:?}", event))
+            );
 
             if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
                 nonce,
