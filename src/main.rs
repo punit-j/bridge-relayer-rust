@@ -169,7 +169,7 @@ async fn main() {
 pub mod tests {
     use crate::last_block;
 
-    const APP_USER_AGENT: &str = "spectre-bridge-service/0.1.0";
+    const APP_USER_AGENT: &str = "fast-bridge-service/0.1.0";
     const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
     const ETH_RPC_ENDPOINT_URL: &str =
         "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";

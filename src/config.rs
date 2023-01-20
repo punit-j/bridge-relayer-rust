@@ -203,13 +203,13 @@ pub mod tests {
 
         assert_eq!(
             settings.eth.rpc_url,
-            url::Url::parse("https://goerli.infura.io/v3/${SPECTRE_BRIDGE_INFURA_PROJECT_ID}")
+            url::Url::parse("https://goerli.infura.io/v3/${FAST_BRIDGE_INFURA_PROJECT_ID}")
                 .unwrap()
         );
         assert_eq!(settings.config_path, config_path);
         assert_eq!(
             settings.near.near_credentials_path,
-            "~/.near-credentials/testnet/spectrebridge.testnet.json"
+            "~/.near-credentials/testnet/fastbridge.testnet.json"
         );
         let token_account: near_sdk::AccountId =
             "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near"

@@ -1,13 +1,13 @@
 use crate::config::{NearTokenInfo, Settings};
 use crate::logs::EVENT_PROCESSOR_TARGET;
 use near_sdk::AccountId;
-use spectre_bridge_common::TransferMessage;
+use fast_bridge_common::TransferMessage;
 use std::sync::{Arc, Mutex};
 use web3::types::{H160, U256};
 
 pub async fn execute_transfer(
     relay_key_on_eth: impl web3::signing::Key,
-    transfer_event: spectre_bridge_common::Event,
+    transfer_event: fast_bridge_common::Event,
     eth_erc20_fast_bridge_contract_abi: &[u8],
     eth1_rpc_url: &str,
     eth_erc20_fast_bridge_proxy_contract_addr: web3::types::Address,
@@ -159,7 +159,7 @@ async fn estimate_profit(
 }
 
 fn get_transfer_data(
-    transfer_event: spectre_bridge_common::Event,
+    transfer_event: fast_bridge_common::Event,
     near_relay_account_id: String,
 ) -> Result<
     (
@@ -171,7 +171,7 @@ fn get_transfer_data(
     crate::errors::CustomError,
 > {
     let method_name = "transferTokens";
-    if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+    if let fast_bridge_common::Event::FastBridgeInitTransferEvent {
         nonce,
         sender_id: _,
         transfer_message,
@@ -224,7 +224,7 @@ pub mod tests {
     use near_client::test_utils::{get_near_signer, get_near_token};
     use near_sdk::json_types::U128;
     use rand::Rng;
-    use spectre_bridge_common::{
+    use fast_bridge_common::{
         EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
     };
     use web3::signing::Key;
@@ -243,10 +243,10 @@ pub mod tests {
         let redis = AsyncRedisWrapper::connect(settings.clone()).await;
         let arc_redis = redis.new_safe();
 
-        let current_nonce: u128 = rand::thread_rng().gen_range(0..1000000000);
+        let current_nonce: u128 = rand::thread_rng().gen_range(0, 1000000000);
         let near_relay_account_id = get_near_signer().account_id.to_string();
 
-        let transfer_message = spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+        let transfer_message = fast_bridge_common::Event::FastBridgeInitTransferEvent {
             nonce: U128::from(current_nonce),
             sender_id: near_relay_account_id.parse().unwrap(),
             transfer_message: TransferMessage {

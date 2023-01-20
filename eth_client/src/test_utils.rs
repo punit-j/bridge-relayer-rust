@@ -39,7 +39,7 @@ pub fn get_eth_erc20_fast_bridge_proxy_contract_address() -> web3::types::Addres
 }
 
 pub fn get_relay_eth_key() -> secp256k1::SecretKey {
-    secp256k1::SecretKey::from_str(&(env::var("SPECTRE_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64])
+    secp256k1::SecretKey::from_str(&(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64])
         .unwrap()
 }
 

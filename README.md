@@ -1,10 +1,10 @@
-# Spectre Bridge Service
+# Fast Bridge Service
 
-Spectre bridge is one-way semi-decentralized bridge created to speed up transfers from Near to Ethereum.
+Fast bridge is one-way semi-decentralized bridge created to speed up transfers from Near to Ethereum.
 
-Repo with ethereum and near contracts, where you can read in more details how the Spectre Bridge works: https://github.com/aurora-is-near/spectre-bridge-protocol
+Repo with ethereum and near contracts, where you can read in more details how the Fast Bridge works: https://github.com/aurora-is-near/fast-bridge-protocol
 
-Current repo is for LP-Relayer component of the Spectre Bridge.
+Current repo is for LP-Relayer component of the Fast Bridge.
 
 ## Installation
 ### Requirements
@@ -18,12 +18,12 @@ Before running LP-Relayer you need to do the following preparation:
 ### Config
 Also, for running LP-Relayer you need to write a proper config.
 
-The config example you can find here: https://github.com/aurora-is-near/spectre-bridge-service/blob/master/config.json.example
+The config example you can find here: https://github.com/aurora-is-near/fast-bridge-service/blob/master/config.json.example
 You can copy this config and field the correct values for you case. For the most
 fields it is strait forward. 
 
 Some comments about the config: 
-1. The value such as `${SPECTRE_BRIDGE_ETHERSCAN_API_KEY}`
+1. The value such as `${FAST_BRIDGE_ETHERSCAN_API_KEY}`
 should be change into the real value. The environment variable doesn't work here.  
 2. For `"rainbow_bridge_index_js_path"` and `"near_credentials_path"`
 you should use the absolut path without `~`.
@@ -42,13 +42,13 @@ First, you need to meet all the requirements from the 'requirements' section.
 The Eth account should be created in the Goerli network and you should
 get some Goerli Eth to this account. Tokens will be minted automatically.
 
-The private key for the NEAR test account should be stored in `~/.near-credentials/testnet/spectrebridge.testnet.json`
+The private key for the NEAR test account should be stored in `~/.near-credentials/testnet/fastbridge.testnet.json`
 
 ### Environment variables
 Also for running tests the following environment variables should be set up
 * `ETH_GOERLI_INFURA_API_KEY` -- API KEY in Infura for eth url rpc
 * `PATH_TO_RAINBOW_BRIDGE_REP` -- local path to cloned rainbow bridge  repo. For example `/home/olga/Aurora/rainbow-bridge`
-* `SPECTRE_BRIDGE_ETH_PRIVATE_KEY` -- private key for you testing ETH account in goerli network
+* `FAST_BRIDGE_ETH_PRIVATE_KEY` -- private key for you testing ETH account in goerli network
 * `ETHERSCAN_API_KEY` -- API key in EtherSacan https://etherscan.io/apis
 
 In the beginning of the `tests/integration_tests.rs` file you 

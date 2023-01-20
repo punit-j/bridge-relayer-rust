@@ -22,7 +22,7 @@
 //! ```
 
 use serde_json::json;
-use spectre_bridge_common;
+use fast_bridge_common;
 use std::process;
 use web3::{
     api,
@@ -42,7 +42,7 @@ pub async fn get_proof<'a, 'b, T: web3::Transport>(
     client: &'a api::Eth<T>,
     rb_bridge_index_js_url: &'a str,
     tx_hash: &'a H256,
-) -> Result<spectre_bridge_common::Proof, Error<'b>> {
+) -> Result<fast_bridge_common::Proof, Error<'b>> {
     let log_index = get_transaction_log_index(client, tx_hash).await?;
 
     let json_args = json!({"logIndex": log_index.as_u64(), "transactionHash": tx_hash});
@@ -66,7 +66,7 @@ pub async fn get_proof<'a, 'b, T: web3::Transport>(
         .get("proof_locker")
         .ok_or(Error::Other("JSON doesnt contain the proof_locker"))?;
 
-    let res = serde_json::from_value::<spectre_bridge_common::Proof>(json.clone())
+    let res = serde_json::from_value::<fast_bridge_common::Proof>(json.clone())
         .map_err(Error::Json)?;
     Ok(res)
 }

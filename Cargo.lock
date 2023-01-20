@@ -1632,6 +1632,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast-bridge-common"
+version = "1.0.0"
+source = "git+ssh://git@github.com/aurora-is-near/fast-bridge-common.git?tag=0.1.1#07f96175d84c49f952bc1b085e2150de304cafaf"
+dependencies = [
+ "assert-json-diff",
+ "hex 0.4.3",
+ "near-sdk",
+ "serde",
+]
+
+[[package]]
+name = "fast-bridge-service"
+version = "0.1.0"
+dependencies = [
+ "assert-json-diff",
+ "borsh",
+ "bytes",
+ "clap",
+ "config 0.13.3",
+ "eth_client",
+ "fast-bridge-common",
+ "futures-util",
+ "hex 0.4.3",
+ "http-client",
+ "http-types",
+ "near-crypto 0.15.0",
+ "near-jsonrpc-client",
+ "near-jsonrpc-primitives",
+ "near-lake-framework",
+ "near-primitives 0.15.0",
+ "near-sdk",
+ "near-workspaces",
+ "near_client",
+ "parking_lot",
+ "rand 0.7.3",
+ "redis",
+ "reqwest",
+ "rlp",
+ "rug",
+ "secp256k1 0.21.3",
+ "serde",
+ "serde_json",
+ "shellexpand",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uint 0.8.5",
+ "url",
+ "uuid 0.8.2",
+ "web3",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4237,60 +4291,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "sha-1",
-]
-
-[[package]]
-name = "spectre-bridge-common"
-version = "1.0.0"
-source = "git+ssh://git@github.com/aurora-is-near/spectre-bridge-common.git?tag=0.1.0#90780021479ade416749a4b58441403f4a41043a"
-dependencies = [
- "assert-json-diff",
- "hex 0.4.3",
- "near-sdk",
- "serde",
-]
-
-[[package]]
-name = "spectre-bridge-service"
-version = "0.1.0"
-dependencies = [
- "assert-json-diff",
- "borsh",
- "bytes",
- "clap",
- "config 0.13.3",
- "eth_client",
- "futures-util",
- "hex 0.4.3",
- "http-client",
- "http-types",
- "near-crypto 0.15.0",
- "near-jsonrpc-client",
- "near-jsonrpc-primitives",
- "near-lake-framework",
- "near-primitives 0.15.0",
- "near-sdk",
- "near-workspaces",
- "near_client",
- "parking_lot",
- "rand 0.8.5",
- "redis",
- "reqwest",
- "rlp",
- "rug",
- "secp256k1 0.21.3",
- "serde",
- "serde_json",
- "shellexpand",
- "spectre-bridge-common",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uint 0.8.5",
- "url",
- "uuid 1.2.2",
- "web3",
 ]
 
 [[package]]

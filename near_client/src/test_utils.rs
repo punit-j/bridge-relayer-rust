@@ -14,7 +14,7 @@ pub fn abspath(p: &str) -> Option<String> {
 }
 
 pub fn get_near_signer() -> InMemorySigner {
-    let path = "~/.near-credentials/testnet/spectrebridge.testnet.json";
+    let path = "~/.near-credentials/testnet/fastbridge.testnet.json";
     let absolute = abspath(path).unwrap();
     read_private_key_from_file(&absolute).unwrap()
 }

@@ -5,7 +5,7 @@ async fn unlock_tokens(
     server_addr: url::Url,
     account: near_crypto::InMemorySigner,
     contract_account_id: String,
-    proof: spectre_bridge_common::Proof,
+    proof: fast_bridge_common::Proof,
     nonce: u128,
     gas: u64,
 ) -> Result<

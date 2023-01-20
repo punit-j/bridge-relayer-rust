@@ -18,7 +18,7 @@ pub struct AsyncRedisWrapper {
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TxData {
     pub block: u64,
-    pub proof: spectre_bridge_common::Proof,
+    pub proof: fast_bridge_common::Proof,
     pub nonce: u128,
 }
 
@@ -75,7 +75,7 @@ impl AsyncRedisWrapper {
     }
 
     #[allow(clippy::let_unit_value)]
-    pub async fn event_pub(&mut self, event: spectre_bridge_common::Event) {
+    pub async fn event_pub(&mut self, event: fast_bridge_common::Event) {
         let _: () = self
             .connection
             .publish(EVENTS, serde_json::to_string(&event).unwrap())
@@ -202,7 +202,7 @@ pub mod tests {
     use eth_client::test_utils::{get_eth_token, get_recipient};
     use near_client::test_utils::get_near_token;
     use near_sdk::json_types::U128;
-    use spectre_bridge_common::{
+    use fast_bridge_common::{
         EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
     };
     use tokio::time::Duration;
@@ -246,7 +246,7 @@ pub mod tests {
         let tx_hash = "test_tx_hash".to_string();
         let tx_data = TxData {
             block: 126u64,
-            proof: spectre_bridge_common::Proof::default(),
+            proof: fast_bridge_common::Proof::default(),
             nonce: 15u128,
         };
 
@@ -279,7 +279,7 @@ pub mod tests {
 
         let mut redis = arc_redis.lock().clone().get_mut().clone();
         redis
-            .event_pub(spectre_bridge_common::Event::SpectreBridgeUnlockEvent {
+            .event_pub(fast_bridge_common::Event::FastBridgeUnlockEvent {
                 nonce: U128::from(16u128),
                 recipient_id: "test.account".parse().unwrap(),
                 transfer_message: TransferMessage {
@@ -300,7 +300,7 @@ pub mod tests {
             .await;
 
         let recv_event =
-            serde_json::from_str::<spectre_bridge_common::Event>(&stream.recv().await.unwrap())
+            serde_json::from_str::<fast_bridge_common::Event>(&stream.recv().await.unwrap())
                 .unwrap();
         println!("recv event: {:?}", recv_event);
     }

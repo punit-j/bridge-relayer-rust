@@ -102,7 +102,7 @@ pub mod tests {
         .unwrap();
 
         let priv_key = get_relay_eth_key();
-        let nonce = web3::types::U256::from(rand::thread_rng().gen_range(0..1000000000));
+        let nonce = web3::types::U256::from(rand::thread_rng().gen_range(0, 1000000000));
 
         let token_addr = get_eth_token();
         let res = transfer_token(

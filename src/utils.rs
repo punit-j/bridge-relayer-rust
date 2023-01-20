@@ -51,14 +51,14 @@ pub async fn build_near_events_subscriber(
     near_relay_account_id: String,
 ) {
     while let Some(msg) = stream.recv().await {
-        if let Ok(event) = serde_json::from_str::<spectre_bridge_common::Event>(msg.as_str()) {
+        if let Ok(event) = serde_json::from_str::<fast_bridge_common::Event>(msg.as_str()) {
             tracing::info!(
                 target: EVENT_PROCESSOR_TARGET,
                 "Process event: {}",
                 serde_json::to_string(&event).unwrap_or(format!("{:?}", event))
             );
 
-            if let spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+            if let fast_bridge_common::Event::FastBridgeInitTransferEvent {
                 nonce,
                 sender_id,
                 transfer_message,

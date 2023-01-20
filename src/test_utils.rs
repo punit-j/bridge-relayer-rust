@@ -3,9 +3,10 @@ use redis::AsyncCommands;
 use std::env;
 use std::path::Path;
 use url::Url;
-use web3::signing::Key;
 use web3::types::U256;
 use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
+
+pub const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge2.olga24912_3.testnet";
 
 pub async fn remove_all(redis: crate::async_redis_wrapper::AsyncRedisWrapper, key: &str) {
     let mut redis_connection = redis.connection;
@@ -46,7 +47,7 @@ pub fn get_settings() -> Settings {
 pub async fn get_tx_count(redis: SafeAsyncRedisWrapper,
                           rpc_url: Url,
                           relay_eth_address: web3::types::Address) -> U256 {
-    let mut transaction_count = redis
+    let transaction_count = redis
         .lock()
         .clone()
         .get_mut()

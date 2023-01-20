@@ -36,7 +36,7 @@ pub async fn run_worker(
             for outcome in shard.receipt_execution_outcomes {
                 if contract_name == outcome.receipt.receiver_id {
                     for log in outcome.execution_outcome.outcome.logs {
-                        if let Some(json) = spectre_bridge_common::remove_prefix(log.as_str()) {
+                        if let Some(json) = fast_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
                                 Ok(r) => {
                                     tracing::info!(
@@ -104,21 +104,21 @@ pub fn fix_json(mut json: serde_json::Value) -> serde_json::Value {
 }
 
 /// Gets an event from json and checks standard+version
-pub fn get_event(json: serde_json::Value) -> Result<spectre_bridge_common::Event, ParceError> {
+pub fn get_event(json: serde_json::Value) -> Result<fast_bridge_common::Event, ParceError> {
     let json = fix_json(json);
 
-    let r = serde_json::from_value::<spectre_bridge_common::EventMessage>(json.clone());
+    let r = serde_json::from_value::<fast_bridge_common::EventMessage>(json.clone());
     let r = r.map_err(ParceError::Json)?;
 
-    if r.standard != spectre_bridge_common::STANDARD {
+    if r.standard != fast_bridge_common::STANDARD {
         return Err(ParceError::NotEvent);
     }
 
-    if r.version != spectre_bridge_common::VERSION {
+    if r.version != fast_bridge_common::VERSION {
         return Err(ParceError::WrongVersion(r.version));
     }
 
-    let r = serde_json::from_value::<spectre_bridge_common::Event>(json);
+    let r = serde_json::from_value::<fast_bridge_common::Event>(json);
     let r = r.map_err(ParceError::Json)?;
 
     Ok(r)
@@ -134,11 +134,11 @@ pub mod tests {
     use near_sdk::json_types::U128;
     use near_sdk::AccountId;
     use parking_lot::ReentrantMutex;
-    use spectre_bridge_common;
+    use fast_bridge_common;
 
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, EVENTS};
     use crate::logs::init_logger;
-    use crate::test_utils::get_settings;
+    use crate::test_utils::{get_settings, NEAR_CONTRACT_ADDRESS};
     use serde_json::json;
     use tokio::time::timeout;
 
@@ -158,13 +158,13 @@ pub mod tests {
 
     #[test]
     fn get_event_test() {
-        let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"spectre_bridge_deposit_event","data":{"amount":"179","sender_id":"alice","token":"token"}}"#;
-        let json = spectre_bridge_common::remove_prefix(json_str).unwrap();
+        let json_str = r#"EVENT_JSON:{"standard":"nep297","version":"1.0.0","event":"fast_bridge_deposit_event","data":{"amount":"179","sender_id":"alice","token":"token"}}"#;
+        let json = fast_bridge_common::remove_prefix(json_str).unwrap();
         let event = get_event(json).unwrap();
 
         assert_eq!(
             event,
-            spectre_bridge_common::Event::SpectreBridgeDepositEvent {
+            fast_bridge_common::Event::FastBridgeDepositEvent {
                 sender_id: AccountId::new_unchecked("alice".to_string()),
                 token: AccountId::new_unchecked("token".to_string()),
                 amount: U128(179)
@@ -179,9 +179,9 @@ pub mod tests {
 
         let settings = get_settings();
         let contract_address =
-            crate::near::AccountId::try_from("fast-bridge2.olga24912_3.testnet".to_string())
+            crate::near::AccountId::try_from(NEAR_CONTRACT_ADDRESS.to_string())
                 .unwrap();
-        let init_block = 112480111;
+        let init_block = 113576799;
         let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
 
         let redis = AsyncRedisWrapper::connect(settings).await;
@@ -200,7 +200,7 @@ pub mod tests {
         let _result = timeout(timeout_duration, worker).await;
 
         let recv_event =
-            serde_json::from_str::<spectre_bridge_common::Event>(&stream.recv().await.unwrap())
+            serde_json::from_str::<fast_bridge_common::Event>(&stream.recv().await.unwrap())
                 .unwrap();
         println!("recv event: {:?}", recv_event);
     }

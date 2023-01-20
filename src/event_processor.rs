@@ -11,7 +11,7 @@ use web3::signing::*;
 pub async fn process_transfer_event(
     nonce: near_sdk::json_types::U128,
     sender_id: AccountId,
-    transfer_message: spectre_bridge_common::TransferMessage,
+    transfer_message: fast_bridge_common::TransferMessage,
     settings: std::sync::Arc<std::sync::Mutex<Settings>>,
     redis: SafeAsyncRedisWrapper,
     eth_erc20_fast_bridge_proxy_contract_address: web3::types::Address,
@@ -46,7 +46,7 @@ pub async fn process_transfer_event(
 
     let tx_hash = crate::transfer::execute_transfer(
         relay_eth_key.clone().as_ref(),
-        spectre_bridge_common::Event::SpectreBridgeInitTransferEvent {
+        fast_bridge_common::Event::FastBridgeInitTransferEvent {
             nonce,
             sender_id,
             transfer_message,
@@ -108,7 +108,7 @@ pub mod tests {
     use near_sdk::json_types::U128;
     use rand::Rng;
     use redis::AsyncCommands;
-    use spectre_bridge_common::{
+    use fast_bridge_common::{
         EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
     };
     use std::time::Duration;
@@ -117,7 +117,7 @@ pub mod tests {
     async fn smoke_process_transfer_event_test() {
         init_logger();
 
-        let nonce = U128::from(rand::thread_rng().gen_range(0..1000000000));
+        let nonce = U128::from(rand::thread_rng().gen_range(0, 1000000000));
         let valid_till = 0;
         let transfer = TransferDataEthereum {
             token_near: get_near_token(),

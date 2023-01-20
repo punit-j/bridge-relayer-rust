@@ -108,7 +108,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
     pub async fn get_proof<'b, 'c>(
         &self,
         tx_hash: &'b web3::types::H256,
-    ) -> Result<spectre_bridge_common::Proof, proof::Error<'c>> {
+    ) -> Result<fast_bridge_common::Proof, proof::Error<'c>> {
         proof::get_proof(
             self.api_url,
             &self.client,
