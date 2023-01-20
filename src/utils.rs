@@ -1,12 +1,34 @@
 use crate::logs::EVENT_PROCESSOR_TARGET;
 use crate::{config::Settings, pending_transactions_worker, async_redis_wrapper::SafeAsyncRedisWrapper};
 use tokio::task::JoinHandle;
+use url::Url;
+use web3::types::Res;
 
 pub async fn request_interval(seconds: u64) -> tokio::time::Interval {
     tokio::time::interval_at(
         tokio::time::Instant::now() + tokio::time::Duration::from_secs(seconds),
         tokio::time::Duration::from_secs(seconds),
     )
+}
+
+pub async fn get_tx_count(redis: SafeAsyncRedisWrapper,
+                          rpc_url: Url,
+                          relay_eth_address: web3::types::Address
+) -> Result<web3::types::U256, crate::errors::CustomError> {
+    let mut transaction_count = redis
+        .lock()
+        .clone()
+        .get_mut()
+        .get_transaction_count()
+        .await
+        .unwrap_or(0.into());
+
+    let transaction_count_rpc =
+        eth_client::methods::get_transaction_count(rpc_url.as_str(), relay_eth_address)
+            .await
+            .map_err(|e| crate::errors::CustomError::FailedGetTxCount(e))?;
+
+    Ok(std::cmp::max(transaction_count, transaction_count_rpc))
 }
 
 pub async fn build_pending_transactions_worker(

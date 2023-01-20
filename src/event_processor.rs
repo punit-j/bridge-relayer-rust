@@ -6,6 +6,7 @@ use near_sdk::AccountId;
 use redis::AsyncCommands;
 use uint::rustc_hex::ToHex;
 use web3::signing::*;
+use crate::utils::get_tx_count;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn process_transfer_event(
@@ -21,21 +22,7 @@ pub async fn process_transfer_event(
 ) -> Result<(), CustomError> {
     let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
     let profit_thershold = settings.lock().unwrap().profit_thershold;
-
-    let mut transaction_count = redis
-        .lock()
-        .clone()
-        .get_mut()
-        .get_transaction_count()
-        .await
-        .unwrap_or(0.into());
-
-    let transaction_count_rpc =
-        eth_client::methods::get_transaction_count(rpc_url.as_str(), relay_eth_key.address())
-            .await
-            .map_err(|e| crate::errors::CustomError::FailedGetTxCount(e))?;
-
-    transaction_count = std::cmp::max(transaction_count, transaction_count_rpc);
+    let mut transaction_count = get_tx_count(redis.clone(), rpc_url.clone(), relay_eth_key.address()).await?;
 
     let mut redis = redis.lock().clone().get_mut().clone();
     tracing::info!(

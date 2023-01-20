@@ -1,6 +1,8 @@
 #![allow(unused_imports)]
 use std::str::FromStr;
 
+const EIP_1559_TRANSACTION_TYPE: u64 = 2;
+
 pub fn construct_contract_interface(
     eth_endpoint: &str,
     contract_addr: web3::types::Address,
@@ -53,7 +55,7 @@ struct FeeData {
     max_fee_per_gas: web3::types::U256,
 }
 
-async fn get_fee_data(server_address: &str) -> web3::contract::Result<FeeData> {
+async fn get_fee_data(server_address: &str, max_priority_fee_per_gas: Option<web3::types::U256>) -> web3::contract::Result<FeeData> {
     let transport = web3::transports::Http::new(server_address)?;
     let client = web3::Web3::new(transport);
 
@@ -68,7 +70,7 @@ async fn get_fee_data(server_address: &str) -> web3::contract::Result<FeeData> {
     let base_fee_per_gas = last_block
         .base_fee_per_gas
         .ok_or("Failed to get `base_fee_per_gas`".to_string())?;
-    let max_priority_fee_per_gas: web3::types::U256 = 1500000000.into();
+    let max_priority_fee_per_gas: web3::types::U256 = max_priority_fee_per_gas.unwrap_or(1500000000.into());
     let max_fee_per_gas = base_fee_per_gas
         .checked_mul(2.into())
         .ok_or("Failed to calculate `max_fee_per_gas`".to_string())?
@@ -104,15 +106,16 @@ pub async fn change(
     use_eip_1559: bool,
     transaction_count: Option<web3::types::U256>,
     gas: Option<web3::types::U256>,
+    max_priority_fee_per_gas: Option<web3::types::U256>
 ) -> web3::contract::Result<web3::types::H256> {
     let mut options = web3::contract::Options::default();
     options.nonce = transaction_count;
 
     if use_eip_1559 {
-        let fee_data = get_fee_data(server_addr).await?;
+        let fee_data = get_fee_data(server_addr, max_priority_fee_per_gas).await?;
         options.max_fee_per_gas = Some(fee_data.max_fee_per_gas);
         options.max_priority_fee_per_gas = Some(fee_data.max_priority_fee_per_gas);
-        options.transaction_type = Some(2.into());
+        options.transaction_type = Some(EIP_1559_TRANSACTION_TYPE.into());
         options.gas = gas;
     }
 
@@ -308,6 +311,9 @@ pub mod tests {
             method_args,
             &priv_key,
             true,
+            None,
+            None,
+            None
         )
         .await
         .unwrap();
@@ -335,6 +341,9 @@ pub mod tests {
             amount,
             &priv_key,
             true,
+            None,
+            None,
+            None
         )
         .await
         .unwrap();

@@ -90,6 +90,7 @@ pub async fn execute_transfer(
         true,
         Some(transaction_count),
         Some(estimated_gas),
+        settings.lock().unwrap().max_priority_fee_per_gas
     )
     .await;
 
@@ -215,7 +216,8 @@ fn get_near_token_info(
 #[cfg(test)]
 pub mod tests {
     use crate::logs::init_logger;
-    use crate::test_utils::{get_settings, get_tx_count};
+    use crate::test_utils::get_settings;
+    use crate::utils::get_tx_count;
     use crate::transfer::execute_transfer;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
@@ -274,7 +276,7 @@ pub mod tests {
             Some(profit_threshold),
             settings,
             near_relay_account_id,
-            get_tx_count(arc_redis, eth1_rpc_url.clone(), relay_key_on_eth.address()).await,
+            get_tx_count(arc_redis, eth1_rpc_url.clone(), relay_key_on_eth.address()).await.unwrap(),
         )
         .await
         .unwrap();

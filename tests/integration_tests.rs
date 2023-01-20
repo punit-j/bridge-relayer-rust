@@ -451,7 +451,7 @@ async fn mint_eth_tokens() {
     )
     .unwrap();
 
-    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key, true, None, None).await.unwrap();
+    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key, true, None, None, None).await.unwrap();
 
     println!("transaction hash: {:?}", res);
 }
@@ -478,7 +478,7 @@ async fn increase_allowance() {
     )
     .unwrap();
 
-    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, method_args, &priv_key, true, None, None).await.unwrap();
+    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, method_args, &priv_key, true, None, None, None).await.unwrap();
 
     println!("transaction hash: {:?}", res);
 }

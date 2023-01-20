@@ -94,6 +94,7 @@ pub struct Settings {
     pub near: NearSettings,
     pub redis: RedisSettings,
     pub profit_thershold: Option<f64>,
+    pub max_priority_fee_per_gas: Option<web3::types::U256>,
     pub vault_addr: Url,
     #[serde(skip)]
     pub config_path: String,

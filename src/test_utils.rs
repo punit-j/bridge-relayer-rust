@@ -43,21 +43,3 @@ pub fn get_settings() -> Settings {
     );
     settings
 }
-
-pub async fn get_tx_count(redis: SafeAsyncRedisWrapper,
-                          rpc_url: Url,
-                          relay_eth_address: web3::types::Address) -> U256 {
-    let transaction_count = redis
-        .lock()
-        .clone()
-        .get_mut()
-        .get_transaction_count()
-        .await
-        .unwrap_or(0.into());
-
-    let transaction_count_rpc =
-        eth_client::methods::get_transaction_count(rpc_url.as_str(), relay_eth_address)
-            .await.unwrap();
-
-    std::cmp::max(transaction_count, transaction_count_rpc)
-}
