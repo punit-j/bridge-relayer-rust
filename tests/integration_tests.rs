@@ -18,7 +18,7 @@ use tokio::time::timeout;
 use url::Url;
 use fast_bridge_service_lib::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
 use fast_bridge_service_lib::async_redis_wrapper::{EVENTS, PENDING_TRANSACTIONS, subscribe, TRANSACTIONS};
-use fast_bridge_service_lib::config::{NearNetwork, Settings, NearTokenInfo};
+use fast_bridge_service_lib::config::{NearNetwork, Settings, NearTokenInfo, Decimals};
 use fast_bridge_service_lib::last_block::{last_block_number_worker, Storage};
 use fast_bridge_service_lib::logs::init_logger;
 use fast_bridge_service_lib::unlock_tokens::unlock_tokens_worker;
@@ -188,7 +188,7 @@ fn get_settings() -> fast_bridge_service_lib::config::Settings {
             exchange_id: "wrapped-near".to_owned(),
             fixed_fee: 0.into(),
             percent_fee: 0.0,
-            decimals: 6,
+            decimals: Decimals::try_from(6).unwrap(),
             eth_address: ETH_TOKEN_ADDRESS.parse().unwrap(),
         },
     );

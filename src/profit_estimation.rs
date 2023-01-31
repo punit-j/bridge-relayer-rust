@@ -1,18 +1,20 @@
-pub fn format_token_units(token_amount: web3::types::U256, decimals: u32) -> String {
-    let decimals = 10u64.pow(decimals);
-    let (amount_integer, amount_decimals) = token_amount.div_mod(decimals.into());
+use crate::config::Decimals;
+
+pub fn format_token_units(token_amount: web3::types::U256, decimals: Decimals) -> String {
+    let one_token_amount = 10u128.pow(decimals.clone().into());
+    let (amount_integer, amount_decimals) = token_amount.div_mod(one_token_amount.into());
     format!(
         "{}.{:0width$}",
         amount_integer,
         amount_decimals,
-        width = decimals as usize
+        width = decimals.try_into().unwrap(),
     )
 }
 
 pub async fn get_profit_usd(
     fee_token_price_usd: f64,
     fee_token_amount: web3::types::U256,
-    fee_token_decimals: u32,
+    fee_token_decimals: Decimals,
     estimated_transfer_execution_price_usd: f64,
 ) -> Option<f64> {
     let readable_fee_token_amount = rug::Float::with_val(
@@ -32,7 +34,8 @@ pub async fn get_profit_usd(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::profit_estimation::get_profit_usd;
+    use crate::config::Decimals;
+    use crate::profit_estimation::{format_token_units, get_profit_usd};
 
     #[tokio::test]
     async fn smoke_get_profit_test() {
@@ -40,7 +43,7 @@ pub mod tests {
         let one_token_amount = 1_000_000;
 
         let profit_usd =
-            get_profit_usd(0.5, web3::types::U256::from(10 * one_token_amount), 6, 2.0)
+            get_profit_usd(0.5, web3::types::U256::from(10 * one_token_amount), Decimals::try_from(6).unwrap(), 2.0)
                 .await
                 .unwrap();
         assert!(profit_usd - 3.0 < EPS && 3.0 - profit_usd < EPS);
@@ -53,7 +56,7 @@ pub mod tests {
         let token_price_usd = 1. / 1_000_000_000.;
         let token_amount = web3::types::U256::from(2_000_000_000);
 
-        let profit_usd = get_profit_usd(token_price_usd, token_amount, 0, 1.0)
+        let profit_usd = get_profit_usd(token_price_usd, token_amount, Decimals::try_from(0).unwrap(), 1.0)
             .await
             .unwrap();
         assert!(
@@ -69,7 +72,7 @@ pub mod tests {
         let token_price_usd = 1. / 10_000.;
         let token_amount = web3::types::U256::from(20_000);
 
-        let profit_usd = get_profit_usd(token_price_usd, token_amount, 0, 1.0)
+        let profit_usd = get_profit_usd(token_price_usd, token_amount, Decimals::try_from(0).unwrap(), 1.0)
             .await
             .unwrap();
         assert!(
@@ -77,5 +80,31 @@ pub mod tests {
             "Incorrect profit: expected = 1, found = {}",
             profit_usd
         );
+    }
+
+    #[test]
+    fn format_token_units_zero_test() {
+        format_token_units(web3::types::U256::zero(), Decimals::try_from(0).unwrap());
+    }
+
+    #[test]
+    fn format_token_units_max_decimal_test() {
+        format_token_units(web3::types::U256::zero(), Decimals::try_from(24).unwrap());
+    }
+
+    #[test]
+    fn format_token_units_max_value_zero_decimals_test() {
+        format_token_units(web3::types::U256::MAX, Decimals::try_from(0).unwrap());
+    }
+
+    #[test]
+    fn format_token_units_max_value_and_decimal_test() {
+        format_token_units(web3::types::U256::MAX, Decimals::try_from(24).unwrap());
+    }
+
+    #[test]
+    #[should_panic(expected = "The decimals value is too big. Max value = 24, found = 25")]
+    fn format_token_units_min_overflow_decimal_test() {
+        format_token_units(web3::types::U256::zero(), Decimals::try_from(25).unwrap());
     }
 }

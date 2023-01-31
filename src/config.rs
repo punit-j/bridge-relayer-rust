@@ -4,6 +4,42 @@ use std::fs;
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "u32")]
+pub struct Decimals(u32);
+
+impl Decimals {
+    const MAX_DECIMALS: u32 = 24;
+}
+
+impl TryFrom<u32> for Decimals {
+    type Error = String;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        if value <= Decimals::MAX_DECIMALS {
+            Ok(Self(value))
+        } else {
+            Err(format!(
+                "The decimals value is too big. Max value = {}, found = {}",
+                Decimals::MAX_DECIMALS,
+                value
+            ))
+        }
+    }
+}
+
+impl From<Decimals> for u32 {
+    fn from(value: Decimals) -> Self {
+        value.0
+    }
+}
+
+impl From<Decimals> for usize {
+    fn from(value: Decimals) -> Self {
+        value.0.try_into().unwrap()
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NearTokensWhitelist {
     pub mapping: std::collections::HashMap<near_sdk::AccountId, NearTokenInfo>,
 }
@@ -13,7 +49,7 @@ pub struct NearTokenInfo {
     pub exchange_id: String,
     pub fixed_fee: near_sdk::json_types::U128,
     pub percent_fee: f64,
-    pub decimals: u32,
+    pub decimals: Decimals,
     pub eth_address: web3::types::Address,
 }
 
@@ -176,7 +212,7 @@ impl Settings {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::config::{NearTokenInfo, Settings};
+    use crate::config::{Decimals, NearTokenInfo, Settings};
     use crate::test_utils::get_settings;
     use near_sdk::AccountId;
     use std::collections::HashMap;
@@ -275,7 +311,7 @@ pub mod tests {
                 exchange_id: "new_token".to_owned(),
                 fixed_fee: 0.into(),
                 percent_fee: 0.0,
-                decimals: 18,
+                decimals: Decimals::try_from(18).unwrap(),
                 eth_address: web3::types::H160::zero(),
             },
         )]));
@@ -321,7 +357,7 @@ pub mod tests {
                 exchange_id: "new_token".to_owned(),
                 fixed_fee: 0.into(),
                 percent_fee: 0.0,
-                decimals: 18,
+                decimals: Decimals::try_from(18).unwrap(),
                 eth_address: web3::types::H160::zero(),
             },
         )]));

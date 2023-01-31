@@ -1,4 +1,4 @@
-use crate::config::{NearTokenInfo, Settings};
+use crate::config::{Decimals, NearTokenInfo, Settings};
 use redis::AsyncCommands;
 use std::env;
 use std::path::Path;
@@ -37,7 +37,7 @@ pub fn get_settings() -> Settings {
                                                       exchange_id: "wrapped-near".to_string(),
                                                       fixed_fee: 0.into(),
                                                       percent_fee: 0.0,
-                                                      decimals: 6,
+                                                      decimals: Decimals::try_from(6).unwrap(),
                                                       eth_address: eth_client::test_utils::ETH_TOKEN_ADDRESS.parse().unwrap()
                                                   }
     );
