@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use near_jsonrpc_client::{methods, JsonRpcClient, JsonRpcClientConnector};
 use near_jsonrpc_primitives::types::query::{QueryResponseKind, RpcQueryResponse};
 use near_jsonrpc_primitives::types::transactions::TransactionInfo;
@@ -5,10 +6,11 @@ use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{BlockReference, Finality, FunctionArgs};
 use near_primitives::views::{FinalExecutionOutcomeView, QueryRequest};
 use tokio::time;
-use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref DEFAULT_CONNECTOR: JsonRpcClientConnector = JsonRpcClient::with(new_near_rpc_client(Some(std::time::Duration::from_secs(30))));
+    static ref DEFAULT_CONNECTOR: JsonRpcClientConnector = JsonRpcClient::with(
+        new_near_rpc_client(Some(std::time::Duration::from_secs(30)))
+    );
 }
 
 fn new_near_rpc_client(timeout: Option<std::time::Duration>) -> reqwest::Client {
@@ -41,6 +43,18 @@ pub async fn view(
         },
     };
     Ok(client.call(request).await?)
+}
+
+pub async fn get_final_block_timestamp(
+    server_addr: url::Url,
+) -> Result<u64, Box<dyn std::error::Error>> {
+    let client = DEFAULT_CONNECTOR.connect(server_addr);
+    let request = methods::block::RpcBlockRequest {
+        block_reference: BlockReference::Finality(Finality::Final),
+    };
+
+    let block_info = client.call(request).await?;
+    Ok(block_info.header.timestamp)
 }
 
 pub async fn change(
@@ -115,13 +129,14 @@ pub async fn change(
 #[cfg(test)]
 pub mod tests {
     use crate::methods::{change, view};
-    use serde_json::json;
-    use near_sdk::borsh::BorshDeserialize;
     use crate::read_private_key::read_private_key_from_file;
-    use std::path::Path;
-    use std::ffi::OsStr;
-    use near_primitives::views::FinalExecutionStatus;
     use crate::test_utils::{get_near_signer, get_near_token, get_server_addr};
+    use near_primitives::views::FinalExecutionStatus;
+    use near_sdk::borsh::BorshDeserialize;
+    use serde_json::json;
+    use std::ffi::OsStr;
+    use std::path::Path;
+    use std::time::SystemTime;
 
     fn abspath(p: &str) -> Option<String> {
         shellexpand::full(p)
@@ -131,15 +146,39 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn smoke_blocktimestamp_test() {
+        const MIN_IN_NS: u64 = 60_000_000_000;
+
+        let near_timestamp_ns = crate::methods::get_final_block_timestamp(get_server_addr())
+            .await
+            .unwrap();
+
+        let sys_timestamp_ns = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
+        println!("near timestamp: {:?}", near_timestamp_ns);
+        println!("sys timestamp: {:?}", sys_timestamp_ns);
+
+        assert!(near_timestamp_ns < sys_timestamp_ns + MIN_IN_NS);
+        assert!(sys_timestamp_ns < near_timestamp_ns + MIN_IN_NS);
+    }
+
+    #[tokio::test]
     async fn smoke_view_test() {
         let server_addr = get_server_addr();
         let contract_account_id = "client6.goerli.testnet".to_string();
         let method_name = "last_block_number".to_string();
         let args = json!({});
 
-        let response = view(server_addr, contract_account_id, method_name, args).await.unwrap();
+        let response = view(server_addr, contract_account_id, method_name, args)
+            .await
+            .unwrap();
 
-        if let near_jsonrpc_primitives::types::query::QueryResponseKind::CallResult(result) = response.kind {
+        if let near_jsonrpc_primitives::types::query::QueryResponseKind::CallResult(result) =
+            response.kind
+        {
             let value = u64::try_from_slice(&result.result).unwrap();
 
             println!("last block number = {}", value);
@@ -157,7 +196,17 @@ pub mod tests {
 
         let args = json!({"account_id": signer.account_id, "amount": "100"});
 
-        let response = change(server_addr, signer, contract_account_id, method_name, args, 4_000_000_000_000, 0).await.unwrap();
+        let response = change(
+            server_addr,
+            signer,
+            contract_account_id.to_string(),
+            method_name,
+            args,
+            4_000_000_000_000,
+            0,
+        )
+        .await
+        .unwrap();
 
         if let FinalExecutionStatus::SuccessValue(_) = response.status {
             println!("change response = {:?}", response);

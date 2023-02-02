@@ -1,6 +1,7 @@
+use dotenv::dotenv;
 use serde_json::json;
 use std::borrow::BorrowMut;
-use std::fs;
+use std::{env, fs};
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -131,6 +132,7 @@ pub struct Settings {
     pub redis: RedisSettings,
     pub profit_thershold: Option<f64>,
     pub max_priority_fee_per_gas: Option<web3::types::U256>,
+    pub min_time_before_unlock_in_sec: Option<u64>,
     pub vault_addr: Url,
     #[serde(skip)]
     pub config_path: String,
@@ -150,9 +152,25 @@ impl Settings {
         let file = fs::File::open(path).map_err(|e| e.to_string())?;
         let reader = std::io::BufReader::new(file);
 
+        dotenv().ok();
+
         // Read the JSON contents of the file as an instance of `User`.
         let mut config: Settings = serde_json::from_reader(reader).map_err(|e| e.to_string())?;
         config.config_path = file_path;
+        config.eth.private_key = config.eth.private_key.replace(
+            "${FAST_BRIDGE_ETH_PRIVATE_KEY}",
+            &env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap_or("".to_string()),
+        );
+        config.eth.rpc_url = url::Url::parse(&config.eth.rpc_url.as_str().replace(
+            "${FAST_BRIDGE_INFURA_PROJECT_ID}",
+            &env::var("FAST_BRIDGE_INFURA_PROJECT_ID").unwrap_or("".to_string()),
+        ))
+        .unwrap();
+        config.etherscan_api.api_key = config.eth.private_key.replace(
+            "${FAST_BRIDGE_ETHERSCAN_API_KEY}",
+            &env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap_or("".to_string()),
+        );
+
         Ok(config)
     }
 
@@ -238,7 +256,7 @@ pub mod tests {
         let config_path = "config.json.example";
         let settings = Settings::init(config_path.to_string()).unwrap();
 
-        assert_eq!(
+        assert_ne!(
             settings.eth.rpc_url,
             url::Url::parse("https://goerli.infura.io/v3/${FAST_BRIDGE_INFURA_PROJECT_ID}")
                 .unwrap()

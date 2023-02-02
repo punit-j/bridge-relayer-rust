@@ -1,5 +1,6 @@
 #![allow(unused_imports)]
 use std::str::FromStr;
+use web3::types::{BlockId, U256};
 
 const EIP_1559_TRANSACTION_TYPE: u64 = 2;
 

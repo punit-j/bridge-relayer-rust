@@ -1,4 +1,5 @@
 use crate::methods::get_contract_abi;
+use dotenv::dotenv;
 use std::env;
 use std::str::FromStr;
 use web3::types::Address;
@@ -9,8 +10,9 @@ const ETH_CONTRACT_IMPLEMENTATION_ADDRESS: &str = "B6b5739c390648A0121502ab3c3F4
 pub const ETH_TOKEN_ADDRESS: &str = "b2d75C5a142A68BDA438e6a318C7FBB2242f9693";
 
 pub async fn get_eth_contract_abi(contract_addr: Address) -> String {
+    dotenv().ok();
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
-    let etherscan_api_key = env::var("ETHERSCAN_API_KEY").unwrap();
+    let etherscan_api_key = env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap();
     get_contract_abi(
         etherscan_endpoint_url,
         contract_addr,
@@ -39,12 +41,14 @@ pub fn get_eth_erc20_fast_bridge_proxy_contract_address() -> web3::types::Addres
 }
 
 pub fn get_relay_eth_key() -> secp256k1::SecretKey {
+    dotenv().ok();
     secp256k1::SecretKey::from_str(&(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64])
         .unwrap()
 }
 
 pub fn get_eth_rpc_url() -> Url {
-    let api_key_string = env::var("ETH_GOERLI_INFURA_API_KEY").unwrap();
+    dotenv().ok();
+    let api_key_string = env::var("FAST_BRIDGE_INFURA_PROJECT_ID").unwrap();
     url::Url::parse(&format!("https://goerli.infura.io/v3/{}", &api_key_string)).unwrap()
 }
 

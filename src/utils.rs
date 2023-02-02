@@ -1,5 +1,7 @@
 use crate::logs::EVENT_PROCESSOR_TARGET;
-use crate::{config::Settings, pending_transactions_worker, async_redis_wrapper::SafeAsyncRedisWrapper};
+use crate::{
+    async_redis_wrapper::SafeAsyncRedisWrapper, config::Settings, pending_transactions_worker,
+};
 use tokio::task::JoinHandle;
 use url::Url;
 use web3::types::Res;
@@ -11,9 +13,10 @@ pub async fn request_interval(seconds: u64) -> tokio::time::Interval {
     )
 }
 
-pub async fn get_tx_count(redis: SafeAsyncRedisWrapper,
-                          rpc_url: Url,
-                          relay_eth_address: web3::types::Address
+pub async fn get_tx_count(
+    redis: SafeAsyncRedisWrapper,
+    rpc_url: Url,
+    relay_eth_address: web3::types::Address,
 ) -> Result<web3::types::U256, crate::errors::CustomError> {
     let mut transaction_count = redis
         .lock()

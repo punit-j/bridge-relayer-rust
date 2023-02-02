@@ -200,11 +200,9 @@ pub mod tests {
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, TxData, EVENTS, TRANSACTIONS};
     use crate::test_utils::{get_settings, remove_all};
     use eth_client::test_utils::{get_eth_token, get_recipient};
+    use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage};
     use near_client::test_utils::get_near_token;
     use near_sdk::json_types::U128;
-    use fast_bridge_common::{
-        EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
-    };
     use tokio::time::Duration;
 
     // run `redis-server` in the terminal

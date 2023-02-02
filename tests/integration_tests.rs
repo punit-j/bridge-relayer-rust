@@ -2,13 +2,21 @@ extern crate core;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use eth_client::methods::get_contract_abi;
+use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
+use fast_bridge_service_lib::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
+use fast_bridge_service_lib::async_redis_wrapper::{
+    subscribe, EVENTS, PENDING_TRANSACTIONS, TRANSACTIONS,
+};
+use fast_bridge_service_lib::config::{Decimals, NearNetwork, NearTokenInfo, Settings};
+use fast_bridge_service_lib::last_block::{last_block_number_worker, Storage};
+use fast_bridge_service_lib::logs::init_logger;
+use fast_bridge_service_lib::unlock_tokens::unlock_tokens_worker;
 use near_client::read_private_key::read_private_key_from_file;
 use near_crypto::InMemorySigner;
 use near_primitives::views::FinalExecutionStatus;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
 use std::env;
 use std::ffi::OsStr;
 use std::path::Path;
@@ -16,12 +24,6 @@ use std::str::FromStr;
 use std::time::Duration;
 use tokio::time::timeout;
 use url::Url;
-use fast_bridge_service_lib::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
-use fast_bridge_service_lib::async_redis_wrapper::{EVENTS, PENDING_TRANSACTIONS, subscribe, TRANSACTIONS};
-use fast_bridge_service_lib::config::{NearNetwork, Settings, NearTokenInfo, Decimals};
-use fast_bridge_service_lib::last_block::{last_block_number_worker, Storage};
-use fast_bridge_service_lib::logs::init_logger;
-use fast_bridge_service_lib::unlock_tokens::unlock_tokens_worker;
 
 const ETH_CONTRACT_PROXY_ADDRESS: &str = "8AC4c4A1015A9A12A9DBA16234A3f7909b9396Eb";
 const ETH_CONTRACT_IMPLEMENTATION_ADDRESS: &str = "B6b5739c390648A0121502ab3c3F4112f3FeAc1a";
@@ -49,10 +51,9 @@ async fn main_integration_test() {
 
     let settings = get_settings();
     let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
-    let redis = fast_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(
-        settings.clone(),
-    )
-    .await;
+    let redis =
+        fast_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone())
+            .await;
     remove_all(redis.clone(), PENDING_TRANSACTIONS).await;
     remove_all(redis.clone(), TRANSACTIONS).await;
     let redis = redis.new_safe();
@@ -61,7 +62,9 @@ async fn main_integration_test() {
 
     detect_new_near_event(redis.clone(), init_block, 10).await;
 
-    let relay_eth_key = std::sync::Arc::new(get_relay_eth_key());
+    let relay_eth_key = std::sync::Arc::new(
+        secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key[..64]).unwrap(),
+    );
     let eth_contract_abi = std::sync::Arc::new(get_eth_erc20_fast_bridge_contract_abi().await);
     let eth_contract_address = std::sync::Arc::new(eth_addr(ETH_CONTRACT_PROXY_ADDRESS));
 
@@ -110,8 +113,10 @@ async fn main_integration_test() {
     check_unlock_event(stream).await;
 }
 
-async fn wait_correct_last_block_number(storage: std::sync::Arc<std::sync::Mutex<Storage>>,
-                                  redis: SafeAsyncRedisWrapper) {
+async fn wait_correct_last_block_number(
+    storage: std::sync::Arc<std::sync::Mutex<Storage>>,
+    redis: SafeAsyncRedisWrapper,
+) {
     let mut connection = redis.lock().clone().into_inner();
     let tx_hashes_queue = connection.get_tx_hashes().await.unwrap();
     let tx_hash = tx_hashes_queue[0].clone();
@@ -165,7 +170,7 @@ fn get_valid_till() -> u64 {
 }
 
 fn get_eth_rpc_url() -> Url {
-    let api_key_string = env::var("ETH_GOERLI_INFURA_API_KEY").unwrap();
+    let api_key_string = env::var("FAST_BRIDGE_INFURA_PROJECT_ID").unwrap();
     url::Url::parse(&format!("https://goerli.infura.io/v3/{}", &api_key_string)).unwrap()
 }
 
@@ -176,11 +181,9 @@ fn get_rb_index_path_str() -> String {
     rb_index_path.to_str().unwrap().to_string()
 }
 
-fn get_settings() -> fast_bridge_service_lib::config::Settings {
+fn get_settings() -> Settings {
     let config_path = "config.json.example";
-    let mut settings =
-        fast_bridge_service_lib::config::Settings::init(config_path.to_string()).unwrap();
-    settings.eth.rpc_url = get_eth_rpc_url();
+    let mut settings = Settings::init(config_path.to_string()).unwrap();
     settings.eth.rainbow_bridge_index_js_path = get_rb_index_path_str();
     settings.near_tokens_whitelist.mapping.insert(
         near_addr(NEAR_TOKEN_ADDRESS),
@@ -198,15 +201,10 @@ fn get_settings() -> fast_bridge_service_lib::config::Settings {
     settings
 }
 
-pub fn get_relay_eth_key() -> secp256k1::SecretKey {
-    secp256k1::SecretKey::from_str(&(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64])
-        .unwrap()
-}
-
 pub async fn get_eth_erc20_fast_bridge_contract_abi() -> String {
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
     let eth_bridge_impl_address = eth_addr(ETH_CONTRACT_IMPLEMENTATION_ADDRESS);
-    let etherscan_api_key = env::var("ETHERSCAN_API_KEY").unwrap();
+    let etherscan_api_key = env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap();
     get_contract_abi(
         etherscan_endpoint_url,
         eth_bridge_impl_address,
@@ -362,7 +360,11 @@ async fn get_finality_block_height() -> u64 {
 }
 
 async fn detect_new_near_event(redis: SafeAsyncRedisWrapper, init_block: u64, wait_time_sec: u64) {
-    let contract_address= near_lake_framework::near_indexer_primitives::types::AccountId::from_str(NEAR_CONTRACT_ADDRESS).unwrap();
+    let contract_address =
+        near_lake_framework::near_indexer_primitives::types::AccountId::from_str(
+            NEAR_CONTRACT_ADDRESS,
+        )
+        .unwrap();
 
     let worker = fast_bridge_service_lib::near::run_worker(
         contract_address,
@@ -395,7 +397,10 @@ async fn process_events(
     let timeout_duration = std::time::Duration::from_secs(120);
     let _result = timeout(timeout_duration, worker).await;
 
-    let pending_transactions: Vec<String> = redis.lock().clone().get_mut()
+    let pending_transactions: Vec<String> = redis
+        .lock()
+        .clone()
+        .get_mut()
         .connection
         .hkeys(PENDING_TRANSACTIONS)
         .await
@@ -432,13 +437,12 @@ async fn handle_pending_transaction(
 }
 
 async fn mint_eth_tokens() {
-    let api_key_string = env::var("ETH_GOERLI_INFURA_API_KEY").unwrap();
-    let eth1_endpoint = format!("https://goerli.infura.io/v3/{}", &api_key_string);
+    let eth1_endpoint = get_eth_rpc_url().to_string();
 
     let token = eth_addr(ETH_TOKEN_ADDRESS);
 
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
-    let etherscan_api_key = env::var("ETHERSCAN_API_KEY").unwrap();
+    let etherscan_api_key = env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap();
     let contract_abi = get_contract_abi(etherscan_endpoint_url, token, &etherscan_api_key)
         .await
         .unwrap();
@@ -446,24 +450,35 @@ async fn mint_eth_tokens() {
     let method_name = "mint";
     let amount = web3::types::U256::from(TRANSFER_TOKEN_AMOUNT + FEE_TOKEN_AMOUNT);
 
-    let priv_key = secp256k1::SecretKey::from_str(
-        &(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64],
-    )
-    .unwrap();
+    let priv_key =
+        secp256k1::SecretKey::from_str(&(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64])
+            .unwrap();
 
-    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, amount, &priv_key, true, None, None, None).await.unwrap();
+    let res = eth_client::methods::change(
+        &eth1_endpoint,
+        token,
+        contract_abi.as_bytes(),
+        &method_name,
+        amount,
+        &priv_key,
+        true,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     println!("transaction hash: {:?}", res);
 }
 
 async fn increase_allowance() {
-    let api_key_string = env::var("ETH_GOERLI_INFURA_API_KEY").unwrap();
-    let eth1_endpoint = format!("https://goerli.infura.io/v3/{}", &api_key_string);
+    let eth1_endpoint = get_eth_rpc_url().to_string();
 
     let token = eth_addr(ETH_TOKEN_ADDRESS);
 
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
-    let etherscan_api_key = env::var("ETHERSCAN_API_KEY").unwrap();
+    let etherscan_api_key = env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap();
     let contract_abi = get_contract_abi(etherscan_endpoint_url, token, &etherscan_api_key)
         .await
         .unwrap();
@@ -473,12 +488,24 @@ async fn increase_allowance() {
     let amount = web3::types::U256::from(TRANSFER_TOKEN_AMOUNT + FEE_TOKEN_AMOUNT);
     let method_args = (spender, amount);
 
-    let priv_key = secp256k1::SecretKey::from_str(
-        &(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64],
-    )
-    .unwrap();
+    let priv_key =
+        secp256k1::SecretKey::from_str(&(env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap())[..64])
+            .unwrap();
 
-    let res = eth_client::methods::change(&eth1_endpoint, token, contract_abi.as_bytes(), &method_name, method_args, &priv_key, true, None, None, None).await.unwrap();
+    let res = eth_client::methods::change(
+        &eth1_endpoint,
+        token,
+        contract_abi.as_bytes(),
+        &method_name,
+        method_args,
+        &priv_key,
+        true,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     println!("transaction hash: {:?}", res);
 }

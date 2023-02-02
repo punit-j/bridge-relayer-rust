@@ -80,4 +80,7 @@ pub enum CustomError {
 
     #[error("The profit: {0}, is lower than the min allowed profit: {1}")]
     TxNotProfitable(f64, f64),
+
+    #[error("Not enough time before user unlock")]
+    NotEnoughTimeBeforeUnlock,
 }

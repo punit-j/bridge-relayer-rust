@@ -23,8 +23,8 @@ You can copy this config and field the correct values for you case. For the most
 fields it is strait forward. 
 
 Some comments about the config: 
-1. The value such as `${FAST_BRIDGE_ETHERSCAN_API_KEY}`
-should be change into the real value. The environment variable doesn't work here.  
+1. For the values such as `${FAST_BRIDGE_ETHERSCAN_API_KEY}` you should setup environment variable, or
+add the correspondent value into `.env` file or just change it into the real values in the config.
 2. For `"rainbow_bridge_index_js_path"` and `"near_credentials_path"`
 you should use the absolut path without `~`.
 
@@ -45,11 +45,11 @@ get some Goerli Eth to this account. Tokens will be minted automatically.
 The private key for the NEAR test account should be stored in `~/.near-credentials/testnet/fastbridge.testnet.json`
 
 ### Environment variables
-Also for running tests the following environment variables should be set up
-* `ETH_GOERLI_INFURA_API_KEY` -- API KEY in Infura for eth url rpc
+Also for running tests the following environment variables(or added into `.env` file) should be set up
+* `FAST_BRIDGE_INFURA_PROJECT_ID` -- API KEY in Infura for eth url rpc
 * `PATH_TO_RAINBOW_BRIDGE_REP` -- local path to cloned rainbow bridge  repo. For example `/home/olga/Aurora/rainbow-bridge`
 * `FAST_BRIDGE_ETH_PRIVATE_KEY` -- private key for you testing ETH account in goerli network
-* `ETHERSCAN_API_KEY` -- API key in EtherSacan https://etherscan.io/apis
+* `FAST_BRIDGE_ETHERSCAN_API_KEY` -- API key in EtherSacan https://etherscan.io/apis
 
 In the beginning of the `tests/integration_tests.rs` file you 
 can find a few consts with the contract addresses you can 

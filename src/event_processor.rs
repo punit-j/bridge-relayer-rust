@@ -1,12 +1,12 @@
 use crate::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
 use crate::config::Settings;
-use crate::logs::EVENT_PROCESSOR_TARGET;
 use crate::errors::CustomError;
+use crate::logs::EVENT_PROCESSOR_TARGET;
+use crate::utils::get_tx_count;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
 use uint::rustc_hex::ToHex;
 use web3::signing::*;
-use crate::utils::get_tx_count;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn process_transfer_event(
@@ -22,7 +22,8 @@ pub async fn process_transfer_event(
 ) -> Result<(), CustomError> {
     let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
     let profit_thershold = settings.lock().unwrap().profit_thershold;
-    let mut transaction_count = get_tx_count(redis.clone(), rpc_url.clone(), relay_eth_key.address()).await?;
+    let mut transaction_count =
+        get_tx_count(redis.clone(), rpc_url.clone(), relay_eth_key.address()).await?;
 
     let mut redis = redis.lock().clone().get_mut().clone();
     tracing::info!(
@@ -91,20 +92,18 @@ pub mod tests {
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
         get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
     };
+    use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage};
     use near_client::test_utils::{get_near_signer, get_near_token};
     use near_sdk::json_types::U128;
     use rand::Rng;
     use redis::AsyncCommands;
-    use fast_bridge_common::{
-        EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
-    };
     use std::time::Duration;
 
     #[tokio::test]
     async fn smoke_process_transfer_event_test() {
         init_logger();
 
-        let nonce = U128::from(rand::thread_rng().gen_range(0, 1000000000));
+        let nonce = U128::from(rand::thread_rng().gen_range(0..1000000000));
         let valid_till = 0;
         let transfer = TransferDataEthereum {
             token_near: get_near_token(),
@@ -117,8 +116,7 @@ pub mod tests {
         };
         let recipient = EthAddress::from(get_recipient());
 
-        let mut settings = get_settings();
-        settings.eth.rpc_url = get_eth_rpc_url();
+        let settings = get_settings();
         let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
         let redis = AsyncRedisWrapper::connect(settings.clone()).await;
 

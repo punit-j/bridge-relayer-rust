@@ -1,7 +1,7 @@
 use crate::config::{NearTokenInfo, Settings};
 use crate::logs::EVENT_PROCESSOR_TARGET;
-use near_sdk::AccountId;
 use fast_bridge_common::TransferMessage;
+use near_sdk::AccountId;
 use std::sync::{Arc, Mutex};
 use web3::types::{H160, U256};
 
@@ -18,6 +18,10 @@ pub async fn execute_transfer(
 ) -> Result<web3::types::H256, crate::errors::CustomError> {
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
+
+    check_time_before_unlock(
+        &transfer_message,
+        settings.lock().unwrap().min_time_before_unlock_in_sec)?;
 
     let estimated_gas = eth_client::methods::estimate_gas(
         eth1_rpc_url,
@@ -90,7 +94,7 @@ pub async fn execute_transfer(
         true,
         Some(transaction_count),
         Some(estimated_gas),
-        settings.lock().unwrap().max_priority_fee_per_gas
+        settings.lock().unwrap().max_priority_fee_per_gas,
     )
     .await;
 
@@ -112,6 +116,31 @@ fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u1
             .to_integer()?
             .to_u128()?,
     )
+}
+
+fn check_time_before_unlock(
+    transfer_message: &TransferMessage,
+    min_time_before_unlock: Option<u64>,
+) -> Result<(), crate::errors::CustomError> {
+    match min_time_before_unlock {
+        Some(min_time_before_unlock) => {
+            let transaction_unlock_time_ns = transfer_message.valid_till as u128;
+            let min_time_before_unlock_ns =
+                std::time::Duration::from_secs(min_time_before_unlock).as_nanos();
+
+            let current_time_ns = std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+
+            if current_time_ns + min_time_before_unlock_ns > transaction_unlock_time_ns {
+                return Err(crate::errors::CustomError::NotEnoughTimeBeforeUnlock);
+            }
+
+            Ok(())
+        }
+        None => Ok(()),
+    }
 }
 
 async fn estimate_profit(
@@ -215,22 +244,20 @@ fn get_near_token_info(
 
 #[cfg(test)]
 pub mod tests {
+    use crate::async_redis_wrapper::AsyncRedisWrapper;
     use crate::logs::init_logger;
     use crate::test_utils::get_settings;
-    use crate::utils::get_tx_count;
     use crate::transfer::execute_transfer;
+    use crate::utils::get_tx_count;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
         get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
     };
+    use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage};
     use near_client::test_utils::{get_near_signer, get_near_token};
     use near_sdk::json_types::U128;
     use rand::Rng;
-    use fast_bridge_common::{
-        EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage,
-    };
     use web3::signing::Key;
-    use crate::async_redis_wrapper::AsyncRedisWrapper;
 
     #[tokio::test]
     async fn smoke_execute_transfer_test() {
@@ -245,7 +272,7 @@ pub mod tests {
         let redis = AsyncRedisWrapper::connect(settings.clone()).await;
         let arc_redis = redis.new_safe();
 
-        let current_nonce: u128 = rand::thread_rng().gen_range(0, 1000000000);
+        let current_nonce: u128 = rand::thread_rng().gen_range(0..1000000000);
         let near_relay_account_id = get_near_signer().account_id.to_string();
 
         let transfer_message = fast_bridge_common::Event::FastBridgeInitTransferEvent {
@@ -276,7 +303,9 @@ pub mod tests {
             Some(profit_threshold),
             settings,
             near_relay_account_id,
-            get_tx_count(arc_redis, eth1_rpc_url.clone(), relay_key_on_eth.address()).await.unwrap(),
+            get_tx_count(arc_redis, eth1_rpc_url.clone(), relay_key_on_eth.address())
+                .await
+                .unwrap(),
         )
         .await
         .unwrap();

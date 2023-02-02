@@ -43,6 +43,29 @@ struct Args {
     near_lake_init_block: Option<u64>,
 }
 
+async fn check_system_time(near_rpc_url: url::Url) {
+    const MAX_TIMESTAMP_DIFF_SEC: u64 = 60;
+
+    let near_timestamp_ns = near_client::methods::get_final_block_timestamp(near_rpc_url)
+        .await
+        .expect("Error on getting NEAR block timestamp");
+    let near_timestamp_sec = std::time::Duration::from_nanos(near_timestamp_ns).as_secs();
+
+    let sys_timestamp_sec = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    if sys_timestamp_sec + MAX_TIMESTAMP_DIFF_SEC < near_timestamp_sec
+        || near_timestamp_sec + MAX_TIMESTAMP_DIFF_SEC < sys_timestamp_sec
+    {
+        panic!(
+            "Incorrect UNIX timestamp. NEAR timestamp = {}, sys timestamp = {}",
+            near_timestamp_sec, sys_timestamp_sec
+        );
+    }
+}
+
 #[allow(unused_must_use)]
 #[tokio::main]
 async fn main() {
@@ -54,6 +77,8 @@ async fn main() {
         Ok(settings) => std::sync::Arc::new(std::sync::Mutex::new(settings)),
         Err(msg) => panic!("{}", msg),
     };
+
+    check_system_time(settings.lock().unwrap().near.rpc_url.clone()).await;
 
     let async_redis = async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone())
         .await
@@ -167,13 +192,19 @@ async fn main() {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::last_block;
+    use std::str::FromStr;
+    use crate::{check_system_time, last_block};
 
     const APP_USER_AGENT: &str = "fast-bridge-service/0.1.0";
     const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";
     const ETH_RPC_ENDPOINT_URL: &str =
         "https://goerli.infura.io/v3/ba5fd6c86e5c4e8c9b36f3f5b4013f7a";
     const ETHERSCAN_RPC_ENDPOINT_URL: &str = "https://api-goerli.etherscan.io";
+
+    #[tokio::test]
+    async fn check_sys_time_test() {
+        check_system_time(url::Url::from_str(NEAR_RPC_ENDPOINT_URL).unwrap()).await;
+    }
 
     #[tokio::test]
     async fn near_rpc_status() {

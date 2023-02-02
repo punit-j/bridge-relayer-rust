@@ -48,6 +48,7 @@ tracing = "0.1.37"
 tracing-subscriber = { version="0.3.15", features = ["env-filter"] }
 rug = "1.19"
 parking_lot = "0.12.1"
+dotenv = "0.15.0"
 
 [dev-dependencies]
 uuid = "*"

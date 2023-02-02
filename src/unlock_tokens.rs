@@ -162,7 +162,10 @@ pub async fn unlock_tokens_worker(
             let unlock_tokens_worker_settings =
                 settings.lock().unwrap().clone().unlock_tokens_worker;
 
-            tracing::info!("unlock_tokens_worker: sleep for {} secs", unlock_tokens_worker_settings.request_interval_secs);
+            tracing::info!(
+                "unlock_tokens_worker: sleep for {} secs",
+                unlock_tokens_worker_settings.request_interval_secs
+            );
             let mut interval =
                 crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
                     .await;

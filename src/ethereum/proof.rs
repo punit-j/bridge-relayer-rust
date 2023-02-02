@@ -21,8 +21,8 @@
 //! println!("res {:?}", res);
 //! ```
 
-use serde_json::json;
 use fast_bridge_common;
+use serde_json::json;
 use std::process;
 use web3::{
     api,
@@ -66,8 +66,8 @@ pub async fn get_proof<'a, 'b, T: web3::Transport>(
         .get("proof_locker")
         .ok_or(Error::Other("JSON doesnt contain the proof_locker"))?;
 
-    let res = serde_json::from_value::<fast_bridge_common::Proof>(json.clone())
-        .map_err(Error::Json)?;
+    let res =
+        serde_json::from_value::<fast_bridge_common::Proof>(json.clone()).map_err(Error::Json)?;
     Ok(res)
 }
 

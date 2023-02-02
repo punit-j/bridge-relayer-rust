@@ -1,8 +1,8 @@
+use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
 use crate::config::NearNetwork;
 use crate::logs::NEAR_EVENTS_TRACER_TARGET;
 use near_lake_framework::near_indexer_primitives::types::AccountId;
 use near_lake_framework::LakeConfigBuilder;
-use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
@@ -131,10 +131,10 @@ pub mod tests {
     use crate::config::NearNetwork;
     use crate::near::{fix_json, get_event, run_worker};
     use assert_json_diff::assert_json_eq;
+    use fast_bridge_common;
     use near_sdk::json_types::U128;
     use near_sdk::AccountId;
     use parking_lot::ReentrantMutex;
-    use fast_bridge_common;
 
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, EVENTS};
     use crate::logs::init_logger;
@@ -179,8 +179,7 @@ pub mod tests {
 
         let settings = get_settings();
         let contract_address =
-            crate::near::AccountId::try_from(NEAR_CONTRACT_ADDRESS.to_string())
-                .unwrap();
+            crate::near::AccountId::try_from(NEAR_CONTRACT_ADDRESS.to_string()).unwrap();
         let init_block = 113576799;
         let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
 
