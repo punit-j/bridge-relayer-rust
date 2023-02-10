@@ -1,4 +1,4 @@
-use crate::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
+use crate::async_redis_wrapper::{self, AsyncRedisWrapper};
 use crate::config::Settings;
 use crate::errors::CustomError;
 use crate::logs::EVENT_PROCESSOR_TARGET;
@@ -13,19 +13,17 @@ pub async fn process_transfer_event(
     nonce: near_sdk::json_types::U128,
     sender_id: AccountId,
     transfer_message: fast_bridge_common::TransferMessage,
-    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
-    redis: SafeAsyncRedisWrapper,
+    settings: &Settings,
+    redis: &mut AsyncRedisWrapper,
     eth_erc20_fast_bridge_proxy_contract_address: web3::types::Address,
     relay_eth_key: std::sync::Arc<secp256k1::SecretKey>,
     eth_erc20_fast_bridge_contract_abi: std::sync::Arc<String>,
     near_relay_account_id: String,
 ) -> Result<(), CustomError> {
-    let rpc_url = settings.lock().unwrap().eth.rpc_url.clone();
-    let profit_thershold = settings.lock().unwrap().profit_thershold;
+    let rpc_url = settings.eth.rpc_url.clone();
     let mut transaction_count =
-        get_tx_count(redis.clone(), rpc_url.clone(), relay_eth_key.address()).await?;
+        get_tx_count(redis, rpc_url.clone(), relay_eth_key.address()).await?;
 
-    let mut redis = redis.lock().clone().get_mut().clone();
     tracing::info!(
         target: EVENT_PROCESSOR_TARGET,
         "Execute transfer on eth with nonce {:?}",
@@ -40,10 +38,10 @@ pub async fn process_transfer_event(
             transfer_message,
         },
         eth_erc20_fast_bridge_contract_abi.as_bytes(),
-        rpc_url.as_str(),
+        rpc_url,
         eth_erc20_fast_bridge_proxy_contract_address,
-        profit_thershold,
-        settings.clone(),
+        settings.profit_thershold,
+        &settings,
         near_relay_account_id,
         transaction_count,
     )
@@ -90,7 +88,7 @@ pub mod tests {
     use crate::test_utils::get_settings;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
-        get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
+        get_eth_token, get_recipient, get_relay_eth_key,
     };
     use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear, TransferMessage};
     use near_client::test_utils::{get_near_signer, get_near_token};
@@ -117,10 +115,8 @@ pub mod tests {
         let recipient = EthAddress::from(get_recipient());
 
         let settings = get_settings();
-        let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
-        let redis = AsyncRedisWrapper::connect(settings.clone()).await;
-
-        let arc_redis = redis.new_safe();
+        let settings = std::sync::Arc::new(tokio::sync::Mutex::new(settings));
+        let mut redis = AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
 
         let relay_eth_key = std::sync::Arc::new(get_relay_eth_key());
         let eth_erc20_fast_bridge_contract_abi =
@@ -128,14 +124,8 @@ pub mod tests {
 
         let near_account = get_near_signer().account_id.to_string();
 
-        let pending_transactions: Vec<String> = arc_redis
-            .lock()
-            .clone()
-            .get_mut()
-            .connection
-            .hkeys(PENDING_TRANSACTIONS)
-            .await
-            .unwrap();
+        let pending_transactions: Vec<String> =
+            redis.connection.hkeys(PENDING_TRANSACTIONS).await.unwrap();
 
         let _res = process_transfer_event(
             nonce,
@@ -147,8 +137,8 @@ pub mod tests {
                 recipient,
                 valid_till_block_height: None,
             },
-            settings.clone(),
-            arc_redis.clone(),
+            &settings.lock().await.clone(),
+            &mut redis,
             get_eth_erc20_fast_bridge_proxy_contract_address(),
             relay_eth_key.clone(),
             eth_erc20_fast_bridge_contract_abi.clone(),
@@ -158,14 +148,8 @@ pub mod tests {
 
         tokio::time::sleep(Duration::from_secs(60)).await;
 
-        let new_pending_transactions: Vec<String> = arc_redis
-            .lock()
-            .clone()
-            .get_mut()
-            .connection
-            .hkeys(PENDING_TRANSACTIONS)
-            .await
-            .unwrap();
+        let new_pending_transactions: Vec<String> =
+            redis.connection.hkeys(PENDING_TRANSACTIONS).await.unwrap();
         assert_eq!(
             pending_transactions.len() + 1,
             new_pending_transactions.len()

@@ -39,7 +39,6 @@ impl From<Decimals> for usize {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NearTokensWhitelist {
     pub mapping: std::collections::HashMap<near_sdk::AccountId, NearTokenInfo>,
@@ -125,6 +124,8 @@ pub struct RedisSettings {
     pub url: Url,
 }
 
+pub type SafeSettings = std::sync::Arc<tokio::sync::Mutex<Settings>>;
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
     pub eth: EthSettings,
@@ -140,6 +141,12 @@ pub struct Settings {
     pub last_block_number_worker: LastBlockNumberWorkerSettings,
     pub unlock_tokens_worker: UnlockTokensWorkerSettings,
     pub near_tokens_whitelist: NearTokensWhitelist,
+    #[serde(default = "default_rpc_timeout_secs")]
+    pub rpc_timeout_secs: u64,
+}
+
+pub fn default_rpc_timeout_secs() -> u64 {
+    30
 }
 
 impl Settings {

@@ -43,11 +43,12 @@
 pub mod proof;
 pub mod transactions;
 
+use eth_client::methods::new_eth_rpc_client;
 use web3::{api::Namespace, contract::Contract, transports::Http};
 
 #[allow(dead_code)]
 pub struct RainbowBridgeEthereumClient<'a> {
-    api_url: &'a str,
+    api_url: http_types::Url,
     rainbow_bridge_index: &'a str,
     client: web3::api::Eth<Http>,
     contract: Contract<Http>,
@@ -56,13 +57,18 @@ pub struct RainbowBridgeEthereumClient<'a> {
 
 impl<'a> RainbowBridgeEthereumClient<'a> {
     pub fn new(
-        eth_endpoint: &'a str,
+        eth_endpoint: http_types::Url,
         rainbow_bridge_index: &'a str,
         contract_addr: web3::ethabi::Address,
         abi_json: &[u8],
         key: web3::signing::SecretKeyRef<'a>,
+        rpc_timeout_secs: u64,
     ) -> Result<Self, std::string::String> {
-        let transport = web3::transports::Http::new(eth_endpoint).unwrap();
+        let transport = web3::transports::Http::with_client(
+            new_eth_rpc_client(Some(std::time::Duration::from_secs(rpc_timeout_secs)))
+                .map_err(|e| e.to_string())?,
+            eth_endpoint.clone(),
+        );
         let client = web3::api::Eth::new(transport);
 
         let contract = web3::contract::Contract::from_json(client.clone(), contract_addr, abi_json)
@@ -110,7 +116,7 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
         tx_hash: &'b web3::types::H256,
     ) -> Result<fast_bridge_common::Proof, proof::Error<'c>> {
         proof::get_proof(
-            self.api_url,
+            self.api_url.as_str(),
             &self.client,
             self.rainbow_bridge_index,
             tx_hash,
@@ -121,19 +127,20 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::ethereum::transactions::TransactionStatus;
     use crate::ethereum::RainbowBridgeEthereumClient;
     use crate::test_utils::get_rb_index_path_str;
+    use crate::{config::default_rpc_timeout_secs, ethereum::transactions::TransactionStatus};
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
         get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
     };
+    use http_types::Url;
     use secp256k1::SecretKey;
     use web3::types::{H160, U64};
 
-    async fn get_params() -> (String, String, H160, String, SecretKey) {
+    async fn get_params() -> (Url, String, H160, String, SecretKey) {
         (
-            get_eth_rpc_url().to_string(),
+            get_eth_rpc_url(),
             get_rb_index_path_str(),
             get_eth_erc20_fast_bridge_proxy_contract_address(),
             get_eth_erc20_fast_bridge_contract_abi().await,
@@ -146,11 +153,12 @@ pub mod tests {
         let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
             get_params().await;
         let _eth = RainbowBridgeEthereumClient::new(
-            &eth1_endpoint,
+            eth1_endpoint,
             &rb_index_path_str,
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             web3::signing::SecretKeyRef::from(&priv_key),
+            default_rpc_timeout_secs(),
         )
         .unwrap();
     }
@@ -160,11 +168,12 @@ pub mod tests {
         let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
             get_params().await;
         let eth = RainbowBridgeEthereumClient::new(
-            &eth1_endpoint,
+            eth1_endpoint,
             &rb_index_path_str,
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             web3::signing::SecretKeyRef::from(&priv_key),
+            default_rpc_timeout_secs(),
         )
         .unwrap();
 
@@ -182,11 +191,12 @@ pub mod tests {
         let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
             get_params().await;
         let eth = RainbowBridgeEthereumClient::new(
-            &eth1_endpoint,
+            eth1_endpoint,
             &rb_index_path_str,
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             web3::signing::SecretKeyRef::from(&priv_key),
+            default_rpc_timeout_secs(),
         )
         .unwrap();
 
@@ -204,11 +214,12 @@ pub mod tests {
         let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
             get_params().await;
         let eth = RainbowBridgeEthereumClient::new(
-            &eth1_endpoint,
+            eth1_endpoint,
             &rb_index_path_str,
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             web3::signing::SecretKeyRef::from(&priv_key),
+            crate::config::default_rpc_timeout_secs(),
         )
         .unwrap();
 

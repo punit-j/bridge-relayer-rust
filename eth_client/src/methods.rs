@@ -1,15 +1,31 @@
-#![allow(unused_imports)]
-use std::str::FromStr;
-use web3::types::{BlockId, U256};
-
 const EIP_1559_TRANSACTION_TYPE: u64 = 2;
 
+pub fn new_eth_rpc_client(timeout: Option<std::time::Duration>) -> web3::Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder();
+    builder = builder.user_agent(reqwest::header::HeaderValue::from_static("web3.rs"));
+
+    if let Some(timeout) = timeout {
+        builder = builder.timeout(timeout).connect_timeout(timeout);
+    }
+
+    Ok(builder.build().map_err(|err| {
+        web3::Error::Transport(web3::error::TransportError::Message(format!(
+            "failed to build client: {}",
+            err
+        )))
+    })?)
+}
+
 pub fn construct_contract_interface(
-    eth_endpoint: &str,
+    eth_endpoint: reqwest::Url,
     contract_addr: web3::types::Address,
     contract_abi: &[u8],
+    rpc_timeout_secs: u64,
 ) -> web3::contract::Result<web3::contract::Contract<web3::transports::Http>> {
-    let transport = web3::transports::Http::new(eth_endpoint)?;
+    let transport = web3::transports::Http::with_client(
+        new_eth_rpc_client(Some(std::time::Duration::from_secs(rpc_timeout_secs)))?,
+        eth_endpoint,
+    );
     let client = web3::Web3::new(transport);
     Ok(web3::contract::Contract::from_json(
         client.eth(),
@@ -51,13 +67,21 @@ pub async fn get_contract_abi(
 }
 
 struct FeeData {
+    #[allow(dead_code)]
     base_fee_per_gas: web3::types::U256,
     max_priority_fee_per_gas: web3::types::U256,
     max_fee_per_gas: web3::types::U256,
 }
 
-async fn get_fee_data(server_address: &str, max_priority_fee_per_gas: Option<web3::types::U256>) -> web3::contract::Result<FeeData> {
-    let transport = web3::transports::Http::new(server_address)?;
+async fn get_fee_data(
+    server_address: reqwest::Url,
+    max_priority_fee_per_gas: Option<web3::types::U256>,
+    rpc_timeout_secs: u64,
+) -> web3::contract::Result<FeeData> {
+    let transport = web3::transports::Http::with_client(
+        new_eth_rpc_client(Some(std::time::Duration::from_secs(rpc_timeout_secs)))?,
+        server_address,
+    );
     let client = web3::Web3::new(transport);
 
     let last_block = client
@@ -71,7 +95,8 @@ async fn get_fee_data(server_address: &str, max_priority_fee_per_gas: Option<web
     let base_fee_per_gas = last_block
         .base_fee_per_gas
         .ok_or("Failed to get `base_fee_per_gas`".to_string())?;
-    let max_priority_fee_per_gas: web3::types::U256 = max_priority_fee_per_gas.unwrap_or(1500000000.into());
+    let max_priority_fee_per_gas: web3::types::U256 =
+        max_priority_fee_per_gas.unwrap_or(1500000000.into());
     let max_fee_per_gas = base_fee_per_gas
         .checked_mul(2.into())
         .ok_or("Failed to calculate `max_fee_per_gas`".to_string())?
@@ -98,7 +123,7 @@ pub async fn get_transaction_count(
 }
 
 pub async fn change(
-    server_addr: &str,
+    server_addr: reqwest::Url,
     contract_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
@@ -107,20 +132,27 @@ pub async fn change(
     use_eip_1559: bool,
     transaction_count: Option<web3::types::U256>,
     gas: Option<web3::types::U256>,
-    max_priority_fee_per_gas: Option<web3::types::U256>
+    max_priority_fee_per_gas: Option<web3::types::U256>,
+    rpc_timeout_secs: u64,
 ) -> web3::contract::Result<web3::types::H256> {
     let mut options = web3::contract::Options::default();
     options.nonce = transaction_count;
 
     if use_eip_1559 {
-        let fee_data = get_fee_data(server_addr, max_priority_fee_per_gas).await?;
+        let fee_data = get_fee_data(
+            server_addr.clone(),
+            max_priority_fee_per_gas,
+            rpc_timeout_secs,
+        )
+        .await?;
         options.max_fee_per_gas = Some(fee_data.max_fee_per_gas);
         options.max_priority_fee_per_gas = Some(fee_data.max_priority_fee_per_gas);
         options.transaction_type = Some(EIP_1559_TRANSACTION_TYPE.into());
         options.gas = gas;
     }
 
-    let abi = construct_contract_interface(server_addr, contract_addr, contract_abi)?;
+    let abi =
+        construct_contract_interface(server_addr, contract_addr, contract_abi, rpc_timeout_secs)?;
     Ok(abi.signed_call(method_name, args, options, key).await?)
 }
 
@@ -131,14 +163,20 @@ pub async fn gas_price_wei(server_addr: &str) -> web3::contract::Result<web3::ty
 }
 
 pub async fn estimate_gas(
-    eth_endpoint: &str,
+    eth_endpoint: reqwest::Url,
     signer_eth_addr: web3::types::Address,
     contract_eth_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
+    rpc_timeout_secs: u64,
 ) -> web3::contract::Result<web3::types::U256> {
-    let abi = construct_contract_interface(eth_endpoint, contract_eth_addr, contract_abi)?;
+    let abi = construct_contract_interface(
+        eth_endpoint,
+        contract_eth_addr,
+        contract_abi,
+        rpc_timeout_secs,
+    )?;
     abi.estimate_gas(
         method_name,
         args,
@@ -314,7 +352,7 @@ pub mod tests {
             true,
             None,
             None,
-            None
+            None,
         )
         .await
         .unwrap();
@@ -344,7 +382,7 @@ pub mod tests {
             true,
             None,
             None,
-            None
+            None,
         )
         .await
         .unwrap();

@@ -1,4 +1,6 @@
-use crate::{async_redis_wrapper::SafeAsyncRedisWrapper, config::Settings};
+use crate::{
+    async_redis_wrapper::AsyncRedisWrapper, config::SafeSettings, last_block::SafeStorage,
+};
 use near_primitives::views::ExecutionStatusView::Failure;
 
 async fn unlock_tokens(
@@ -53,22 +55,17 @@ async fn transactions_traversal(
     gas: u64,
     unlock_tokens_worker_settings: crate::config::UnlockTokensWorkerSettings,
     tx_hashes_queue: Vec<String>,
-    storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
-    redis: SafeAsyncRedisWrapper,
+    storage: SafeStorage,
+    mut redis: AsyncRedisWrapper,
 ) {
-    let mut connection = redis.lock().clone().get_mut().clone();
     for tx_hash in tx_hashes_queue {
         tracing::info!(
             "Start processing transaction for lp unlock (tx_hash={})",
             tx_hash
         );
 
-        let eth_last_block_number_on_near = storage
-            .lock()
-            .unwrap()
-            .clone()
-            .eth_last_block_number_on_near;
-        let tx_data = connection.get_tx_data(tx_hash.clone()).await;
+        let eth_last_block_number_on_near = storage.lock().await.eth_last_block_number_on_near;
+        let tx_data = redis.get_tx_data(tx_hash.clone()).await;
         match tx_data {
             Ok(data) => {
                 let unlock_tokens_execution_condition = data.block
@@ -103,7 +100,7 @@ async fn transactions_traversal(
                                     tx_execution_status,
                                     near_tx_hash
                                 );
-                                unstore_tx(&mut connection, &tx_hash).await;
+                                unstore_tx(&mut redis, &tx_hash).await;
                             }
                             near_primitives::views::FinalExecutionStatus::SuccessValue(_) => {
                                 tracing::info!(
@@ -111,7 +108,7 @@ async fn transactions_traversal(
                                     data.nonce,
                                     near_tx_hash
                                 );
-                                unstore_tx(&mut connection, &tx_hash).await;
+                                unstore_tx(&mut redis, &tx_hash).await;
                             }
                         },
                         Err(err) => tracing::error!("{}", err),
@@ -152,50 +149,47 @@ async fn unstore_tx(
 pub async fn unlock_tokens_worker(
     account: near_crypto::InMemorySigner,
     gas: u64,
-    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
-    storage: std::sync::Arc<std::sync::Mutex<crate::last_block::Storage>>,
-    redis: SafeAsyncRedisWrapper,
+    settings: SafeSettings,
+    storage: SafeStorage,
+    mut redis: AsyncRedisWrapper,
 ) {
-    tokio::spawn(async move {
-        let mut connection = redis.lock().clone().get_mut().clone();
-        loop {
-            let unlock_tokens_worker_settings =
-                settings.lock().unwrap().clone().unlock_tokens_worker;
+    loop {
+        let unlock_tokens_worker_settings = settings.lock().await.unlock_tokens_worker.clone();
+        tracing::trace!(
+            "unlock_tokens_worker: sleep for {} secs",
+            unlock_tokens_worker_settings.request_interval_secs
+        );
 
-            tracing::info!(
-                "unlock_tokens_worker: sleep for {} secs",
-                unlock_tokens_worker_settings.request_interval_secs
-            );
-            let mut interval =
-                crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
-                    .await;
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-            interval.tick().await;
-            let tx_hashes_queue = connection.get_tx_hashes().await;
-            match tx_hashes_queue {
-                Ok(queue) => {
-                    transactions_traversal(
-                        account.clone(),
-                        gas,
-                        unlock_tokens_worker_settings,
-                        queue,
-                        storage.clone(),
-                        redis.clone(),
-                    )
-                    .await;
-                }
-                Err(error) => tracing::error!(
-                    "{}",
-                    crate::errors::CustomError::FailedGetTxHashesQueue(error)
-                ),
+        let mut interval =
+            crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
+                .await;
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        interval.tick().await;
+        let tx_hashes_queue = redis.get_tx_hashes().await;
+        match tx_hashes_queue {
+            Ok(queue) => {
+                transactions_traversal(
+                    account.clone(),
+                    gas,
+                    unlock_tokens_worker_settings,
+                    queue,
+                    storage.clone(),
+                    redis.clone(),
+                )
+                .await;
             }
+            Err(error) => tracing::error!(
+                "{}",
+                crate::errors::CustomError::FailedGetTxHashesQueue(error)
+            ),
         }
-    });
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use crate::async_redis_wrapper::{AsyncRedisWrapper, TRANSACTIONS};
+    use crate::config::default_rpc_timeout_secs;
     use crate::last_block::Storage;
     use crate::logs::init_logger;
     use crate::test_utils::{get_rb_index_path_str, get_settings, remove_all};
@@ -206,8 +200,6 @@ pub mod tests {
         get_eth_rpc_url, get_relay_eth_key,
     };
     use near_client::test_utils::get_near_signer;
-    use parking_lot::ReentrantMutex;
-    use std::cell::RefCell;
     use std::str::FromStr;
     use std::time::Duration;
 
@@ -218,11 +210,12 @@ pub mod tests {
         let rb_index_path_str = get_rb_index_path_str();
 
         let eth_client = ethereum::RainbowBridgeEthereumClient::new(
-            eth_rpc_url.as_str(),
+            eth_rpc_url,
             &rb_index_path_str,
             get_eth_erc20_fast_bridge_proxy_contract_address(),
             get_eth_erc20_fast_bridge_contract_abi().await.as_bytes(),
             web3::signing::SecretKeyRef::from(&relay_eth_key),
+            default_rpc_timeout_secs(),
         )
         .unwrap();
 
@@ -252,21 +245,19 @@ pub mod tests {
 
         let signer = get_near_signer();
 
-        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
-        let redis = AsyncRedisWrapper::connect(settings.clone()).await;
+        let settings = std::sync::Arc::new(tokio::sync::Mutex::new(get_settings()));
+        let redis = AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
         add_transaction(redis.clone()).await;
 
-        let arc_redis = std::sync::Arc::new(ReentrantMutex::new(RefCell::new(redis)));
-
-        let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));
-        storage.lock().unwrap().eth_last_block_number_on_near = 8249163;
+        let storage = std::sync::Arc::new(tokio::sync::Mutex::new(Storage::new()));
+        storage.lock().await.eth_last_block_number_on_near = 8249163;
 
         let _worker = unlock_tokens_worker(
             signer,
             230_000_000_000_000u64,
             settings.clone(),
             storage.clone(),
-            arc_redis,
+            redis,
         )
         .await;
 

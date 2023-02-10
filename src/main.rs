@@ -74,32 +74,30 @@ async fn main() {
     init_logger();
 
     let settings = match Settings::init(args.config) {
-        Ok(settings) => std::sync::Arc::new(std::sync::Mutex::new(settings)),
+        Ok(settings) => std::sync::Arc::new(tokio::sync::Mutex::new(settings)),
         Err(msg) => panic!("{}", msg),
     };
 
-    check_system_time(settings.lock().unwrap().near.rpc_url.clone()).await;
+    check_system_time(settings.lock().await.near.rpc_url.clone()).await;
 
-    let async_redis = async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone())
-        .await
-        .new_safe();
+    let mut async_redis =
+        async_redis_wrapper::AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
 
-    let storage = std::sync::Arc::new(std::sync::Mutex::new(last_block::Storage::new()));
+    let storage = std::sync::Arc::new(tokio::sync::Mutex::new(last_block::Storage::new()));
 
     // If args.eth_secret is valid then get key from it else from settings
     let eth_keypair = std::sync::Arc::new({
         if let Some(path) = args.eth_secret {
             secp256k1::SecretKey::from_str(path.as_str())
         } else {
-            secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key)
+            secp256k1::SecretKey::from_str(&settings.lock().await.eth.private_key)
         }
         .expect("Unable to get an Eth key")
     });
 
-    let eth_contract_address =
-        std::sync::Arc::new(settings.lock().unwrap().clone().eth.bridge_proxy_address);
+    let eth_contract_address = std::sync::Arc::new(settings.lock().await.eth.bridge_proxy_address);
 
-    let eth_contract_abi_settings = settings.lock().unwrap().clone();
+    let eth_contract_abi_settings = settings.lock().await.clone();
     let eth_contract_abi = std::sync::Arc::new(
         eth_client::methods::get_contract_abi(
             eth_contract_abi_settings
@@ -117,12 +115,12 @@ async fn main() {
         near_client::read_private_key::read_private_key_from_file(path.as_str())
     } else {
         near_client::read_private_key::read_private_key_from_file(
-            settings.lock().unwrap().near.near_credentials_path.as_str(),
+            settings.lock().await.near.near_credentials_path.as_str(),
         )
     }
     .unwrap();
 
-    let near_contract_address = settings.lock().unwrap().near.contract_address.clone();
+    let near_contract_address = settings.lock().await.near.contract_address.clone();
 
     let near_worker = near::run_worker(
         near_contract_address,
@@ -131,19 +129,16 @@ async fn main() {
             if let Some(start_block) = args.near_lake_init_block {
                 start_block
             } else if let Some(start_block) = async_redis
-                .lock()
-                .clone()
-                .get_mut()
                 .option_get::<u64>(near::OPTION_START_BLOCK)
                 .await
                 .unwrap()
             {
                 start_block
             } else {
-                settings.lock().unwrap().near.near_lake_init_block
+                settings.lock().await.near.near_lake_init_block
             }
         },
-        settings.lock().unwrap().clone().near.near_network,
+        settings.lock().await.near.near_network.clone(),
     );
 
     let stream = async_redis_wrapper::subscribe::<String>(
@@ -163,9 +158,9 @@ async fn main() {
     );
 
     let pending_transactions_worker = utils::build_pending_transactions_worker(
-        settings.clone(),
+        settings.lock().await.clone(),
         eth_keypair.clone(),
-        async_redis.lock().clone().get_mut().clone(),
+        async_redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
     );
@@ -178,22 +173,26 @@ async fn main() {
         300_000_000_000_000,
         settings.clone(),
         storage.clone(),
-        async_redis.clone(),
+        async_redis,
     );
 
-    tokio::join!(
-        near_worker,
-        subscriber,
-        pending_transactions_worker,
-        last_block_number_worker,
-        unlock_tokens_worker //,
-    );
+    let tasks = vec![
+        tokio::spawn(last_block_number_worker),
+        tokio::spawn(subscriber),
+        tokio::spawn(pending_transactions_worker),
+        tokio::spawn(unlock_tokens_worker),
+        tokio::spawn(near_worker),
+    ];
+
+    for task in tasks {
+        task.await;
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use std::str::FromStr;
     use crate::{check_system_time, last_block};
+    use std::str::FromStr;
 
     const APP_USER_AGENT: &str = "fast-bridge-service/0.1.0";
     const NEAR_RPC_ENDPOINT_URL: &str = "https://rpc.testnet.near.org";

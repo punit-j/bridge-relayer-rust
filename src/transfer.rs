@@ -2,34 +2,32 @@ use crate::config::{NearTokenInfo, Settings};
 use crate::logs::EVENT_PROCESSOR_TARGET;
 use fast_bridge_common::TransferMessage;
 use near_sdk::AccountId;
-use std::sync::{Arc, Mutex};
 use web3::types::{H160, U256};
 
 pub async fn execute_transfer(
     relay_key_on_eth: impl web3::signing::Key,
     transfer_event: fast_bridge_common::Event,
     eth_erc20_fast_bridge_contract_abi: &[u8],
-    eth1_rpc_url: &str,
+    eth1_rpc_url: reqwest::Url,
     eth_erc20_fast_bridge_proxy_contract_addr: web3::types::Address,
     profit_threshold: Option<f64>,
-    settings: Arc<Mutex<Settings>>,
+    settings: &Settings,
     near_relay_account_id: String,
     transaction_count: web3::types::U256,
 ) -> Result<web3::types::H256, crate::errors::CustomError> {
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
 
-    check_time_before_unlock(
-        &transfer_message,
-        settings.lock().unwrap().min_time_before_unlock_in_sec)?;
+    check_time_before_unlock(&transfer_message, settings.min_time_before_unlock_in_sec)?;
 
     let estimated_gas = eth_client::methods::estimate_gas(
-        eth1_rpc_url,
+        eth1_rpc_url.clone(),
         relay_key_on_eth.address(),
         eth_erc20_fast_bridge_proxy_contract_addr,
         eth_erc20_fast_bridge_contract_abi,
         method_name.as_str(),
         method_args.clone(),
+        settings.rpc_timeout_secs,
     )
     .await;
 
@@ -42,7 +40,7 @@ pub async fn execute_transfer(
         return Err(crate::errors::CustomError::InvalidFeeToken);
     }
 
-    let token_info = get_near_token_info(settings.clone(), transfer_message.transfer.token_near)?;
+    let token_info = get_near_token_info(&settings, transfer_message.transfer.token_near)?;
 
     if token_info.eth_address != transfer_message.transfer.token_eth.into() {
         return Err(crate::errors::CustomError::InvalidEthTokenAddress);
@@ -60,7 +58,7 @@ pub async fn execute_transfer(
 
     if let Some(profit_threshold) = profit_threshold {
         let profit = estimate_profit(
-            eth1_rpc_url,
+            eth1_rpc_url.as_str(),
             token_info.clone(),
             transfer_message.fee.amount.0.into(),
             estimated_gas,
@@ -94,7 +92,8 @@ pub async fn execute_transfer(
         true,
         Some(transaction_count),
         Some(estimated_gas),
-        settings.lock().unwrap().max_priority_fee_per_gas,
+        settings.max_priority_fee_per_gas,
+        settings.rpc_timeout_secs,
     )
     .await;
 
@@ -225,12 +224,10 @@ fn get_transfer_data(
 }
 
 fn get_near_token_info(
-    settings: Arc<Mutex<Settings>>,
+    settings: &Settings,
     fee_token: AccountId,
 ) -> Result<NearTokenInfo, crate::errors::CustomError> {
     let token_info = settings
-        .lock()
-        .unwrap()
         .near_tokens_whitelist
         .get_token_info(fee_token.clone());
 
@@ -267,10 +264,9 @@ pub mod tests {
         let relay_key_on_eth = std::sync::Arc::new(get_relay_eth_key());
         let eth_erc20_fast_bridge_contract_abi = get_eth_erc20_fast_bridge_contract_abi().await;
         let profit_threshold = 0f64;
-        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+        let settings = std::sync::Arc::new(tokio::sync::Mutex::new(get_settings()));
 
-        let redis = AsyncRedisWrapper::connect(settings.clone()).await;
-        let arc_redis = redis.new_safe();
+        let mut redis = AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
 
         let current_nonce: u128 = rand::thread_rng().gen_range(0..1000000000);
         let near_relay_account_id = get_near_signer().account_id.to_string();
@@ -298,12 +294,12 @@ pub mod tests {
             relay_key_on_eth.clone().as_ref(),
             transfer_message,
             eth_erc20_fast_bridge_contract_abi.as_bytes(),
-            eth1_rpc_url.as_str(),
+            eth1_rpc_url.clone(),
             get_eth_erc20_fast_bridge_proxy_contract_address(),
             Some(profit_threshold),
-            settings,
+            &settings.lock().await.clone(),
             near_relay_account_id,
-            get_tx_count(arc_redis, eth1_rpc_url.clone(), relay_key_on_eth.address())
+            get_tx_count(&mut redis, eth1_rpc_url, relay_key_on_eth.address())
                 .await
                 .unwrap(),
         )

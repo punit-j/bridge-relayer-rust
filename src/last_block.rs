@@ -1,5 +1,7 @@
-use crate::config::Settings;
+use crate::config::SafeSettings;
 use near_sdk::borsh::BorshDeserialize;
+
+pub type SafeStorage = std::sync::Arc<tokio::sync::Mutex<Storage>>;
 
 #[derive(Clone, Debug)]
 pub struct Storage {
@@ -14,14 +16,12 @@ impl Storage {
     }
 }
 
-pub async fn last_block_number_worker(
-    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
-    storage: std::sync::Arc<std::sync::Mutex<Storage>>,
-) {
+pub async fn last_block_number_worker(settings: SafeSettings, storage: SafeStorage) {
     tokio::spawn(async move {
         loop {
             let last_block_number_worker_settings =
-                settings.lock().unwrap().clone().last_block_number_worker;
+                settings.lock().await.last_block_number_worker.clone();
+
             let mut interval = crate::utils::request_interval(
                 last_block_number_worker_settings.request_interval_secs,
             )
@@ -36,7 +36,7 @@ pub async fn last_block_number_worker(
             match number {
                 Ok(result) => match result {
                     Some(block_number) => {
-                        storage.lock().unwrap().eth_last_block_number_on_near = block_number
+                        storage.lock().await.eth_last_block_number_on_near = block_number
                     }
                     None => (),
                 },
@@ -97,18 +97,14 @@ pub mod tests {
     async fn smoke_last_block_number_worker_test() {
         init_logger();
 
-        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
+        let settings = std::sync::Arc::new(tokio::sync::Mutex::new(get_settings()));
 
-        let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));
+        let storage = std::sync::Arc::new(tokio::sync::Mutex::new(Storage::new()));
 
         let _last_block_worker = last_block_number_worker(settings.clone(), storage.clone()).await;
         tokio::time::sleep(Duration::from_secs(16)).await;
 
-        let new_last_block_number = storage
-            .clone()
-            .lock()
-            .unwrap()
-            .eth_last_block_number_on_near;
+        let new_last_block_number = storage.clone().lock().await.eth_last_block_number_on_near;
         assert_ne!(new_last_block_number, 0u64);
         println!("new last block number = {}", new_last_block_number);
     }

@@ -3,12 +3,15 @@ extern crate core;
 use borsh::{BorshDeserialize, BorshSerialize};
 use eth_client::methods::get_contract_abi;
 use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
-use fast_bridge_service_lib::async_redis_wrapper::{self, SafeAsyncRedisWrapper};
+use fast_bridge_service_lib::async_redis_wrapper::{self, AsyncRedisWrapper};
 use fast_bridge_service_lib::async_redis_wrapper::{
     subscribe, EVENTS, PENDING_TRANSACTIONS, TRANSACTIONS,
 };
-use fast_bridge_service_lib::config::{Decimals, NearNetwork, NearTokenInfo, Settings};
-use fast_bridge_service_lib::last_block::{last_block_number_worker, Storage};
+
+use fast_bridge_service_lib::config::{
+    Decimals, NearNetwork, NearTokenInfo, SafeSettings, Settings,
+};
+use fast_bridge_service_lib::last_block::{last_block_number_worker, SafeStorage, Storage};
 use fast_bridge_service_lib::logs::init_logger;
 use fast_bridge_service_lib::unlock_tokens::unlock_tokens_worker;
 use near_client::read_private_key::read_private_key_from_file;
@@ -50,20 +53,20 @@ async fn main_integration_test() {
     .await;
 
     let settings = get_settings();
-    let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
-    let redis =
-        fast_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(settings.clone())
-            .await;
+    let settings = std::sync::Arc::new(tokio::sync::Mutex::new(settings));
+    let redis = fast_bridge_service_lib::async_redis_wrapper::AsyncRedisWrapper::connect(
+        &settings.lock().await.redis,
+    )
+    .await;
     remove_all(redis.clone(), PENDING_TRANSACTIONS).await;
     remove_all(redis.clone(), TRANSACTIONS).await;
-    let redis = redis.new_safe();
 
     let stream = subscribe::<String>(EVENTS.to_string(), redis.clone()).unwrap();
 
     detect_new_near_event(redis.clone(), init_block, 10).await;
 
     let relay_eth_key = std::sync::Arc::new(
-        secp256k1::SecretKey::from_str(&settings.lock().unwrap().eth.private_key[..64]).unwrap(),
+        secp256k1::SecretKey::from_str(&settings.lock().await.eth.private_key[..64]).unwrap(),
     );
     let eth_contract_abi = std::sync::Arc::new(get_eth_erc20_fast_bridge_contract_abi().await);
     let eth_contract_address = std::sync::Arc::new(eth_addr(ETH_CONTRACT_PROXY_ADDRESS));
@@ -87,13 +90,13 @@ async fn main_integration_test() {
     handle_pending_transaction(
         settings.clone(),
         relay_eth_key.clone(),
-        redis.lock().clone().into_inner(),
+        redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
     )
     .await;
 
-    let storage = std::sync::Arc::new(std::sync::Mutex::new(Storage::new()));
+    let storage = std::sync::Arc::new(tokio::sync::Mutex::new(Storage::new()));
     let _last_block_worker = last_block_number_worker(settings.clone(), storage.clone()).await;
     wait_correct_last_block_number(storage.clone(), redis.clone()).await;
 
@@ -113,25 +116,17 @@ async fn main_integration_test() {
     check_unlock_event(stream).await;
 }
 
-async fn wait_correct_last_block_number(
-    storage: std::sync::Arc<std::sync::Mutex<Storage>>,
-    redis: SafeAsyncRedisWrapper,
-) {
-    let mut connection = redis.lock().clone().into_inner();
-    let tx_hashes_queue = connection.get_tx_hashes().await.unwrap();
+async fn wait_correct_last_block_number(storage: SafeStorage, mut redis: AsyncRedisWrapper) {
+    let tx_hashes_queue = redis.get_tx_hashes().await.unwrap();
     let tx_hash = tx_hashes_queue[0].clone();
-    let tx_block = connection.get_tx_data(tx_hash.clone()).await.unwrap().block;
+    let tx_block = redis.get_tx_data(tx_hash.clone()).await.unwrap().block;
 
     let mut eth_last_block_number_on_near = 0;
 
     while eth_last_block_number_on_near < tx_block {
         tokio::time::sleep(Duration::from_secs(30)).await;
 
-        eth_last_block_number_on_near = storage
-            .lock()
-            .unwrap()
-            .clone()
-            .eth_last_block_number_on_near;
+        eth_last_block_number_on_near = storage.lock().await.clone().eth_last_block_number_on_near;
     }
 }
 
@@ -359,7 +354,7 @@ async fn get_finality_block_height() -> u64 {
     block.height()
 }
 
-async fn detect_new_near_event(redis: SafeAsyncRedisWrapper, init_block: u64, wait_time_sec: u64) {
+async fn detect_new_near_event(redis: AsyncRedisWrapper, init_block: u64, wait_time_sec: u64) {
     let contract_address =
         near_lake_framework::near_indexer_primitives::types::AccountId::from_str(
             NEAR_CONTRACT_ADDRESS,
@@ -368,7 +363,7 @@ async fn detect_new_near_event(redis: SafeAsyncRedisWrapper, init_block: u64, wa
 
     let worker = fast_bridge_service_lib::near::run_worker(
         contract_address,
-        redis.clone(),
+        redis,
         init_block,
         NearNetwork::Testnet,
     );
@@ -377,9 +372,9 @@ async fn detect_new_near_event(redis: SafeAsyncRedisWrapper, init_block: u64, wa
 }
 
 async fn process_events(
-    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
+    settings: SafeSettings,
     eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
-    redis: SafeAsyncRedisWrapper,
+    mut redis: AsyncRedisWrapper,
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
     stream: tokio::sync::mpsc::Receiver<String>,
@@ -397,26 +392,20 @@ async fn process_events(
     let timeout_duration = std::time::Duration::from_secs(120);
     let _result = timeout(timeout_duration, worker).await;
 
-    let pending_transactions: Vec<String> = redis
-        .lock()
-        .clone()
-        .get_mut()
-        .connection
-        .hkeys(PENDING_TRANSACTIONS)
-        .await
-        .unwrap();
+    let pending_transactions: Vec<String> =
+        redis.connection.hkeys(PENDING_TRANSACTIONS).await.unwrap();
     assert_eq!(pending_transactions.len(), 1);
 }
 
 async fn handle_pending_transaction(
-    settings: std::sync::Arc<std::sync::Mutex<Settings>>,
+    settings: SafeSettings,
     eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
     redis: async_redis_wrapper::AsyncRedisWrapper,
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
 ) {
     fast_bridge_service_lib::utils::build_pending_transactions_worker(
-        settings.clone(),
+        settings.lock().await.clone(),
         eth_keypair.clone(),
         redis.clone(),
         eth_contract_abi.clone(),
@@ -437,7 +426,7 @@ async fn handle_pending_transaction(
 }
 
 async fn mint_eth_tokens() {
-    let eth1_endpoint = get_eth_rpc_url().to_string();
+    let eth1_endpoint = get_eth_rpc_url();
 
     let token = eth_addr(ETH_TOKEN_ADDRESS);
 
@@ -455,7 +444,7 @@ async fn mint_eth_tokens() {
             .unwrap();
 
     let res = eth_client::methods::change(
-        &eth1_endpoint,
+        eth1_endpoint,
         token,
         contract_abi.as_bytes(),
         &method_name,
@@ -465,6 +454,7 @@ async fn mint_eth_tokens() {
         None,
         None,
         None,
+        30,
     )
     .await
     .unwrap();
@@ -473,7 +463,7 @@ async fn mint_eth_tokens() {
 }
 
 async fn increase_allowance() {
-    let eth1_endpoint = get_eth_rpc_url().to_string();
+    let eth1_endpoint = get_eth_rpc_url();
 
     let token = eth_addr(ETH_TOKEN_ADDRESS);
 
@@ -493,7 +483,7 @@ async fn increase_allowance() {
             .unwrap();
 
     let res = eth_client::methods::change(
-        &eth1_endpoint,
+        eth1_endpoint,
         token,
         contract_abi.as_bytes(),
         &method_name,
@@ -503,6 +493,7 @@ async fn increase_allowance() {
         None,
         None,
         None,
+        30,
     )
     .await
     .unwrap();

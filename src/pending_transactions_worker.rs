@@ -12,14 +12,15 @@ pub async fn run<'a>(
     eth_keypair: web3::signing::SecretKeyRef<'a>,
     rainbow_bridge_index_js_path: String,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
-    _delay_request_status_sec: u64,
+    rpc_timeout_secs: u64,
 ) {
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
-        eth_rpc_url.as_str(),
+        eth_rpc_url,
         rainbow_bridge_index_js_path.as_str(),
         eth_contract_address,
         eth_contract_abi.as_bytes(),
         eth_keypair,
+        rpc_timeout_secs,
     )
     .unwrap();
 
@@ -165,8 +166,8 @@ pub mod tests {
     async fn smoke_pending_transactions_worker_test() {
         init_logger();
 
-        let settings = std::sync::Arc::new(std::sync::Mutex::new(get_settings()));
-        let mut redis = AsyncRedisWrapper::connect(settings.clone()).await;
+        let settings = std::sync::Arc::new(tokio::sync::Mutex::new(get_settings()));
+        let mut redis = AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
         let eth_key = get_relay_eth_key();
 
         remove_all(redis.clone(), async_redis_wrapper::PENDING_TRANSACTIONS).await;

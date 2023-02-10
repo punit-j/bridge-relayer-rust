@@ -1,4 +1,4 @@
-use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
+use crate::async_redis_wrapper::AsyncRedisWrapper;
 use crate::config::NearNetwork;
 use crate::logs::NEAR_EVENTS_TRACER_TARGET;
 use near_lake_framework::near_indexer_primitives::types::AccountId;
@@ -11,7 +11,7 @@ pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 // since start_block and save it to redis.
 pub async fn run_worker(
     contract_name: AccountId,
-    redis: SafeAsyncRedisWrapper,
+    mut redis: AsyncRedisWrapper,
     start_block: u64,
     near_network: NearNetwork,
 ) {
@@ -32,9 +32,20 @@ pub async fn run_worker(
         near_lake_framework::streamer(lake_config.build().expect("Failed to build LakeConfig"));
 
     while let Some(streamer_message) = stream.recv().await {
+        tracing::trace!(
+            target: NEAR_EVENTS_TRACER_TARGET,
+            "Process near block {}",
+            streamer_message.block.header.height
+        );
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
                 if contract_name == outcome.receipt.receiver_id {
+                    tracing::info!(
+                        target: NEAR_EVENTS_TRACER_TARGET,
+                        "Process receipt {}",
+                        outcome.receipt.receipt_id
+                    );
+
                     for log in outcome.execution_outcome.outcome.logs {
                         if let Some(json) = fast_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
@@ -44,7 +55,7 @@ pub async fn run_worker(
                                         "New event: {}",
                                         serde_json::to_string(&r).unwrap_or(format!("{:?}", r))
                                     );
-                                    redis.lock().clone().get_mut().event_pub(r).await;
+                                    redis.event_pub(r).await;
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {
@@ -64,9 +75,6 @@ pub async fn run_worker(
 
         // store block number to redis
         redis
-            .lock()
-            .clone()
-            .get_mut()
             .option_set(
                 OPTION_START_BLOCK,
                 streamer_message.block.header.height as u64 + 1,
@@ -126,15 +134,12 @@ pub fn get_event(json: serde_json::Value) -> Result<fast_bridge_common::Event, P
 
 #[cfg(test)]
 pub mod tests {
-    use std::cell::RefCell;
-
     use crate::config::NearNetwork;
     use crate::near::{fix_json, get_event, run_worker};
     use assert_json_diff::assert_json_eq;
     use fast_bridge_common;
     use near_sdk::json_types::U128;
     use near_sdk::AccountId;
-    use parking_lot::ReentrantMutex;
 
     use crate::async_redis_wrapper::{subscribe, AsyncRedisWrapper, EVENTS};
     use crate::logs::init_logger;
@@ -181,10 +186,9 @@ pub mod tests {
         let contract_address =
             crate::near::AccountId::try_from(NEAR_CONTRACT_ADDRESS.to_string()).unwrap();
         let init_block = 113576799;
-        let settings = std::sync::Arc::new(std::sync::Mutex::new(settings));
+        let settings = std::sync::Arc::new(tokio::sync::Mutex::new(settings));
 
-        let redis = AsyncRedisWrapper::connect(settings).await;
-        let redis = std::sync::Arc::new(ReentrantMutex::new(RefCell::new(redis)));
+        let redis = AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
 
         let worker = run_worker(
             contract_address,

@@ -1641,7 +1641,7 @@ dependencies = [
 [[package]]
 name = "fast-bridge-common"
 version = "1.0.0"
-source = "git+ssh://git@github.com/aurora-is-near/fast-bridge-common.git?tag=0.1.1#07f96175d84c49f952bc1b085e2150de304cafaf"
+source = "git+https://github.com/aurora-is-near/fast-bridge-common.git?tag=0.1.2#fe507e29fa029a2519769034c6f971f9587bf801"
 dependencies = [
  "assert-json-diff",
  "hex 0.4.3",
@@ -1673,7 +1673,6 @@ dependencies = [
  "near-sdk",
  "near-workspaces",
  "near_client",
- "parking_lot",
  "rand 0.8.5",
  "redis",
  "reqwest",
@@ -3626,9 +3625,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.21.7"
+version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "152f3863635cbb76b73bc247845781098302c6c9ad2060e1a9a7de56840346b6"
+checksum = "aa8455fa3621f6b41c514946de66ea0531f57ca017b2e6c7cc368035ea5b46df"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3638,7 +3637,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "ryu",
- "sha1 0.6.1",
+ "sha1_smol",
  "tokio",
  "tokio-util",
  "url",

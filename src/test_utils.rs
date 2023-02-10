@@ -1,11 +1,8 @@
-use crate::async_redis_wrapper::SafeAsyncRedisWrapper;
 use crate::config::{Decimals, NearTokenInfo, Settings};
 use dotenv::dotenv;
 use redis::AsyncCommands;
 use std::env;
 use std::path::Path;
-use url::Url;
-use web3::types::U256;
 
 pub const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge2.olga24912_3.testnet";
 

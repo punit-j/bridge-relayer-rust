@@ -43,5 +43,6 @@
     "server_addr": "https://rpc.testnet.near.org",
     "blocks_for_tx_finalization": 10
   },
-  "vault_addr": "http://127.0.0.1:8200/v1/kv/"
+  "vault_addr": "http://127.0.0.1:8200/v1/kv/",
+  "rpc_timeout_secs": 30
 }
