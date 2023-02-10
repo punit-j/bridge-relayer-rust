@@ -5058,7 +5058,7 @@ dependencies = [
 [[package]]
 name = "web3"
 version = "0.19.0"
-source = "git+https://github.com/tomusdrw/rust-web3.git#c593b722d57da0c2885123867a7d4662a288d6cc"
+source = "git+https://github.com/tomusdrw/rust-web3.git?rev=c593b722d57da0c2885123867a7d4662a288d6cc#c593b722d57da0c2885123867a7d4662a288d6cc"
 dependencies = [
  "arrayvec 0.7.2",
  "base64 0.13.1",
