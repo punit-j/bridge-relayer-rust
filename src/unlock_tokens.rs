@@ -201,7 +201,7 @@ pub mod tests {
     };
     use near_client::test_utils::get_near_signer;
     use std::str::FromStr;
-    use std::time::Duration;
+    use tokio::time::timeout;
 
     async fn add_transaction(mut redis: AsyncRedisWrapper) {
         remove_all(redis.clone(), TRANSACTIONS).await;
@@ -252,15 +252,15 @@ pub mod tests {
         let storage = std::sync::Arc::new(tokio::sync::Mutex::new(Storage::new()));
         storage.lock().await.eth_last_block_number_on_near = 8249163;
 
-        let _worker = unlock_tokens_worker(
+        let worker = unlock_tokens_worker(
             signer,
             230_000_000_000_000u64,
             settings.clone(),
             storage.clone(),
             redis,
-        )
-        .await;
+        );
 
-        tokio::time::sleep(Duration::from_secs(60)).await;
+        let timeout_duration = std::time::Duration::from_secs(10);
+        let _result = timeout(timeout_duration, worker).await;
     }
 }

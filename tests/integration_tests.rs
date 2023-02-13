@@ -123,10 +123,18 @@ async fn wait_correct_last_block_number(storage: SafeStorage, mut redis: AsyncRe
 
     let mut eth_last_block_number_on_near = 0;
 
-    while eth_last_block_number_on_near < tx_block {
+    const MAX_ITERATION_NUMBER: u64 = 100;
+    let mut iter_number = 0;
+
+    while eth_last_block_number_on_near < tx_block && iter_number < MAX_ITERATION_NUMBER {
+        iter_number += 1;
         tokio::time::sleep(Duration::from_secs(30)).await;
 
         eth_last_block_number_on_near = storage.lock().await.clone().eth_last_block_number_on_near;
+    }
+
+    if iter_number == MAX_ITERATION_NUMBER {
+        panic!("Last block number wasn't updated for a while. Please, check that EthOnNearClient works properly.");
     }
 }
 

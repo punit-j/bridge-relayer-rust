@@ -18,7 +18,10 @@ pub async fn execute_transfer(
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
 
-    check_time_before_unlock(&transfer_message, settings.min_time_before_unlock_in_sec)?;
+    check_time_before_unlock(
+        &transfer_message,
+        settings.min_time_before_unlock_in_sec,
+    )?;
 
     let estimated_gas = eth_client::methods::estimate_gas(
         eth1_rpc_url.clone(),
@@ -271,11 +274,13 @@ pub mod tests {
         let current_nonce: u128 = rand::thread_rng().gen_range(0..1000000000);
         let near_relay_account_id = get_near_signer().account_id.to_string();
 
+        let valid_till = crate::test_utils::get_valid_till();
+
         let transfer_message = fast_bridge_common::Event::FastBridgeInitTransferEvent {
             nonce: U128::from(current_nonce),
             sender_id: near_relay_account_id.parse().unwrap(),
             transfer_message: TransferMessage {
-                valid_till: 0,
+                valid_till: valid_till,
                 transfer: TransferDataEthereum {
                     token_near: get_near_token(),
                     token_eth: EthAddress::from(get_eth_token()),

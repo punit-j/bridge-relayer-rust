@@ -3,8 +3,17 @@ use dotenv::dotenv;
 use redis::AsyncCommands;
 use std::env;
 use std::path::Path;
+use std::time::Duration;
 
 pub const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge2.olga24912_3.testnet";
+
+pub fn get_valid_till() -> u64 {
+    (std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        + Duration::from_secs(3 * 60 * 60).as_nanos()) as u64
+}
 
 pub async fn remove_all(redis: crate::async_redis_wrapper::AsyncRedisWrapper, key: &str) {
     let mut redis_connection = redis.connection;

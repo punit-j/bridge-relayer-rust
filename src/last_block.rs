@@ -84,7 +84,7 @@ pub mod tests {
     async fn smoke_last_block_number_test() {
         init_logger();
         let server_addr = url::Url::parse("https://rpc.testnet.near.org").unwrap();
-        let contract_account_id = "client6.goerli.testnet".to_string();
+        let contract_account_id = "client-eth2.goerli.testnet".to_string();
 
         let last_block_number = last_block_number(server_addr, contract_account_id)
             .await

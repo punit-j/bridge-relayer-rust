@@ -198,7 +198,7 @@ pub mod tests {
             web3::signing::SecretKeyRef::from(&eth_key),
             get_rb_index_path_str(),
             redis.clone(),
-            0,
+            30,
         );
 
         let timeout_duration = std::time::Duration::from_secs(10);

@@ -4,7 +4,7 @@
     "bridge_proxy_address": "0xbC685C003884c394eBB5F9235a1DBe9cbdc6c9d6",
     "pending_transaction_poll_delay_sec": 5,
     "private_key": "${FAST_BRIDGE_ETH_PRIVATE_KEY}",
-    "rpc_url": "https://goerli.infura.io/v3/${FAST_BRIDGE_INFURA_PROJECT_ID}",
+    "rpc_url": "https://goerli.infura.io/v3/FAST_BRIDGE_INFURA_PROJECT_ID",
     "rainbow_bridge_index_js_path": "./rainbow-bridge/cli/index.js"
   },
   "etherscan_api": {

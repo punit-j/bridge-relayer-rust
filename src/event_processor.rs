@@ -85,6 +85,7 @@ pub mod tests {
     use crate::async_redis_wrapper::{AsyncRedisWrapper, PENDING_TRANSACTIONS};
     use crate::event_processor::process_transfer_event;
     use crate::logs::init_logger;
+    use crate::test_utils;
     use crate::test_utils::get_settings;
     use eth_client::test_utils::{
         get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
@@ -102,7 +103,7 @@ pub mod tests {
         init_logger();
 
         let nonce = U128::from(rand::thread_rng().gen_range(0..1000000000));
-        let valid_till = 0;
+        let valid_till = test_utils::get_valid_till();
         let transfer = TransferDataEthereum {
             token_near: get_near_token(),
             token_eth: EthAddress::from(get_eth_token()),
@@ -144,12 +145,14 @@ pub mod tests {
             eth_erc20_fast_bridge_contract_abi.clone(),
             near_account,
         )
-        .await;
+        .await
+        .unwrap();
 
         tokio::time::sleep(Duration::from_secs(60)).await;
 
         let new_pending_transactions: Vec<String> =
             redis.connection.hkeys(PENDING_TRANSACTIONS).await.unwrap();
+
         assert_eq!(
             pending_transactions.len() + 1,
             new_pending_transactions.len()

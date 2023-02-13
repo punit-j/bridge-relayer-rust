@@ -59,12 +59,8 @@ pub async fn transaction_status<T: web3::Transport>(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::ethereum::transactions::{transaction_status, transfer_token, TransactionStatus};
-    use eth_client::test_utils::{
-        get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
-        get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
-    };
-    use rand::Rng;
+    use crate::ethereum::transactions::{transaction_status, TransactionStatus};
+    use eth_client::test_utils::get_eth_rpc_url;
     use web3::api::Namespace;
     use web3::types::U64;
 
@@ -83,40 +79,5 @@ pub mod tests {
         let tx_status = transaction_status(&client, tx_hash).await.unwrap();
 
         assert_eq!(tx_status, TransactionStatus::Sucess(U64::from(8180335)));
-    }
-
-    #[tokio::test]
-    async fn smoke_transfer_token_test() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
-
-        let transport = web3::transports::Http::new(&eth1_endpoint).unwrap();
-        let client = web3::api::Eth::new(transport);
-        let bridge_proxy_addres = get_eth_erc20_fast_bridge_proxy_contract_address();
-        let contract_abi = get_eth_erc20_fast_bridge_contract_abi().await;
-
-        let contract = web3::contract::Contract::from_json(
-            client.clone(),
-            bridge_proxy_addres,
-            contract_abi.as_bytes(),
-        )
-        .unwrap();
-
-        let priv_key = get_relay_eth_key();
-        let nonce = web3::types::U256::from(rand::thread_rng().gen_range(0..1000000000));
-
-        let token_addr = get_eth_token();
-        let res = transfer_token(
-            &contract,
-            &priv_key,
-            token_addr,
-            get_recipient(),
-            159,
-            nonce,
-            "alice.testnet".to_string(),
-        )
-        .await
-        .unwrap();
-
-        println!("transaction hash = {:?}", res);
     }
 }

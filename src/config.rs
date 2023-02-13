@@ -169,11 +169,11 @@ impl Settings {
             &env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap_or("".to_string()),
         );
         config.eth.rpc_url = url::Url::parse(&config.eth.rpc_url.as_str().replace(
-            "${FAST_BRIDGE_INFURA_PROJECT_ID}",
+            "FAST_BRIDGE_INFURA_PROJECT_ID",
             &env::var("FAST_BRIDGE_INFURA_PROJECT_ID").unwrap_or("".to_string()),
         ))
         .unwrap();
-        config.etherscan_api.api_key = config.eth.private_key.replace(
+        config.etherscan_api.api_key = config.etherscan_api.api_key.replace(
             "${FAST_BRIDGE_ETHERSCAN_API_KEY}",
             &env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap_or("".to_string()),
         );
@@ -265,7 +265,7 @@ pub mod tests {
 
         assert_ne!(
             settings.eth.rpc_url,
-            url::Url::parse("https://goerli.infura.io/v3/${FAST_BRIDGE_INFURA_PROJECT_ID}")
+            url::Url::parse("https://goerli.infura.io/v3/FAST_BRIDGE_INFURA_PROJECT_ID")
                 .unwrap()
         );
         assert_eq!(settings.config_path, config_path);
