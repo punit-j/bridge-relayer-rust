@@ -34,6 +34,43 @@ cargo build
 cargo run -- --config <PATH_TO_CONFIG.JSON>
 ```
 
+## Providing private key by vault
+You can store relayer private keys for both Ethereum and Near in the vault. The vault
+will be used in case if no argument with private key(`eth_secret`, `near_credentials`) is provided and correspondent
+fields(`eth.private_key`,`near.near_credentials_path`) in the config are absent.
+
+If you use vault, you should set the `VAULT_TOKEN` environment variable and  `vault_addr` field in the config.
+
+### Vault set up
+In this section, I will tell you how to locally install and set up the vault.
+
+Instruction for vault installation: https://developer.hashicorp.com/vault/downloads
+
+For running the server, write in the console:
+```bash
+$ vault server -dev
+```
+After running this command
+you will see:
+```bash
+...
+Root Token: <ROOT_TOKEN_VALUE>
+...
+```
+
+This value you should save into
+`VAULT_TOKEN` environment variable.
+
+Before using the vault, first you
+should set the Ethereum and Near Private
+keys:
+```bash
+$ vault kv put secret/ethsignerSigningKey key=<ETH_PRIVATE_KEY>
+$ vault kv put secret/nearsignerSigningKey key=<NEAR_PRIVATE_KEY> account_id=<NEAR_ACCOUNT_ID>
+```
+
+Now the vault is ready to use.
+
 ## Tests
 The main test for checking the work of the whole system is integration test(`tests/integration_tests.rs`). 
 This test runs the whole pipeline. In this section we will describe how to run it. 

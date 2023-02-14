@@ -7,11 +7,11 @@ mod last_block;
 mod logs;
 mod near;
 mod pending_transactions_worker;
-mod private_key;
 mod profit_estimation;
 mod transfer;
 mod unlock_tokens;
 mod utils;
+mod vault_private_key;
 
 #[cfg(test)]
 mod test_utils;
@@ -19,6 +19,7 @@ mod test_utils;
 use crate::config::Settings;
 use crate::logs::init_logger;
 use clap::Parser;
+use near_crypto::InMemorySigner;
 use std::str::FromStr;
 
 extern crate redis;
@@ -41,6 +42,33 @@ struct Args {
     /// to override the value from redis
     #[clap(long)]
     near_lake_init_block: Option<u64>,
+}
+
+async fn get_eth_private_key(
+    args: &Args,
+    settings: &Settings,
+) -> std::sync::Arc<secp256k1::SecretKey> {
+    let secret_key_str: String = if let Some(path) = args.eth_secret.clone() {
+        path
+    } else if let Some(private_key) = settings.eth.private_key.clone() {
+        private_key
+    } else {
+        vault_private_key::EthKey::vault_private_key(settings, None).await
+    };
+
+    std::sync::Arc::new(
+        secp256k1::SecretKey::from_str(&secret_key_str).expect("Unable to get an Eth key"),
+    )
+}
+
+async fn get_near_private_key(args: &Args, settings: &Settings) -> InMemorySigner {
+    if let Some(path) = args.near_credentials.clone() {
+        near_client::read_private_key::read_private_key_from_file(path.as_str()).unwrap()
+    } else if let Some(path) = settings.near.near_credentials_path.clone() {
+        near_client::read_private_key::read_private_key_from_file(path.as_str()).unwrap()
+    } else {
+        vault_private_key::NearKey::get_signer(settings, None).await
+    }
 }
 
 async fn check_system_time(near_rpc_url: url::Url) {
@@ -73,7 +101,7 @@ async fn main() {
 
     init_logger();
 
-    let settings = match Settings::init(args.config) {
+    let settings = match Settings::init(args.config.clone()) {
         Ok(settings) => std::sync::Arc::new(tokio::sync::Mutex::new(settings)),
         Err(msg) => panic!("{}", msg),
     };
@@ -84,18 +112,9 @@ async fn main() {
         async_redis_wrapper::AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
 
     let storage = std::sync::Arc::new(tokio::sync::Mutex::new(last_block::Storage::new()));
-
-    // If args.eth_secret is valid then get key from it else from settings
-    let eth_keypair = std::sync::Arc::new({
-        if let Some(path) = args.eth_secret {
-            secp256k1::SecretKey::from_str(path.as_str())
-        } else {
-            secp256k1::SecretKey::from_str(&settings.lock().await.eth.private_key)
-        }
-        .expect("Unable to get an Eth key")
-    });
-
-    let eth_contract_address = std::sync::Arc::new(settings.lock().await.eth.bridge_proxy_address);
+    let eth_keypair = get_eth_private_key(&args, &settings.lock().await.clone()).await;
+    let eth_contract_address =
+        std::sync::Arc::new(settings.lock().await.eth.bridge_proxy_address);
 
     let eth_contract_abi_settings = settings.lock().await.clone();
     let eth_contract_abi = std::sync::Arc::new(
@@ -111,14 +130,7 @@ async fn main() {
         .expect("Failed to get contract abi"),
     );
 
-    let near_account = if let Some(path) = args.near_credentials {
-        near_client::read_private_key::read_private_key_from_file(path.as_str())
-    } else {
-        near_client::read_private_key::read_private_key_from_file(
-            settings.lock().await.near.near_credentials_path.as_str(),
-        )
-    }
-    .unwrap();
+    let near_account = get_near_private_key(&args, &settings.lock().await.clone()).await;
 
     let near_contract_address = settings.lock().await.near.contract_address.clone();
 

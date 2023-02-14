@@ -7,11 +7,11 @@ pub mod last_block;
 pub mod logs;
 pub mod near;
 pub mod pending_transactions_worker;
-pub mod private_key;
 pub mod profit_estimation;
 pub mod transfer;
 pub mod unlock_tokens;
 pub mod utils;
+pub mod vault_private_key;
 
 #[cfg(test)]
 mod test_utils;

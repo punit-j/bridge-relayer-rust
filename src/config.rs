@@ -103,7 +103,7 @@ pub struct UnlockTokensWorkerSettings {
 pub struct EthSettings {
     pub bridge_proxy_address: web3::types::Address,
     pub bridge_impl_address: web3::types::Address,
-    pub private_key: String,
+    pub private_key: Option<String>,
     pub rpc_url: Url,
     #[serde(default)]
     pub pending_transaction_poll_delay_sec: u32,
@@ -112,7 +112,7 @@ pub struct EthSettings {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NearSettings {
-    pub near_credentials_path: String,
+    pub near_credentials_path: Option<String>,
     pub rpc_url: Url,
     pub contract_address: near_lake_framework::near_indexer_primitives::types::AccountId,
     pub near_lake_init_block: u64,
@@ -164,10 +164,12 @@ impl Settings {
         // Read the JSON contents of the file as an instance of `User`.
         let mut config: Settings = serde_json::from_reader(reader).map_err(|e| e.to_string())?;
         config.config_path = file_path;
-        config.eth.private_key = config.eth.private_key.replace(
-            "${FAST_BRIDGE_ETH_PRIVATE_KEY}",
-            &env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap_or("".to_string()),
-        );
+        if let Some(eth_private_key) = config.eth.private_key {
+            config.eth.private_key = Some(eth_private_key.replace(
+                "${FAST_BRIDGE_ETH_PRIVATE_KEY}",
+                &env::var("FAST_BRIDGE_ETH_PRIVATE_KEY").unwrap_or("".to_string()),
+            ));
+        }
         config.eth.rpc_url = url::Url::parse(&config.eth.rpc_url.as_str().replace(
             "FAST_BRIDGE_INFURA_PROJECT_ID",
             &env::var("FAST_BRIDGE_INFURA_PROJECT_ID").unwrap_or("".to_string()),
@@ -270,7 +272,7 @@ pub mod tests {
         );
         assert_eq!(settings.config_path, config_path);
         assert_eq!(
-            settings.near.near_credentials_path,
+            settings.near.near_credentials_path.unwrap(),
             "~/.near-credentials/testnet/fastbridge.testnet.json"
         );
         let token_account: near_sdk::AccountId =
