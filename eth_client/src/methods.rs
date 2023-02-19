@@ -231,8 +231,9 @@ pub async fn token_price_usd(coin_id: String) -> Result<Option<f64>, reqwest::Er
 #[cfg(test)]
 pub mod tests {
     use crate::methods::{
-        change, estimate_gas, estimate_transfer_execution_usd, eth_price_usd, gas_price_wei,
-        get_contract_abi, token_price_usd,
+        change, construct_contract_interface, estimate_gas, estimate_transfer_execution_usd,
+        eth_price_usd, gas_price_wei, get_contract_abi, get_fee_data, get_transaction_count,
+        token_price_usd,
     };
     use crate::test_utils;
     use crate::test_utils::{
@@ -242,6 +243,7 @@ pub mod tests {
     };
     use std::env;
     use std::str::FromStr;
+    use web3::types::{Address, U256};
 
     #[tokio::test]
     async fn smoke_estimate_gas_test() {
@@ -262,6 +264,7 @@ pub mod tests {
             contract_abi.as_bytes(),
             method_name,
             method_args,
+            30
         )
         .await
         .unwrap();
@@ -353,6 +356,7 @@ pub mod tests {
             None,
             None,
             None,
+            30
         )
         .await
         .unwrap();
@@ -383,10 +387,486 @@ pub mod tests {
             None,
             None,
             None,
+            30
         )
         .await
         .unwrap();
 
         println!("transaction hash: {:?}", res);
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Transport(Message(\"failed to parse url: relative URL without a base\")))"]
+    async fn test_construct_contract_interface_incorrect_url() {
+        let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
+        let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        construct_contract_interface(
+            "not_valid_url",
+            bridge_proxy_addres,
+            contract_abi.as_bytes(),
+            30
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_construct_contract_interface_not_eth_endpoint_url() {
+        let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
+        let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        construct_contract_interface(
+            "https://www.google.com/",
+            bridge_proxy_addres,
+            contract_abi.as_bytes(),
+            30
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Abi(SerdeJson(Error(\"invalid type: map, expected valid abi spec file\", line: 1, column: 1)))"]
+    async fn test_construct_contract_interface_incorrect_json() {
+        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        construct_contract_interface(&eth1_endpoint, bridge_proxy_addres, "{".as_bytes(), 30).unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Abi(SerdeJson(Error(\"invalid type: map, expected valid abi spec file\", line: 1, column: 2)))"]
+    async fn test_construct_contract_interface_not_abi_json() {
+        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        construct_contract_interface(&eth1_endpoint, bridge_proxy_addres, "{}".as_bytes(), 30).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_construct_contract_interface_non_existing_address() {
+        let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
+        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let bridge_proxy_addres = web3::types::Address::from_slice(
+            hex::decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+                .unwrap()
+                .as_slice(),
+        );
+
+        construct_contract_interface(&eth1_endpoint, bridge_proxy_addres, contract_abi.as_bytes(), 30)
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_construct_contract_interface_unreachable_url() {
+        let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
+
+        let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        construct_contract_interface(
+            "http://httpstat.us/404",
+            bridge_proxy_addres,
+            contract_abi.as_bytes(),
+            30
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Transport(Code(404)))"]
+    async fn test_get_fee_data_bad_server() {
+        get_fee_data("http://httpstat.us/404", None, 30).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "InvalidOutputType(\"Failed to calculate `max_fee_per_gas`\")"]
+    async fn test_get_fee_data_big_max_priority() {
+        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+
+        get_fee_data(&eth1_endpoint, Some(U256::MAX), 30).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Transport(Code(404))"]
+    async fn test_transaction_count_bad_server() {
+        let eth_addres = test_utils::get_eth_token();
+
+        get_transaction_count("http://httpstat.us/404", eth_addres)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_transaction_count_bad_account() {
+        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+
+        assert_eq!(
+            U256::zero(),
+            get_transaction_count(&eth1_endpoint, Address::zero())
+                .await
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Transport(Code(404)))"]
+    async fn test_change_bad_server_not_use_eip_1559() {
+        let token = get_eth_token();
+
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_relay_eth_key();
+
+        change(
+            "http://httpstat.us/404",
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            false,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Transport(Code(404)))"]
+    async fn test_change_bad_server_use_eip_1559() {
+        let token = get_eth_token();
+
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_relay_eth_key();
+
+        change(
+            "http://httpstat.us/404",
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_change_invalid_address() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+        let token = web3::types::Address::from_slice(
+            hex::decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+                .unwrap()
+                .as_slice(),
+        );
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_relay_eth_key();
+
+        change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Decoder(\"InvalidName(\\\"min\\\")\"))"]
+    async fn test_change_wrong_method_name() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "min";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_relay_eth_key();
+
+        change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Decoder(\"InvalidData\"))"]
+    async fn test_change_wrong_method_args() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = 100;
+
+        let priv_key = get_relay_eth_key();
+
+        change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Rpc(Error { code: ServerError(-32000), message: \"insufficient funds for gas * price + value\", data: None }))"]
+    async fn test_change_wrong_private_key() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = secp256k1::SecretKey::from_str(
+            "0000090000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap();
+
+        change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Rpc(Error { code: ServerError(-32000), message: \"replacement transaction underpriced\", data: None }))"]
+    async fn test_change_wrong_nonce() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_relay_eth_key();
+
+        change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+
+        let amount = web3::types::U256::from(200);
+
+        change(
+            &eth1_endpoint,
+            token,
+            contract_abi.as_bytes(),
+            &method_name,
+            amount,
+            &priv_key,
+            true,
+            None,
+            None,
+            None,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Transport(Code(404)))"]
+    async fn test_get_price_wei_incorrect_server_address() {
+        gas_price_wei("http://httpstat.us/404").await.unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Transport(Code(404)))"]
+    async fn test_gas_estimation_bad_server() {
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        estimate_gas(
+            "http://httpstat.us/404",
+            priv_key,
+            token,
+            contract_abi.as_bytes(),
+            method_name,
+            amount,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Abi(InvalidName(\"min\"))"]
+    async fn test_gas_estimation_wrong_method_name() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "min";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        estimate_gas(
+            &eth1_endpoint,
+            priv_key,
+            token,
+            contract_abi.as_bytes(),
+            method_name,
+            amount,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Abi(InvalidData)"]
+    async fn test_gas_estimation_wrong_args() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = 100;
+
+        let priv_key = get_eth_erc20_fast_bridge_proxy_contract_address();
+
+        estimate_gas(
+            &eth1_endpoint,
+            priv_key,
+            token,
+            contract_abi.as_bytes(),
+            method_name,
+            amount,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    #[should_panic = "Api(Rpc(Error { code: ServerError(3), message: \"execution reverted: ERC20: mint to the zero address\""]
+    async fn test_gas_estimation_wrong_eth_address() {
+        let eth1_endpoint = get_eth_rpc_url().to_string();
+
+        let token = get_eth_token();
+        let contract_abi = get_eth_contract_abi(token).await;
+
+        let method_name = "mint";
+        let amount = web3::types::U256::from(100);
+
+        let priv_key = Address::zero();
+
+        estimate_gas(
+            &eth1_endpoint,
+            priv_key,
+            token,
+            contract_abi.as_bytes(),
+            method_name,
+            amount,
+            30
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_token_price_incorrect_token_name() {
+        let token_name = "unexistingtoken";
+        let token_price = token_price_usd(token_name.to_string()).await.unwrap();
+        assert_eq!(token_price, None);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_estimate_transfer_execution_usd_max() {
+        estimate_transfer_execution_usd(U256::MAX, U256::MAX, f64::MAX);
+    }
+
+    #[test]
+    fn test_estimate_transfer_execution_usd_max_possible() {
+        estimate_transfer_execution_usd(
+            U256::from(100_000_000),
+            U256::from(40_000_000_u128 * 1_000_000_000_u128),
+            10_000.,
+        );
     }
 }

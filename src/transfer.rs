@@ -66,8 +66,7 @@ pub async fn execute_transfer(
             transfer_message.fee.amount.0.into(),
             estimated_gas,
         )
-        .await?
-        .ok_or(crate::errors::CustomError::FailedProfitEstimation)?;
+        .await?;
 
         tracing::info!(
             target: EVENT_PROCESSOR_TARGET,
@@ -150,44 +149,40 @@ async fn estimate_profit(
     token_info: NearTokenInfo,
     fee_amount: U256,
     estimated_gas: U256,
-) -> Result<Option<f64>, crate::errors::CustomError> {
-    let gas_price_in_wei = eth_client::methods::gas_price_wei(eth1_rpc_url).await;
-    match gas_price_in_wei {
-        Ok(_) => (),
+) -> Result<f64, crate::errors::CustomError> {
+    let gas_price_in_wei = match eth_client::methods::gas_price_wei(eth1_rpc_url).await {
+        Ok(gas_price_in_wei) => gas_price_in_wei,
         Err(error) => return Err(crate::errors::CustomError::FailedFetchGasPrice(error)),
-    }
+    };
 
-    let eth_price_in_usd = eth_client::methods::eth_price_usd().await;
-    match eth_price_in_usd {
+    let eth_price_in_usd = match eth_client::methods::eth_price_usd().await {
         Ok(price) => match price {
-            Some(_) => (),
+            Some(eth_price_in_usd) => eth_price_in_usd,
             None => return Err(crate::errors::CustomError::FailedFetchEthereumPriceInvalidCoinId),
         },
         Err(error) => return Err(crate::errors::CustomError::FailedFetchEthereumPrice(error)),
-    }
+    };
 
     let estimated_transfer_execution_price = eth_client::methods::estimate_transfer_execution_usd(
         estimated_gas,
-        gas_price_in_wei.unwrap(),
-        eth_price_in_usd.unwrap().unwrap(),
+        gas_price_in_wei,
+        eth_price_in_usd,
     );
 
-    let fee_token_usd = eth_client::methods::token_price_usd(token_info.exchange_id).await;
-    match fee_token_usd {
+    let fee_token_usd = match eth_client::methods::token_price_usd(token_info.exchange_id).await {
         Ok(price) => match price {
-            Some(_) => (),
+            Some(fee_token_usd) => fee_token_usd,
             None => return Err(crate::errors::CustomError::FailedGetTokenPriceInvalidCoinId),
         },
         Err(error) => return Err(crate::errors::CustomError::FailedGetTokenPrice(error)),
-    }
+    };
 
-    Ok(crate::profit_estimation::get_profit_usd(
-        fee_token_usd.unwrap().unwrap(),
+    crate::profit_estimation::get_profit_usd(
+        fee_token_usd,
         fee_amount,
         token_info.decimals,
         estimated_transfer_execution_price,
     )
-    .await)
 }
 
 fn get_transfer_data(

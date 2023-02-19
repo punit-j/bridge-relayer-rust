@@ -81,6 +81,13 @@ pub enum CustomError {
     #[error("The profit: {0}, is lower than the min allowed profit: {1}")]
     TxNotProfitable(f64, f64),
 
+    #[error(
+        "Error in parsing tokens amount during profit estimation. \
+             Fee token amount: {0}, fee token decimal: {1}. \
+             This ERROR should never occur. Please check the profit estimation!"
+    )]
+    ErrorInFeeAmountParsing(web3::types::U256, u32),
+
     #[error("Not enough time before user unlock")]
     NotEnoughTimeBeforeUnlock,
 }
