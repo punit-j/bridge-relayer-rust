@@ -66,9 +66,6 @@ pub enum CustomError {
     #[error("Failed to calculate fee")]
     FailedFeeCalculation,
 
-    #[error("Failed to estimate profit")]
-    FailedProfitEstimation,
-
     #[error("Invalid fee token")]
     InvalidFeeToken,
 

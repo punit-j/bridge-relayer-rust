@@ -66,7 +66,10 @@ async fn main_integration_test() {
     detect_new_near_event(redis.clone(), init_block, 10).await;
 
     let relay_eth_key = std::sync::Arc::new(
-        secp256k1::SecretKey::from_str(&settings.lock().await.eth.private_key.clone().unwrap()[..64]).unwrap(),
+        secp256k1::SecretKey::from_str(
+            &settings.lock().await.eth.private_key.clone().unwrap()[..64],
+        )
+        .unwrap(),
     );
     let eth_contract_abi = std::sync::Arc::new(get_eth_erc20_fast_bridge_contract_abi().await);
     let eth_contract_address = std::sync::Arc::new(eth_addr(ETH_CONTRACT_PROXY_ADDRESS));
@@ -87,14 +90,7 @@ async fn main_integration_test() {
     )
     .await;
 
-    handle_pending_transaction(
-        settings.clone(),
-        relay_eth_key.clone(),
-        redis.clone(),
-        eth_contract_abi.clone(),
-        eth_contract_address.clone(),
-    )
-    .await;
+    handle_pending_transaction(settings.clone(), redis.clone()).await;
 
     let storage = std::sync::Arc::new(tokio::sync::Mutex::new(Storage::new()));
     let _last_block_worker = last_block_number_worker(settings.clone(), storage.clone()).await;
@@ -407,19 +403,14 @@ async fn process_events(
 
 async fn handle_pending_transaction(
     settings: SafeSettings,
-    eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
     redis: async_redis_wrapper::AsyncRedisWrapper,
-    eth_contract_abi: std::sync::Arc<String>,
-    eth_contract_address: std::sync::Arc<web3::types::Address>,
 ) {
     fast_bridge_service_lib::utils::build_pending_transactions_worker(
         settings.lock().await.clone(),
-        eth_keypair.clone(),
         redis.clone(),
-        eth_contract_abi.clone(),
-        eth_contract_address.clone(),
     )
     .await;
+
     tokio::time::sleep(Duration::from_secs(30)).await;
     let pending_transactions: Vec<String> = redis
         .clone()

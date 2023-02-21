@@ -44,24 +44,18 @@ pub mod proof;
 pub mod transactions;
 
 use eth_client::methods::new_eth_rpc_client;
-use web3::{api::Namespace, contract::Contract, transports::Http};
+use web3::{api::Namespace, transports::Http};
 
-#[allow(dead_code)]
 pub struct RainbowBridgeEthereumClient<'a> {
     api_url: http_types::Url,
     rainbow_bridge_index: &'a str,
     client: web3::api::Eth<Http>,
-    contract: Contract<Http>,
-    key: web3::signing::SecretKeyRef<'a>,
 }
 
 impl<'a> RainbowBridgeEthereumClient<'a> {
     pub fn new(
         eth_endpoint: http_types::Url,
         rainbow_bridge_index: &'a str,
-        contract_addr: web3::ethabi::Address,
-        abi_json: &[u8],
-        key: web3::signing::SecretKeyRef<'a>,
         rpc_timeout_secs: u64,
     ) -> Result<Self, std::string::String> {
         let transport = web3::transports::Http::with_client(
@@ -71,37 +65,11 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
         );
         let client = web3::api::Eth::new(transport);
 
-        let contract = web3::contract::Contract::from_json(client.clone(), contract_addr, abi_json)
-            .map_err(|e| e.to_string())?;
-
         Ok(Self {
             api_url: eth_endpoint,
             rainbow_bridge_index,
             client,
-            contract,
-            key,
         })
-    }
-
-    #[allow(dead_code)]
-    pub async fn transfer_token(
-        &self,
-        token: web3::ethabi::Address,
-        receiver: web3::ethabi::Address,
-        amount: u64,
-        nonce: web3::types::U256,
-        unlock_recipient: String,
-    ) -> web3::error::Result<web3::types::H256> {
-        transactions::transfer_token(
-            &self.contract,
-            &self.key,
-            token,
-            receiver,
-            amount,
-            nonce,
-            unlock_recipient,
-        )
-        .await
     }
 
     pub async fn transaction_status(
@@ -127,37 +95,24 @@ impl<'a> RainbowBridgeEthereumClient<'a> {
 
 #[cfg(test)]
 pub mod tests {
+    use crate::config::default_rpc_timeout_secs;
+    use crate::ethereum::transactions::TransactionStatus;
     use crate::ethereum::RainbowBridgeEthereumClient;
     use crate::test_utils::get_rb_index_path_str;
-    use crate::{config::default_rpc_timeout_secs, ethereum::transactions::TransactionStatus};
-    use eth_client::test_utils::{
-        get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
-        get_eth_rpc_url, get_eth_token, get_recipient, get_relay_eth_key,
-    };
-    use http_types::Url;
-    use secp256k1::SecretKey;
-    use web3::types::{H160, U64};
+    use eth_client::test_utils::get_eth_rpc_url;
+    use url::Url;
+    use web3::types::U64;
 
-    async fn get_params() -> (Url, String, H160, String, SecretKey) {
-        (
-            get_eth_rpc_url(),
-            get_rb_index_path_str(),
-            get_eth_erc20_fast_bridge_proxy_contract_address(),
-            get_eth_erc20_fast_bridge_contract_abi().await,
-            get_relay_eth_key(),
-        )
+    async fn get_params() -> (Url, String) {
+        (get_eth_rpc_url(), get_rb_index_path_str())
     }
 
     #[tokio::test]
     async fn smoke_new_test() {
-        let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
-            get_params().await;
+        let (eth1_endpoint, rb_index_path_str) = get_params().await;
         let _eth = RainbowBridgeEthereumClient::new(
             eth1_endpoint,
             &rb_index_path_str,
-            bridge_proxy_addres,
-            contract_abi.as_bytes(),
-            web3::signing::SecretKeyRef::from(&priv_key),
             default_rpc_timeout_secs(),
         )
         .unwrap();
@@ -165,14 +120,10 @@ pub mod tests {
 
     #[tokio::test]
     async fn smoke_get_proof_test() {
-        let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
-            get_params().await;
+        let (eth1_endpoint, rb_index_path_str) = get_params().await;
         let eth = RainbowBridgeEthereumClient::new(
             eth1_endpoint,
             &rb_index_path_str,
-            bridge_proxy_addres,
-            contract_abi.as_bytes(),
-            web3::signing::SecretKeyRef::from(&priv_key),
             default_rpc_timeout_secs(),
         )
         .unwrap();
@@ -188,14 +139,10 @@ pub mod tests {
 
     #[tokio::test]
     async fn smoke_transaction_status_test() {
-        let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
-            get_params().await;
+        let (eth1_endpoint, rb_index_path_str) = get_params().await;
         let eth = RainbowBridgeEthereumClient::new(
             eth1_endpoint,
             &rb_index_path_str,
-            bridge_proxy_addres,
-            contract_abi.as_bytes(),
-            web3::signing::SecretKeyRef::from(&priv_key),
             default_rpc_timeout_secs(),
         )
         .unwrap();
@@ -206,35 +153,6 @@ pub mod tests {
         );
         let tx_status = eth.transaction_status(tx_hash).await.unwrap();
 
-        assert_eq!(tx_status, TransactionStatus::Sucess(U64::from(8180335)));
-    }
-
-    #[tokio::test]
-    async fn smoke_transfer_token_test() {
-        let (eth1_endpoint, rb_index_path_str, bridge_proxy_addres, contract_abi, priv_key) =
-            get_params().await;
-        let eth = RainbowBridgeEthereumClient::new(
-            eth1_endpoint,
-            &rb_index_path_str,
-            bridge_proxy_addres,
-            contract_abi.as_bytes(),
-            web3::signing::SecretKeyRef::from(&priv_key),
-            crate::config::default_rpc_timeout_secs(),
-        )
-        .unwrap();
-
-        let token_addr = get_eth_token();
-        let res = eth
-            .transfer_token(
-                token_addr,
-                get_recipient(),
-                159,
-                web3::types::U256::from(200),
-                "alice.testnet".to_string(),
-            )
-            .await
-            .unwrap();
-
-        println!("transaction hash = {:?}", res);
+        assert_eq!(tx_status, TransactionStatus::Success(U64::from(8180335)));
     }
 }

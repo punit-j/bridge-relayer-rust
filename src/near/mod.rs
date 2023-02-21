@@ -86,9 +86,6 @@ pub async fn run_worker(
     // ![TODO] In that place we should submit some kind of alert and restart relayer.
 }
 
-#[allow(dead_code)]
-pub struct JsonError(pub serde_json::Error);
-
 #[derive(Debug)]
 pub enum ParceError {
     Json(serde_json::Error),

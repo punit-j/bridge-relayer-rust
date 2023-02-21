@@ -1,32 +1,11 @@
-use secp256k1::SecretKey;
+use web3::api;
 use web3::types::TransactionId;
-use web3::{api, contract::Contract, types::Address};
-
-#[allow(dead_code)]
-pub async fn transfer_token<'a, T: web3::Transport>(
-    contract: &'a Contract<T>,
-    private_key: &'a SecretKey,
-    token: Address,
-    receiver: Address,
-    amount: u64,
-    nonce: web3::types::U256,
-    unlock_recipient: String,
-) -> web3::error::Result<web3::types::H256> {
-    contract
-        .signed_call(
-            "transferTokens",
-            (token, receiver, nonce, amount, unlock_recipient),
-            Default::default(),
-            private_key,
-        )
-        .await
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionStatus {
-    Pengind,
+    Pending,
     Failure(web3::types::U64), // block_number
-    Sucess(web3::types::U64),  // block_number
+    Success(web3::types::U64), // block_number
 }
 
 pub async fn transaction_status<T: web3::Transport>(
@@ -38,7 +17,7 @@ pub async fn transaction_status<T: web3::Transport>(
         .await?
         .ok_or(web3::error::Error::Unreachable)?;
     if res.block_number.is_none() {
-        return Ok(TransactionStatus::Pengind);
+        return Ok(TransactionStatus::Pending);
     }
 
     let res = client
@@ -50,7 +29,7 @@ pub async fn transaction_status<T: web3::Transport>(
         return Ok(if s == web3::types::U64::from(0) {
             TransactionStatus::Failure(block_number)
         } else {
-            TransactionStatus::Sucess(block_number)
+            TransactionStatus::Success(block_number)
         });
     }
 
@@ -78,6 +57,6 @@ pub mod tests {
 
         let tx_status = transaction_status(&client, tx_hash).await.unwrap();
 
-        assert_eq!(tx_status, TransactionStatus::Sucess(U64::from(8180335)));
+        assert_eq!(tx_status, TransactionStatus::Success(U64::from(8180335)));
     }
 }

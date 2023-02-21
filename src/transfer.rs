@@ -18,10 +18,7 @@ pub async fn execute_transfer(
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
 
-    check_time_before_unlock(
-        &transfer_message,
-        settings.min_time_before_unlock_in_sec,
-    )?;
+    check_time_before_unlock(&transfer_message, settings.min_time_before_unlock_in_sec)?;
 
     let estimated_gas = eth_client::methods::estimate_gas(
         eth1_rpc_url.clone(),

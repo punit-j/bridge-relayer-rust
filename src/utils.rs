@@ -4,7 +4,6 @@ use crate::logs::EVENT_PROCESSOR_TARGET;
 use crate::{config::Settings, pending_transactions_worker};
 use url::Url;
 use web3::contract::Error::Api;
-use web3::types::Res;
 use web3::Error::{Rpc, Transport};
 
 pub async fn request_interval(seconds: u64) -> tokio::time::Interval {
@@ -35,16 +34,10 @@ pub async fn get_tx_count(
 
 pub async fn build_pending_transactions_worker(
     settings: Settings,
-    eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
     redis: crate::async_redis_wrapper::AsyncRedisWrapper,
-    eth_contract_abi: std::sync::Arc<String>,
-    eth_contract_address: std::sync::Arc<web3::types::Address>,
 ) {
     pending_transactions_worker::run(
         settings.eth.rpc_url,
-        *eth_contract_address,
-        eth_contract_abi.as_ref().clone(),
-        web3::signing::SecretKeyRef::from(eth_keypair.as_ref()),
         settings.eth.rainbow_bridge_index_js_path,
         redis,
         settings.rpc_timeout_secs,
@@ -56,7 +49,8 @@ macro_rules! skip_transaction {
     ($nonce:expr, $error:expr) => {
         tracing::error!(
             "Failed to process tx with nonce {}, err: {:?}. Skip transaction.",
-            $nonce, $error
+            $nonce,
+            $error
         );
         break;
     };
@@ -66,7 +60,8 @@ macro_rules! repeat_transaction {
     ($nonce:expr, $error:expr) => {
         tracing::error!(
             "Failed to process tx with nonce {}, err: {:?}. Repeat try after 15s.",
-            $nonce, $error
+            $nonce,
+            $error
         );
 
         tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
@@ -117,15 +112,15 @@ pub async fn build_near_events_subscriber(
                         match error {
                             //Problem with server connection
                             crate::errors::CustomError::FailedExecuteTransferTokens(Api(
-                                                                                        Transport(_),
-                                                                                    ))
+                                Transport(_),
+                            ))
                             | crate::errors::CustomError::FailedFetchGasPrice(Api(Transport(_)))
                             | crate::errors::CustomError::FailedEstimateGas(Api(Transport(_)))
                             | crate::errors::CustomError::FailedGetTxCount(Transport(_))
                             | crate::errors::CustomError::FailedGetTokenPrice(_)
                             | crate::errors::CustomError::FailedFetchEthereumPrice(_) => {
                                 repeat_transaction!(nonce.0, error);
-                            },
+                            }
                             //Incorrect Nonce
                             crate::errors::CustomError::FailedExecuteTransferTokens(Api(Rpc(
                                 ref rpc_error,
@@ -138,8 +133,10 @@ pub async fn build_near_events_subscriber(
                                 } else {
                                     skip_transaction!(nonce.0, error);
                                 }
-                            },
-                            _ => { skip_transaction!(nonce.0, error); }
+                            }
+                            _ => {
+                                skip_transaction!(nonce.0, error);
+                            }
                         }
                     }
 

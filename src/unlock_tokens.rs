@@ -195,26 +195,19 @@ pub mod tests {
     use crate::test_utils::{get_rb_index_path_str, get_settings, remove_all};
     use crate::unlock_tokens::unlock_tokens_worker;
     use crate::{async_redis_wrapper, ethereum};
-    use eth_client::test_utils::{
-        get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
-        get_eth_rpc_url, get_relay_eth_key,
-    };
+    use eth_client::test_utils::get_eth_rpc_url;
     use near_client::test_utils::get_near_signer;
     use std::str::FromStr;
     use tokio::time::timeout;
 
     async fn add_transaction(mut redis: AsyncRedisWrapper) {
         remove_all(redis.clone(), TRANSACTIONS).await;
-        let relay_eth_key = get_relay_eth_key();
         let eth_rpc_url = get_eth_rpc_url();
         let rb_index_path_str = get_rb_index_path_str();
 
         let eth_client = ethereum::RainbowBridgeEthereumClient::new(
             eth_rpc_url,
             &rb_index_path_str,
-            get_eth_erc20_fast_bridge_proxy_contract_address(),
-            get_eth_erc20_fast_bridge_contract_abi().await.as_bytes(),
-            web3::signing::SecretKeyRef::from(&relay_eth_key),
             default_rpc_timeout_secs(),
         )
         .unwrap();

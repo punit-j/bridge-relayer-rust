@@ -7,9 +7,6 @@ use uint::rustc_hex::ToHex;
 #[allow(clippy::needless_lifetimes)]
 pub async fn run<'a>(
     eth_rpc_url: url::Url,
-    eth_contract_address: web3::types::Address,
-    eth_contract_abi: String,
-    eth_keypair: web3::signing::SecretKeyRef<'a>,
     rainbow_bridge_index_js_path: String,
     mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
     rpc_timeout_secs: u64,
@@ -17,9 +14,6 @@ pub async fn run<'a>(
     let eth_client = ethereum::RainbowBridgeEthereumClient::new(
         eth_rpc_url,
         rainbow_bridge_index_js_path.as_str(),
-        eth_contract_address,
-        eth_contract_abi.as_bytes(),
-        eth_keypair,
         rpc_timeout_secs,
     )
     .unwrap();
@@ -69,7 +63,7 @@ pub async fn run<'a>(
                 match eth_client.transaction_status(*key).await {
                     Ok(status) => {
                         match status {
-                            ethereum::transactions::TransactionStatus::Pengind => {
+                            ethereum::transactions::TransactionStatus::Pending => {
                                 // update the timestamp
                                 tx_data.timestamp = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
@@ -87,7 +81,7 @@ pub async fn run<'a>(
                                 );
                                 transactions_to_remove.push(*key);
                             }
-                            ethereum::transactions::TransactionStatus::Sucess(block_number) => {
+                            ethereum::transactions::TransactionStatus::Success(block_number) => {
                                 let proof = eth_client.get_proof(key).await;
                                 match proof {
                                     Ok(proof) => {
@@ -155,10 +149,7 @@ pub mod tests {
     use crate::logs::init_logger;
     use crate::pending_transactions_worker::run;
     use crate::test_utils::{get_rb_index_path_str, get_settings, remove_all};
-    use eth_client::test_utils::{
-        get_eth_erc20_fast_bridge_contract_abi, get_eth_erc20_fast_bridge_proxy_contract_address,
-        get_eth_rpc_url, get_relay_eth_key,
-    };
+    use eth_client::test_utils::get_eth_rpc_url;
     use redis::AsyncCommands;
     use tokio::time::timeout;
 
@@ -168,7 +159,6 @@ pub mod tests {
 
         let settings = std::sync::Arc::new(tokio::sync::Mutex::new(get_settings()));
         let mut redis = AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
-        let eth_key = get_relay_eth_key();
 
         remove_all(redis.clone(), async_redis_wrapper::PENDING_TRANSACTIONS).await;
         remove_all(redis.clone(), async_redis_wrapper::TRANSACTIONS).await;
@@ -193,9 +183,6 @@ pub mod tests {
 
         let worker = run(
             get_eth_rpc_url(),
-            get_eth_erc20_fast_bridge_proxy_contract_address(),
-            get_eth_erc20_fast_bridge_contract_abi().await,
-            web3::signing::SecretKeyRef::from(&eth_key),
             get_rb_index_path_str(),
             redis.clone(),
             30,

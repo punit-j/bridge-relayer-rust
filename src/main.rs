@@ -113,8 +113,7 @@ async fn main() {
 
     let storage = std::sync::Arc::new(tokio::sync::Mutex::new(last_block::Storage::new()));
     let eth_keypair = get_eth_private_key(&args, &settings.lock().await.clone()).await;
-    let eth_contract_address =
-        std::sync::Arc::new(settings.lock().await.eth.bridge_proxy_address);
+    let eth_contract_address = std::sync::Arc::new(settings.lock().await.eth.bridge_proxy_address);
 
     let eth_contract_abi_settings = settings.lock().await.clone();
     let eth_contract_abi = std::sync::Arc::new(
@@ -171,10 +170,7 @@ async fn main() {
 
     let pending_transactions_worker = utils::build_pending_transactions_worker(
         settings.lock().await.clone(),
-        eth_keypair.clone(),
         async_redis.clone(),
-        eth_contract_abi.clone(),
-        eth_contract_address.clone(),
     );
 
     let last_block_number_worker =
