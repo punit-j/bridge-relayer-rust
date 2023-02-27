@@ -49,16 +49,14 @@ impl AsyncRedisWrapper {
         name: &str,
         value: T,
     ) -> redis::RedisResult<()> {
-        self.connection.hset(OPTIONS, name, value).await?;
-        Ok(())
+        Ok(self.connection.hset(OPTIONS, name, value).await?)
     }
 
     pub async fn option_get<T: redis::ToRedisArgs + Send + Sync + redis::FromRedisValue>(
         &mut self,
         name: &str,
     ) -> redis::RedisResult<Option<T>> {
-        let val: Option<T> = self.connection.hget(OPTIONS, name).await?;
-        Ok(val)
+        Ok(self.connection.hget(OPTIONS, name).await?)
     }
 
     pub async fn set_transaction_count(
@@ -90,32 +88,30 @@ impl AsyncRedisWrapper {
     }
 
     pub async fn store_tx(&mut self, tx_hash: String, tx_data: TxData) -> redis::RedisResult<()> {
-        let storing_status = self
-            .hsetnx(
+        match self
+            .connection
+            .hset_nx(
                 TRANSACTIONS,
                 &tx_hash,
                 &serde_json::to_string(&tx_data)
                     .expect("REDIS: Failed to serialize transaction data"),
             )
-            .await;
-        if let Ok(redis::Value::Int(1)) = storing_status {
-            Ok(())
-        } else {
-            Err(storing_status.unwrap_err())
+            .await
+        {
+            Ok(redis::Value::Int(1)) => Ok(()),
+            storing_status => Err(storing_status.unwrap_err()),
         }
     }
 
     pub async fn unstore_tx(&mut self, tx_hash: String) -> redis::RedisResult<()> {
-        let unstoring_status = self.hdel(TRANSACTIONS, &tx_hash).await;
-        if let Ok(redis::Value::Int(1)) = unstoring_status {
-            Ok(())
-        } else {
-            Err(unstoring_status.unwrap_err())
+        match self.connection.hdel(TRANSACTIONS, &tx_hash).await {
+            Ok(redis::Value::Int(1)) => Ok(()),
+            unstoring_status => Err(unstoring_status.unwrap_err()),
         }
     }
 
     pub async fn get_tx_data(&mut self, tx_hash: String) -> redis::RedisResult<TxData> {
-        match self.hget(TRANSACTIONS, &tx_hash).await {
+        match self.connection.hget(TRANSACTIONS, &tx_hash).await {
             Ok(value) => {
                 let serialized_tx_data: String = redis::from_redis_value(&value)?;
                 Ok(serde_json::from_str(&serialized_tx_data)
@@ -127,23 +123,6 @@ impl AsyncRedisWrapper {
 
     pub async fn get_tx_hashes(&mut self) -> redis::RedisResult<Vec<String>> {
         self.connection.hkeys(TRANSACTIONS).await
-    }
-
-    async fn hsetnx(
-        &mut self,
-        key: &str,
-        field: &str,
-        value: &str,
-    ) -> redis::RedisResult<redis::Value> {
-        self.connection.hset_nx(key, field, value).await
-    }
-
-    async fn hget(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
-        self.connection.hget(key, field).await
-    }
-
-    async fn hdel(&mut self, key: &str, field: &str) -> redis::RedisResult<redis::Value> {
-        self.connection.hdel(key, field).await
     }
 }
 
@@ -159,10 +138,9 @@ pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
             .await
             .expect("REDIS: Failed to get connection")
             .into_pubsub();
-        pubsub_connection
-            .subscribe(channel)
-            .await
-            .expect("Failed to subscribe to the channel");
+
+        let err_msg = "REDIS: Failed to subscribe to the channel";
+        pubsub_connection.subscribe(channel).await.expect(err_msg);
         let mut pubsub_stream = pubsub_connection.on_message();
 
         while let Some(s) = pubsub_stream.next().await {

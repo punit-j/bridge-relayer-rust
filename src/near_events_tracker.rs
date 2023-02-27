@@ -1,10 +1,19 @@
-use crate::async_redis_wrapper::AsyncRedisWrapper;
-use crate::config::NearNetwork;
-use crate::logs::NEAR_EVENTS_TRACER_TARGET;
-use near_lake_framework::near_indexer_primitives::types::AccountId;
-use near_lake_framework::LakeConfigBuilder;
+use crate::{async_redis_wrapper::AsyncRedisWrapper, config::NearNetwork};
+use near_lake_framework::{near_indexer_primitives::types::AccountId, LakeConfigBuilder};
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
+
+macro_rules! info {
+    ($($arg:tt)+) => { tracing::info!(target: crate::logs::NEAR_EVENTS_TRACER_TARGET, $($arg)+) }
+}
+
+macro_rules! error {
+    ($($arg:tt)+) => { tracing::error!(target: crate::logs::NEAR_EVENTS_TRACER_TARGET, $($arg)+) }
+}
+
+macro_rules! trace {
+    ($($arg:tt)+) => { tracing::trace!(target: crate::logs::NEAR_EVENTS_TRACER_TARGET, $($arg)+) }
+}
 
 #[allow(clippy::await_holding_lock)]
 // extract all events produced by contract_name on NEAR
@@ -22,36 +31,26 @@ pub async fn run_worker(
         NearNetwork::Testnet => lake_config.testnet(),
     };
 
-    tracing::info!(
-        target: NEAR_EVENTS_TRACER_TARGET,
-        "NEAR lake starts from block {}",
-        start_block
-    );
+    info!("NEAR lake starts from block {}", start_block);
 
     let (_, mut stream) =
         near_lake_framework::streamer(lake_config.build().expect("Failed to build LakeConfig"));
 
     while let Some(streamer_message) = stream.recv().await {
-        tracing::trace!(
-            target: NEAR_EVENTS_TRACER_TARGET,
+        trace!(
             "Process near block {}",
             streamer_message.block.header.height
         );
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
                 if contract_name == outcome.receipt.receiver_id {
-                    tracing::info!(
-                        target: NEAR_EVENTS_TRACER_TARGET,
-                        "Process receipt {}",
-                        outcome.receipt.receipt_id
-                    );
+                    info!("Process receipt {}", outcome.receipt.receipt_id);
 
                     for log in outcome.execution_outcome.outcome.logs {
                         if let Some(json) = fast_bridge_common::remove_prefix(log.as_str()) {
                             match get_event(json) {
                                 Ok(r) => {
-                                    tracing::info!(
-                                        target: NEAR_EVENTS_TRACER_TARGET,
+                                    info!(
                                         "New event: {}",
                                         serde_json::to_string(&r).unwrap_or(format!("{:?}", r))
                                     );
@@ -59,11 +58,7 @@ pub async fn run_worker(
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {
-                                        tracing::error!(
-                                            target: NEAR_EVENTS_TRACER_TARGET,
-                                            "Log error: {:?}",
-                                            e
-                                        );
+                                        error!("Log error: {:?}", e);
                                     }
                                 }
                             }
@@ -74,16 +69,12 @@ pub async fn run_worker(
         }
 
         // store block number to redis
+        let start_block = streamer_message.block.header.height as u64 + 1;
         redis
-            .option_set(
-                OPTION_START_BLOCK,
-                streamer_message.block.header.height as u64 + 1,
-            )
+            .option_set(OPTION_START_BLOCK, start_block)
             .await
             .unwrap();
     }
-
-    // ![TODO] In that place we should submit some kind of alert and restart relayer.
 }
 
 #[derive(Debug)]
@@ -132,7 +123,7 @@ pub fn get_event(json: serde_json::Value) -> Result<fast_bridge_common::Event, P
 #[cfg(test)]
 pub mod tests {
     use crate::config::NearNetwork;
-    use crate::near::{fix_json, get_event, run_worker};
+    use crate::near_events_tracker::{fix_json, get_event, run_worker};
     use assert_json_diff::assert_json_eq;
     use fast_bridge_common;
     use near_sdk::json_types::U128;
@@ -181,7 +172,8 @@ pub mod tests {
 
         let settings = get_settings();
         let contract_address =
-            crate::near::AccountId::try_from(NEAR_CONTRACT_ADDRESS.to_string()).unwrap();
+            crate::near_events_tracker::AccountId::try_from(NEAR_CONTRACT_ADDRESS.to_string())
+                .unwrap();
         let init_block = 113576799;
         let settings = std::sync::Arc::new(tokio::sync::Mutex::new(settings));
 

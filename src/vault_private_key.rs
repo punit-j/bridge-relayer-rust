@@ -1,5 +1,5 @@
 use crate::config::Settings;
-use std::str::FromStr;
+use std::{env::var, str::FromStr};
 
 use http_client::HttpClient;
 use http_types::{Method, Request};
@@ -22,16 +22,9 @@ async fn read_secret_key(
     let mut request = Request::new(Method::Get, addr.as_str());
     request.insert_header("X-Vault-Token", vault_token);
 
-    let res: serde_json::Value = serde_json::from_str(
-        &client
-            .send(request)
-            .await
-            .unwrap()
-            .body_string()
-            .await
-            .unwrap(),
-    )
-    .unwrap();
+    let mut response = client.send(request).await.unwrap();
+    let res: serde_json::Value =
+        serde_json::from_str(&response.body_string().await.unwrap()).unwrap();
 
     match res.get("data") {
         None => {
@@ -65,12 +58,8 @@ impl NearKey {
         read_secret_key(settings, vault_token, NEAR_VAULT_PREFIX, "key").await
     }
 
-    pub async fn get_signer(settings: &Settings, vault_token: Option<&String>) -> InMemorySigner {
-        let vault_token = if let Some(vault_token) = vault_token {
-            vault_token.to_string()
-        } else {
-            std::env::var("VAULT_TOKEN").unwrap()
-        };
+    pub async fn get_signer(settings: &Settings, vault_token: Option<String>) -> InMemorySigner {
+        let vault_token = vault_token.unwrap_or(var("VAULT_TOKEN").unwrap());
 
         let private_key = NearKey::vault_private_key(settings, &vault_token).await;
         let account_id = NearKey::vault_account_id(settings, &vault_token).await;
@@ -87,13 +76,8 @@ impl NearKey {
 pub struct EthKey {}
 
 impl EthKey {
-    pub async fn vault_private_key(settings: &Settings, vault_token: Option<&String>) -> String {
-        let vault_token = if let Some(vault_token) = vault_token {
-            vault_token.to_string()
-        } else {
-            std::env::var("VAULT_TOKEN").unwrap()
-        };
-
+    pub async fn vault_private_key(settings: &Settings, vault_token: Option<String>) -> String {
+        let vault_token = vault_token.unwrap_or(var("VAULT_TOKEN").unwrap());
         read_secret_key(settings, &vault_token, ETH_VAULT_PREFIX, "key").await
     }
 }
@@ -108,7 +92,7 @@ pub mod tests {
         dotenv::dotenv().ok();
         let vault_token = std::env::var("VAULT_TOKEN").unwrap();
 
-        let private_key = EthKey::vault_private_key(&settings, Some(&vault_token)).await;
+        let private_key = EthKey::vault_private_key(&settings, Some(vault_token)).await;
         assert_eq!(private_key.len(), 64);
     }
 

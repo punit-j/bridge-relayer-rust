@@ -10,13 +10,13 @@ pub enum CustomError {
     FailedFetchGasPrice(web3::contract::Error),
 
     #[error("Failed to fetch Ethereum price in USD: invalid coin id")]
-    FailedFetchEthereumPriceInvalidCoinId,
+    FailedFetchEthPriceInvalidCoinId,
 
     #[error("Failed to fetch Ethereum price in USD: {0:?}")]
     FailedFetchEthereumPrice(reqwest::Error),
 
     #[error("Failed to get near token info from whitelist ({0}) by matching")]
-    FailedGetNearTokenInfoByMatching(String),
+    FailedGetNearTokenInfo(String),
 
     #[error("Failed to get token price: invalid coin id")]
     FailedGetTokenPriceInvalidCoinId,

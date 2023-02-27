@@ -5,6 +5,7 @@ use near_jsonrpc_primitives::types::transactions::TransactionInfo;
 use near_primitives::transaction::{Action, FunctionCallAction, Transaction};
 use near_primitives::types::{BlockReference, Finality, FunctionArgs};
 use near_primitives::views::{FinalExecutionOutcomeView, QueryRequest};
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use tokio::time;
 
 lazy_static! {
@@ -14,11 +15,8 @@ lazy_static! {
 }
 
 fn new_near_rpc_client(timeout: Option<std::time::Duration>) -> reqwest::Client {
-    let mut headers = reqwest::header::HeaderMap::with_capacity(2);
-    headers.insert(
-        reqwest::header::CONTENT_TYPE,
-        reqwest::header::HeaderValue::from_static("application/json"),
-    );
+    let mut headers = HeaderMap::with_capacity(2);
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
     let mut builder = reqwest::Client::builder().default_headers(headers);
     if let Some(timeout) = timeout {
@@ -67,15 +65,14 @@ pub async fn change(
     deposit: u128,
 ) -> Result<FinalExecutionOutcomeView, Box<dyn std::error::Error>> {
     let client = DEFAULT_CONNECTOR.connect(server_addr);
-    let access_key_query_response = client
-        .call(methods::query::RpcQueryRequest {
-            block_reference: BlockReference::latest(),
-            request: near_primitives::views::QueryRequest::ViewAccessKey {
-                account_id: signer.account_id.clone(),
-                public_key: signer.public_key.clone(),
-            },
-        })
-        .await?;
+    let rpc_request = methods::query::RpcQueryRequest {
+        block_reference: BlockReference::latest(),
+        request: near_primitives::views::QueryRequest::ViewAccessKey {
+            account_id: signer.account_id.clone(),
+            public_key: signer.public_key.clone(),
+        },
+    };
+    let access_key_query_response = client.call(rpc_request).await?;
     let current_nonce = match access_key_query_response.kind {
         QueryResponseKind::AccessKey(access_key) => access_key.nonce,
         _ => Err("failed to extract current nonce")?,
@@ -107,11 +104,12 @@ pub async fn change(
                 },
             })
             .await;
-        let received_at = time::Instant::now();
-        let delta = (received_at - sent_at).as_secs();
+
+        let delta = (time::Instant::now() - sent_at).as_secs();
         if delta > 60 {
             Err("time limit exceeded for the transaction to be recognized")?;
         }
+
         match response {
             Err(err) => match err.handler_error() {
                 Some(err) => {
@@ -129,21 +127,11 @@ pub async fn change(
 #[cfg(test)]
 pub mod tests {
     use crate::methods::{change, view};
-    use crate::read_private_key::read_private_key_from_file;
     use crate::test_utils::{get_near_signer, get_near_token, get_server_addr};
     use near_primitives::views::FinalExecutionStatus;
     use near_sdk::borsh::BorshDeserialize;
     use serde_json::json;
-    use std::ffi::OsStr;
-    use std::path::Path;
     use std::time::SystemTime;
-
-    fn abspath(p: &str) -> Option<String> {
-        shellexpand::full(p)
-            .ok()
-            .and_then(|x| Path::new(OsStr::new(x.as_ref())).canonicalize().ok())
-            .and_then(|p| p.into_os_string().into_string().ok())
-    }
 
     #[tokio::test]
     async fn smoke_blocktimestamp_test() {

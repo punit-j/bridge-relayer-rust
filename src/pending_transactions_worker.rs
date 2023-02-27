@@ -1,145 +1,115 @@
-use crate::logs::PENDING_TRANSACTION_TARGET;
-use crate::{async_redis_wrapper, ethereum};
-use redis::AsyncCommands;
-use std::str::FromStr;
+use crate::async_redis_wrapper::{
+    AsyncRedisWrapper, PendingTransactionData, TxData, PENDING_TRANSACTIONS,
+};
+use crate::{
+    errors::CustomError,
+    ethereum::{transactions::TransactionStatus, RainbowBridgeEthereumClient},
+};
+use redis::{AsyncCommands, RedisResult};
+use std::{collections::HashMap, str::FromStr};
 use uint::rustc_hex::ToHex;
+use web3::types::H256;
+
+macro_rules! info {
+    ($($arg:tt)+) => { tracing::info!(target: crate::logs::PENDING_TRANSACTION_TARGET, $($arg)+) }
+}
+
+macro_rules! error {
+    ($($arg:tt)+) => { tracing::error!(target: crate::logs::PENDING_TRANSACTION_TARGET, $($arg)+) }
+}
 
 #[allow(clippy::needless_lifetimes)]
 pub async fn run<'a>(
     eth_rpc_url: url::Url,
     rainbow_bridge_index_js_path: String,
-    mut redis: crate::async_redis_wrapper::AsyncRedisWrapper,
+    mut redis: AsyncRedisWrapper,
     rpc_timeout_secs: u64,
 ) {
-    let eth_client = ethereum::RainbowBridgeEthereumClient::new(
-        eth_rpc_url,
-        rainbow_bridge_index_js_path.as_str(),
-        rpc_timeout_secs,
-    )
-    .unwrap();
+    let rb_index = rainbow_bridge_index_js_path.as_str();
+    let eth_client =
+        RainbowBridgeEthereumClient::new(eth_rpc_url, rb_index, rpc_timeout_secs).unwrap();
 
     // transaction hash and last processed time
-    let mut pending_transactions: std::collections::HashMap<
-        web3::types::H256,
-        async_redis_wrapper::PendingTransactionData,
-    > = std::collections::HashMap::new();
+    let mut pending_transactions = HashMap::<H256, PendingTransactionData>::new();
 
     loop {
         // fill the pending_transactions
-        let mut iter: redis::AsyncIter<(String, String)> = redis
-            .connection
-            .hscan(async_redis_wrapper::PENDING_TRANSACTIONS)
-            .await
-            .unwrap();
+        let mut iter: redis::AsyncIter<(String, String)> =
+            redis.connection.hscan(PENDING_TRANSACTIONS).await.unwrap();
+
         while let Some(pair) = iter.next_item().await {
-            let hash =
-                web3::types::H256::from_str(pair.0.as_str()).expect("Unable to parse tx hash");
-            let data = serde_json::from_str::<async_redis_wrapper::PendingTransactionData>(
-                pair.1.as_str(),
-            )
-            .unwrap();
+            let hash = H256::from_str(pair.0.as_str()).expect("Unable to parse tx hash");
+            let data = serde_json::from_str::<PendingTransactionData>(pair.1.as_str()).unwrap();
 
             if let std::collections::hash_map::Entry::Vacant(e) = pending_transactions.entry(hash) {
                 e.insert(data);
-                tracing::info!(
-                    target: PENDING_TRANSACTION_TARGET,
-                    "New pending transaction: {:#?}",
-                    hash
-                )
+                info!("New pending transaction: {:#?}", hash);
             }
         }
 
         // process the pending_transactions
-        let mut transactions_to_remove: Vec<web3::types::H256> = Vec::new();
+        let mut txs_to_remove: Vec<H256> = Vec::new();
         for (key, tx_data) in pending_transactions.iter_mut() {
             // remove and skip if transaction is already processing
-            if redis
-                .get_tx_data(key.as_bytes().to_hex::<String>())
-                .await
-                .is_ok()
-            {
-                transactions_to_remove.push(*key);
+            let key_hex = key.as_bytes().to_hex::<String>();
+            if redis.get_tx_data(key_hex).await.is_ok() {
+                txs_to_remove.push(*key);
             } else {
-                match eth_client.transaction_status(*key).await {
-                    Ok(status) => {
-                        match status {
-                            ethereum::transactions::TransactionStatus::Pending => {
-                                // update the timestamp
-                                tx_data.timestamp = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs();
-                            }
-                            ethereum::transactions::TransactionStatus::Failure(_block_number) => {
-                                tracing::error!(
-                                    target: PENDING_TRANSACTION_TARGET,
-                                    "{}",
-                                    crate::errors::CustomError::FailedTxStatus(format!(
-                                        "{:?}",
-                                        key
-                                    ))
-                                );
-                                transactions_to_remove.push(*key);
-                            }
-                            ethereum::transactions::TransactionStatus::Success(block_number) => {
-                                let proof = eth_client.get_proof(key).await;
-                                match proof {
-                                    Ok(proof) => {
-                                        let data = async_redis_wrapper::TxData {
-                                            block: u64::try_from(block_number).unwrap(),
-                                            proof,
-                                            nonce: tx_data.nonce,
-                                        };
-                                        redis
-                                            .store_tx(key.as_bytes().to_hex::<String>(), data)
-                                            .await
-                                            .unwrap();
-                                        transactions_to_remove.push(*key);
-                                    }
-                                    Err(error) => {
-                                        tracing::error!(
-                                            target: PENDING_TRANSACTION_TARGET,
-                                            "{}",
-                                            crate::errors::CustomError::FailedFetchProof(
-                                                error.to_string()
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        tracing::error!(
-                            target: PENDING_TRANSACTION_TARGET,
-                            "{}",
-                            crate::errors::CustomError::FailedFetchTxStatus(error)
-                        )
-                    }
+                let res = handle_one_tx(key, tx_data, &eth_client, &mut txs_to_remove, &mut redis);
+                if let Err(err) = res.await {
+                    error!("{}", err);
                 }
             }
         }
 
-        for item in transactions_to_remove {
-            let res: redis::RedisResult<()> = redis
-                .connection
-                .hdel(
-                    async_redis_wrapper::PENDING_TRANSACTIONS,
-                    item.as_bytes().to_hex::<String>(),
-                )
-                .await;
+        for item in txs_to_remove {
+            let item_hex = item.as_bytes().to_hex::<String>();
+            let res: RedisResult<()> = redis.connection.hdel(PENDING_TRANSACTIONS, item_hex).await;
             if let Err(error) = res {
-                tracing::error!(
-                    target: PENDING_TRANSACTION_TARGET,
-                    "{}",
-                    crate::errors::CustomError::FailedUnstorePendingTx(error)
-                );
+                error!("{}", CustomError::FailedUnstorePendingTx(error));
             }
             pending_transactions.remove(&item);
         }
 
         tokio::time::sleep(core::time::Duration::from_secs(1)).await;
     }
+}
+
+async fn handle_one_tx(
+    key: &H256,
+    tx_data: &mut PendingTransactionData,
+    eth_client: &RainbowBridgeEthereumClient<'_>,
+    transactions_to_remove: &mut Vec<H256>,
+    redis: &mut AsyncRedisWrapper,
+) -> Result<(), CustomError> {
+    let status = eth_client.transaction_status(*key).await;
+    let status = status.map_err(|err| CustomError::FailedFetchTxStatus(err))?;
+    match status {
+        TransactionStatus::Pending => {
+            // update the timestamp
+            tx_data.timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+        }
+        TransactionStatus::Failure(_block_number) => {
+            transactions_to_remove.push(*key);
+            return Err(CustomError::FailedTxStatus(format!("{:?}", key)));
+        }
+        TransactionStatus::Success(block_number) => {
+            let proof = eth_client.get_proof(key).await;
+            let proof = proof.map_err(|err| CustomError::FailedFetchProof(err.to_string()))?;
+            let data = TxData {
+                block: u64::try_from(block_number).unwrap(),
+                proof,
+                nonce: tx_data.nonce,
+            };
+            let hex_key = key.as_bytes().to_hex::<String>();
+            redis.store_tx(hex_key, data).await.unwrap();
+            transactions_to_remove.push(*key);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

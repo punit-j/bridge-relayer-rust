@@ -1,12 +1,19 @@
 use crate::async_redis_wrapper::{self, AsyncRedisWrapper};
-use crate::config::Settings;
-use crate::errors::CustomError;
-use crate::logs::EVENT_PROCESSOR_TARGET;
-use crate::utils::get_tx_count;
+use crate::config::{SafeSettings, Settings};
+use crate::{errors::CustomError, utils::get_tx_count};
+use fast_bridge_common::Event::FastBridgeInitTransferEvent;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
 use uint::rustc_hex::ToHex;
-use web3::signing::*;
+use web3::{contract::Error::Api, signing::*, Error::Rpc, Error::Transport};
+
+macro_rules! info {
+    ($($arg:tt)+) => { tracing::info!(target: crate::logs::EVENT_PROCESSOR_TARGET, $($arg)+) }
+}
+
+macro_rules! error {
+    ($($arg:tt)+) => { tracing::error!(target: crate::logs::EVENT_PROCESSOR_TARGET, $($arg)+) }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn process_transfer_event(
@@ -24,11 +31,7 @@ pub async fn process_transfer_event(
     let mut transaction_count =
         get_tx_count(redis, rpc_url.clone(), relay_eth_key.address()).await?;
 
-    tracing::info!(
-        target: EVENT_PROCESSOR_TARGET,
-        "Execute transfer on eth with nonce {:?}",
-        nonce
-    );
+    info!("Execute transfer on eth with nonce {:?}", nonce);
 
     let tx_hash = crate::transfer::execute_transfer(
         relay_eth_key.clone().as_ref(),
@@ -47,13 +50,9 @@ pub async fn process_transfer_event(
     )
     .await?;
 
-    tracing::info!(
-        target: EVENT_PROCESSOR_TARGET,
-        "New eth transaction: {:#?}",
-        tx_hash
-    );
+    info!("New eth transaction: {:#?}", tx_hash);
 
-    let pending_transaction_data = crate::async_redis_wrapper::PendingTransactionData {
+    let pending_transaction_data = async_redis_wrapper::PendingTransactionData {
         timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -69,15 +68,86 @@ pub async fn process_transfer_event(
             serde_json::to_string(&pending_transaction_data).unwrap(),
         )
         .await;
-    res.map_err(|e| crate::errors::CustomError::FailedStorePendingTx(e))?;
+    res.map_err(|e| CustomError::FailedStorePendingTx(e))?;
 
     transaction_count += 1.into();
     redis
         .set_transaction_count(transaction_count)
         .await
-        .map_err(|e| crate::errors::CustomError::FailedSetTxCount(e))?;
+        .map_err(|e| CustomError::FailedSetTxCount(e))?;
 
     Ok(())
+}
+
+pub async fn build_near_events_subscriber(
+    settings: SafeSettings,
+    eth_keypair: std::sync::Arc<secp256k1::SecretKey>,
+    mut redis: AsyncRedisWrapper,
+    eth_contract_abi: std::sync::Arc<String>,
+    eth_contract_address: std::sync::Arc<web3::types::Address>,
+    mut stream: tokio::sync::mpsc::Receiver<String>,
+    near_relay_account_id: String,
+) {
+    while let Some(msg) = stream.recv().await {
+        let settings = settings.lock().await.clone();
+
+        if let Ok(event) = serde_json::from_str::<fast_bridge_common::Event>(msg.as_str()) {
+            let event_str = serde_json::to_string(&event).unwrap_or(format!("{:?}", event));
+            info!("Process event: {}", event_str);
+
+            if let FastBridgeInitTransferEvent {
+                nonce,
+                sender_id,
+                transfer_message,
+            } = event
+            {
+                loop {
+                    let res = process_transfer_event(
+                        nonce,
+                        sender_id.clone(),
+                        transfer_message.clone(),
+                        &settings,
+                        &mut redis,
+                        *eth_contract_address,
+                        eth_keypair.clone(),
+                        eth_contract_abi.clone(),
+                        near_relay_account_id.clone(),
+                    )
+                    .await;
+
+                    if let Err(error) = res {
+                        if is_connection_error(&error) {
+                            error!("Failed to process tx with nonce {}, err: {:?}. Repeat try after 15s.", nonce.0, error);
+                            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+                            continue;
+                        } else {
+                            error!(
+                                "Failed to process tx with nonce {}, err: {:?}. Skip transaction.",
+                                nonce.0, error
+                            );
+                        }
+                    }
+
+                    break;
+                }
+            }
+        }
+    }
+}
+
+fn is_connection_error(error: &CustomError) -> bool {
+    match error {
+        CustomError::FailedExecuteTransferTokens(Api(Transport(_)))
+        | CustomError::FailedFetchGasPrice(Api(Transport(_)))
+        | CustomError::FailedEstimateGas(Api(Transport(_)))
+        | CustomError::FailedGetTxCount(Transport(_))
+        | CustomError::FailedGetTokenPrice(_)
+        | CustomError::FailedFetchEthereumPrice(_) => true,
+        CustomError::FailedExecuteTransferTokens(Api(Rpc(ref rpc_error))) => rpc_error
+            .message
+            .contains("replacement transaction underpriced"),
+        _ => false,
+    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,5 @@
+use web3::{contract::Options, types::BlockNumber};
+
 const EIP_1559_TRANSACTION_TYPE: u64 = 2;
 
 pub fn new_eth_rpc_client(timeout: Option<std::time::Duration>) -> web3::Result<reqwest::Client> {
@@ -118,7 +120,7 @@ pub async fn get_transaction_count(
     let client = web3::Web3::new(transport);
     client
         .eth()
-        .transaction_count(account_address, Some(web3::types::BlockNumber::Pending))
+        .transaction_count(account_address, Some(BlockNumber::Pending))
         .await
 }
 
@@ -165,25 +167,16 @@ pub async fn gas_price_wei(server_addr: &str) -> web3::contract::Result<web3::ty
 pub async fn estimate_gas(
     eth_endpoint: reqwest::Url,
     signer_eth_addr: web3::types::Address,
-    contract_eth_addr: web3::types::Address,
+    contract_addr: web3::types::Address,
     contract_abi: &[u8],
     method_name: &str,
     args: impl web3::contract::tokens::Tokenize,
     rpc_timeout_secs: u64,
 ) -> web3::contract::Result<web3::types::U256> {
-    let abi = construct_contract_interface(
-        eth_endpoint,
-        contract_eth_addr,
-        contract_abi,
-        rpc_timeout_secs,
-    )?;
-    abi.estimate_gas(
-        method_name,
-        args,
-        signer_eth_addr,
-        web3::contract::Options::default(),
-    )
-    .await
+    let abi =
+        construct_contract_interface(eth_endpoint, contract_addr, contract_abi, rpc_timeout_secs)?;
+    abi.estimate_gas(method_name, args, signer_eth_addr, Options::default())
+        .await
 }
 
 pub fn estimate_transfer_execution_usd(
@@ -211,20 +204,14 @@ pub async fn eth_price_usd() -> Result<Option<f64>, reqwest::Error> {
 
 pub async fn token_price_usd(coin_id: String) -> Result<Option<f64>, reqwest::Error> {
     let client = coingecko::CoinGeckoClient::default();
-    match client.ping().await {
-        Ok(_) => {
-            let token_price = client
-                .price(&[&coin_id], &["usd"], true, true, true, true)
-                .await;
-            match token_price {
-                Ok(hashmap) => match hashmap.get(&coin_id) {
-                    Some(entry) => Ok(entry.usd),
-                    None => Ok(None),
-                },
-                Err(error) => Err(error),
-            }
-        }
-        Err(error) => Err(error),
+    client.ping().await?;
+    let token_price = client
+        .price(&[&coin_id], &["usd"], true, true, true, true)
+        .await;
+
+    match token_price?.get(&coin_id) {
+        Some(entry) => Ok(entry.usd),
+        None => Ok(None),
     }
 }
 
@@ -232,8 +219,7 @@ pub async fn token_price_usd(coin_id: String) -> Result<Option<f64>, reqwest::Er
 pub mod tests {
     use crate::methods::{
         change, construct_contract_interface, estimate_gas, estimate_transfer_execution_usd,
-        eth_price_usd, gas_price_wei, get_contract_abi, get_fee_data, get_transaction_count,
-        token_price_usd,
+        eth_price_usd, gas_price_wei, get_fee_data, get_transaction_count, token_price_usd,
     };
     use crate::test_utils;
     use crate::test_utils::{
@@ -241,14 +227,14 @@ pub mod tests {
         get_eth_erc20_fast_bridge_proxy_contract_address, get_eth_rpc_url, get_eth_token,
         get_recipient, get_relay_eth_key,
     };
-    use std::env;
     use std::str::FromStr;
+    use url::Url;
     use web3::types::{Address, U256};
 
     #[tokio::test]
     async fn smoke_estimate_gas_test() {
         let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
-        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let eth1_endpoint = test_utils::get_eth_rpc_url();
 
         let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
         let signer_addres = bridge_proxy_addres.clone();
@@ -258,13 +244,13 @@ pub mod tests {
         let method_args = token;
 
         let estimated_gas = estimate_gas(
-            &eth1_endpoint,
+            eth1_endpoint,
             signer_addres,
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             method_name,
             method_args,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -329,7 +315,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn smoke_change_test() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let bridge_proxy_addres = get_eth_erc20_fast_bridge_proxy_contract_address();
         let contract_abi = get_eth_erc20_fast_bridge_contract_abi().await;
@@ -346,7 +332,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         let res = change(
-            &eth1_endpoint,
+            eth1_endpoint,
             bridge_proxy_addres,
             contract_abi.as_bytes(),
             &method_name,
@@ -356,7 +342,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -366,7 +352,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn mint_token() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
         let token = get_eth_token();
 
         let contract_abi = get_eth_contract_abi(token).await;
@@ -377,7 +363,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         let res = change(
-            &eth1_endpoint,
+            eth1_endpoint,
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -387,7 +373,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -396,30 +382,15 @@ pub mod tests {
     }
 
     #[tokio::test]
-    #[should_panic = "Api(Transport(Message(\"failed to parse url: relative URL without a base\")))"]
-    async fn test_construct_contract_interface_incorrect_url() {
-        let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
-        let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
-
-        construct_contract_interface(
-            "not_valid_url",
-            bridge_proxy_addres,
-            contract_abi.as_bytes(),
-            30
-        )
-        .unwrap();
-    }
-
-    #[tokio::test]
     async fn test_construct_contract_interface_not_eth_endpoint_url() {
         let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
         let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
 
         construct_contract_interface(
-            "https://www.google.com/",
+            Url::from_str("https://www.google.com/").unwrap(),
             bridge_proxy_addres,
             contract_abi.as_bytes(),
-            30
+            30,
         )
         .unwrap();
     }
@@ -427,33 +398,40 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Abi(SerdeJson(Error(\"invalid type: map, expected valid abi spec file\", line: 1, column: 1)))"]
     async fn test_construct_contract_interface_incorrect_json() {
-        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let eth1_endpoint = test_utils::get_eth_rpc_url();
         let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
 
-        construct_contract_interface(&eth1_endpoint, bridge_proxy_addres, "{".as_bytes(), 30).unwrap();
+        construct_contract_interface(eth1_endpoint, bridge_proxy_addres, "{".as_bytes(), 30)
+            .unwrap();
     }
 
     #[tokio::test]
     #[should_panic = "Abi(SerdeJson(Error(\"invalid type: map, expected valid abi spec file\", line: 1, column: 2)))"]
     async fn test_construct_contract_interface_not_abi_json() {
-        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let eth1_endpoint = test_utils::get_eth_rpc_url();
         let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
 
-        construct_contract_interface(&eth1_endpoint, bridge_proxy_addres, "{}".as_bytes(), 30).unwrap();
+        construct_contract_interface(eth1_endpoint, bridge_proxy_addres, "{}".as_bytes(), 30)
+            .unwrap();
     }
 
     #[tokio::test]
     async fn test_construct_contract_interface_non_existing_address() {
         let contract_abi = test_utils::get_eth_erc20_fast_bridge_contract_abi().await;
-        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let eth1_endpoint = test_utils::get_eth_rpc_url();
         let bridge_proxy_addres = web3::types::Address::from_slice(
             hex::decode("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
                 .unwrap()
                 .as_slice(),
         );
 
-        construct_contract_interface(&eth1_endpoint, bridge_proxy_addres, contract_abi.as_bytes(), 30)
-            .unwrap();
+        construct_contract_interface(
+            eth1_endpoint,
+            bridge_proxy_addres,
+            contract_abi.as_bytes(),
+            30,
+        )
+        .unwrap();
     }
 
     #[tokio::test]
@@ -463,10 +441,10 @@ pub mod tests {
         let bridge_proxy_addres = test_utils::get_eth_erc20_fast_bridge_proxy_contract_address();
 
         construct_contract_interface(
-            "http://httpstat.us/404",
+            Url::from_str("http://httpstat.us/404").unwrap(),
             bridge_proxy_addres,
             contract_abi.as_bytes(),
-            30
+            30,
         )
         .unwrap();
     }
@@ -474,15 +452,19 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Api(Transport(Code(404)))"]
     async fn test_get_fee_data_bad_server() {
-        get_fee_data("http://httpstat.us/404", None, 30).await.unwrap();
+        get_fee_data(Url::from_str("http://httpstat.us/404").unwrap(), None, 30)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
     #[should_panic = "InvalidOutputType(\"Failed to calculate `max_fee_per_gas`\")"]
     async fn test_get_fee_data_big_max_priority() {
-        let eth1_endpoint = test_utils::get_eth_rpc_url().to_string();
+        let eth1_endpoint = test_utils::get_eth_rpc_url();
 
-        get_fee_data(&eth1_endpoint, Some(U256::MAX), 30).await.unwrap();
+        get_fee_data(eth1_endpoint, Some(U256::MAX), 30)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -520,7 +502,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         change(
-            "http://httpstat.us/404",
+            Url::from_str("http://httpstat.us/404").unwrap(),
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -530,7 +512,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -549,7 +531,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         change(
-            "http://httpstat.us/404",
+            Url::from_str("http://httpstat.us/404").unwrap(),
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -559,7 +541,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -567,7 +549,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_change_invalid_address() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -583,7 +565,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         change(
-            &eth1_endpoint,
+            eth1_endpoint,
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -593,7 +575,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -602,7 +584,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Api(Decoder(\"InvalidName(\\\"min\\\")\"))"]
     async fn test_change_wrong_method_name() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -613,7 +595,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         change(
-            &eth1_endpoint,
+            eth1_endpoint,
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -623,7 +605,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -632,7 +614,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Api(Decoder(\"InvalidData\"))"]
     async fn test_change_wrong_method_args() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -643,7 +625,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         change(
-            &eth1_endpoint,
+            eth1_endpoint,
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -653,7 +635,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -662,7 +644,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Api(Rpc(Error { code: ServerError(-32000), message: \"insufficient funds for gas * price + value\", data: None }))"]
     async fn test_change_wrong_private_key() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -676,7 +658,7 @@ pub mod tests {
         .unwrap();
 
         change(
-            &eth1_endpoint,
+            eth1_endpoint,
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -686,7 +668,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -695,7 +677,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Api(Rpc(Error { code: ServerError(-32000), message: \"replacement transaction underpriced\", data: None }))"]
     async fn test_change_wrong_nonce() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -706,7 +688,7 @@ pub mod tests {
         let priv_key = get_relay_eth_key();
 
         change(
-            &eth1_endpoint,
+            eth1_endpoint.clone(),
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -716,7 +698,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -724,7 +706,7 @@ pub mod tests {
         let amount = web3::types::U256::from(200);
 
         change(
-            &eth1_endpoint,
+            eth1_endpoint,
             token,
             contract_abi.as_bytes(),
             &method_name,
@@ -734,7 +716,7 @@ pub mod tests {
             None,
             None,
             None,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -758,13 +740,13 @@ pub mod tests {
         let priv_key = get_eth_erc20_fast_bridge_proxy_contract_address();
 
         estimate_gas(
-            "http://httpstat.us/404",
+            Url::from_str("http://httpstat.us/404").unwrap(),
             priv_key,
             token,
             contract_abi.as_bytes(),
             method_name,
             amount,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -773,7 +755,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Abi(InvalidName(\"min\"))"]
     async fn test_gas_estimation_wrong_method_name() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -784,13 +766,13 @@ pub mod tests {
         let priv_key = get_eth_erc20_fast_bridge_proxy_contract_address();
 
         estimate_gas(
-            &eth1_endpoint,
+            eth1_endpoint,
             priv_key,
             token,
             contract_abi.as_bytes(),
             method_name,
             amount,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -799,7 +781,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Abi(InvalidData)"]
     async fn test_gas_estimation_wrong_args() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -810,13 +792,13 @@ pub mod tests {
         let priv_key = get_eth_erc20_fast_bridge_proxy_contract_address();
 
         estimate_gas(
-            &eth1_endpoint,
+            eth1_endpoint,
             priv_key,
             token,
             contract_abi.as_bytes(),
             method_name,
             amount,
-            30
+            30,
         )
         .await
         .unwrap();
@@ -825,7 +807,7 @@ pub mod tests {
     #[tokio::test]
     #[should_panic = "Api(Rpc(Error { code: ServerError(3), message: \"execution reverted: ERC20: mint to the zero address\""]
     async fn test_gas_estimation_wrong_eth_address() {
-        let eth1_endpoint = get_eth_rpc_url().to_string();
+        let eth1_endpoint = get_eth_rpc_url();
 
         let token = get_eth_token();
         let contract_abi = get_eth_contract_abi(token).await;
@@ -836,13 +818,13 @@ pub mod tests {
         let priv_key = Address::zero();
 
         estimate_gas(
-            &eth1_endpoint,
+            eth1_endpoint,
             priv_key,
             token,
             contract_abi.as_bytes(),
             method_name,
             amount,
-            30
+            30,
         )
         .await
         .unwrap();

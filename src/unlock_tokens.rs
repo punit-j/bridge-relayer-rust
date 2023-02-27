@@ -1,7 +1,11 @@
 use crate::{
-    async_redis_wrapper::AsyncRedisWrapper, config::SafeSettings, last_block::SafeStorage,
+    async_redis_wrapper::AsyncRedisWrapper, config::SafeSettings, errors::CustomError,
+    last_block::SafeStorage,
 };
-use near_primitives::views::ExecutionStatusView::Failure;
+use near_primitives::{
+    hash::CryptoHash,
+    views::{ExecutionStatusView::Failure, FinalExecutionStatus},
+};
 
 async fn unlock_tokens(
     server_addr: url::Url,
@@ -10,15 +14,9 @@ async fn unlock_tokens(
     proof: fast_bridge_common::Proof,
     nonce: u128,
     gas: u64,
-) -> Result<
-    (
-        near_primitives::views::FinalExecutionStatus,
-        near_primitives::hash::CryptoHash,
-    ),
-    crate::errors::CustomError,
-> {
+) -> Result<(FinalExecutionStatus, CryptoHash), CustomError> {
     tracing::info!("Start lp unlock for token with nonce={}", nonce);
-    let response = near_client::methods::change(
+    let result = near_client::methods::change(
         server_addr,
         account,
         contract_account_id,
@@ -30,119 +28,98 @@ async fn unlock_tokens(
         gas,
         0,
     )
-    .await;
+    .await
+    .map_err(|err| CustomError::FailedExecuteUnlockTokens(err.to_string()))?;
 
-    match response {
-        Ok(result) => {
-            for receipt_outcome in result.receipts_outcome {
-                if let Failure(tx_error) = receipt_outcome.outcome.status {
-                    return Ok((
-                        near_primitives::views::FinalExecutionStatus::Failure(tx_error),
-                        result.transaction.hash,
-                    ));
-                }
-            }
-            Ok((result.status, result.transaction.hash))
+    for receipt_outcome in result.receipts_outcome {
+        if let Failure(tx_error) = receipt_outcome.outcome.status {
+            return Ok((
+                FinalExecutionStatus::Failure(tx_error),
+                result.transaction.hash,
+            ));
         }
-        Err(error) => Err(crate::errors::CustomError::FailedExecuteUnlockTokens(
-            error.to_string(),
-        )),
     }
+    Ok((result.status, result.transaction.hash))
 }
 
-async fn transactions_traversal(
+async fn handle_one_tx(
     account: near_crypto::InMemorySigner,
     gas: u64,
     unlock_tokens_worker_settings: crate::config::UnlockTokensWorkerSettings,
-    tx_hashes_queue: Vec<String>,
+    tx_hash: String,
     storage: SafeStorage,
     mut redis: AsyncRedisWrapper,
-) {
-    for tx_hash in tx_hashes_queue {
+) -> Result<(), String> {
+    tracing::info!(
+        "Start processing transaction for lp unlock (tx_hash={})",
+        tx_hash
+    );
+
+    let eth_last_block_number_on_near = storage.lock().await.eth_last_block_number_on_near;
+    let tx_data = redis
+        .get_tx_data(tx_hash.clone())
+        .await
+        .map_err(|err| format!("{}", CustomError::FailedGetTxData(err)))?;
+    let unlock_tokens_execution_condition = tx_data.block
+        + unlock_tokens_worker_settings.blocks_for_tx_finalization
+        <= eth_last_block_number_on_near;
+
+    if !unlock_tokens_execution_condition {
         tracing::info!(
-            "Start processing transaction for lp unlock (tx_hash={})",
-            tx_hash
-        );
-
-        let eth_last_block_number_on_near = storage.lock().await.eth_last_block_number_on_near;
-        let tx_data = redis.get_tx_data(tx_hash.clone()).await;
-        match tx_data {
-            Ok(data) => {
-                let unlock_tokens_execution_condition = data.block
-                    + unlock_tokens_worker_settings.blocks_for_tx_finalization
-                    <= eth_last_block_number_on_near;
-                if unlock_tokens_execution_condition {
-                    let tx_execution_status_and_hash = crate::unlock_tokens::unlock_tokens(
-                        unlock_tokens_worker_settings.server_addr.clone(),
-                        account.clone(),
-                        unlock_tokens_worker_settings.contract_account_id.clone(),
-                        data.proof,
-                        data.nonce,
-                        gas,
-                    )
-                    .await;
-
-                    match tx_execution_status_and_hash {
-                        Ok((tx_execution_status, near_tx_hash)) => match tx_execution_status {
-                            near_primitives::views::FinalExecutionStatus::NotStarted
-                            | near_primitives::views::FinalExecutionStatus::Started => {
-                                tracing::error!(
-                                    "Tx status (nonce: {}): {:?}; NEAR tx_hash: {}",
-                                    data.nonce,
-                                    tx_execution_status,
-                                    near_tx_hash
-                                );
-                            }
-                            near_primitives::views::FinalExecutionStatus::Failure(_) => {
-                                tracing::error!(
-                                    "Failed transaction (nonce: {}): {:?}; NEAR tx_hash: {}",
-                                    data.nonce,
-                                    tx_execution_status,
-                                    near_tx_hash
-                                );
-                                unstore_tx(&mut redis, &tx_hash).await;
-                            }
-                            near_primitives::views::FinalExecutionStatus::SuccessValue(_) => {
-                                tracing::info!(
-                                    "Tokens successfully unlocked (nonce: {}). NEAR tx_hash = {}",
-                                    data.nonce,
-                                    near_tx_hash
-                                );
-                                unstore_tx(&mut redis, &tx_hash).await;
-                            }
-                        },
-                        Err(err) => tracing::error!("{}", err),
-                    }
-                } else {
-                    tracing::info!(
-                        "Skip tx(nonce={}, tx_hash={}); \n\
+            "Skip tx(nonce={}, tx_hash={}); \n\
                           Current last ETH block on NEAR = {}, \n\
                           ETH block with tx = {}, \n\
                           Waiting for block = {}",
-                        data.nonce,
-                        tx_hash,
-                        eth_last_block_number_on_near,
-                        data.block,
-                        data.block + unlock_tokens_worker_settings.blocks_for_tx_finalization
-                    );
-                    continue;
-                }
-            }
-            Err(error) => tracing::error!("{}", crate::errors::CustomError::FailedGetTxData(error)),
+            tx_data.nonce,
+            tx_hash,
+            eth_last_block_number_on_near,
+            tx_data.block,
+            tx_data.block + unlock_tokens_worker_settings.blocks_for_tx_finalization
+        );
+        return Ok(());
+    }
+
+    let (tx_execution_status, near_tx_hash) = unlock_tokens(
+        unlock_tokens_worker_settings.server_addr.clone(),
+        account.clone(),
+        unlock_tokens_worker_settings.contract_account_id.clone(),
+        tx_data.proof,
+        tx_data.nonce,
+        gas,
+    )
+    .await
+    .map_err(|err| format!("{}", err))?;
+
+    match tx_execution_status {
+        FinalExecutionStatus::NotStarted | FinalExecutionStatus::Started => {
+            return Err(format!(
+                "Tx status (nonce: {}): {:?}; NEAR tx_hash: {}",
+                tx_data.nonce, tx_execution_status, near_tx_hash
+            ));
+        }
+        FinalExecutionStatus::Failure(_) => {
+            unstore_tx(&mut redis, &tx_hash).await;
+            return Err(format!(
+                "Failed transaction (nonce: {}): {:?}; NEAR tx_hash: {}",
+                tx_data.nonce, tx_execution_status, near_tx_hash
+            ));
+        }
+        FinalExecutionStatus::SuccessValue(_) => {
+            unstore_tx(&mut redis, &tx_hash).await;
+            tracing::info!(
+                "Tokens unlocked (nonce: {}). NEAR tx_hash = {}",
+                tx_data.nonce,
+                near_tx_hash
+            );
         }
     }
+    Ok(())
 }
 
-async fn unstore_tx(
-    connection: &mut crate::async_redis_wrapper::AsyncRedisWrapper,
-    tx_hash: &String,
-) {
+async fn unstore_tx(connection: &mut AsyncRedisWrapper, tx_hash: &String) {
     let unstore_tx_status = connection.unstore_tx(tx_hash.to_string()).await;
     if let Err(error) = unstore_tx_status {
-        tracing::error!(
-            "{}",
-            crate::errors::CustomError::FailedUnstoreTransaction(error)
-        )
+        tracing::error!("{}", CustomError::FailedUnstoreTransaction(error))
     }
 }
 
@@ -154,34 +131,32 @@ pub async fn unlock_tokens_worker(
     mut redis: AsyncRedisWrapper,
 ) {
     loop {
-        let unlock_tokens_worker_settings = settings.lock().await.unlock_tokens_worker.clone();
-        tracing::trace!(
-            "unlock_tokens_worker: sleep for {} secs",
-            unlock_tokens_worker_settings.request_interval_secs
-        );
+        let unlock_tokens_settings = settings.lock().await.unlock_tokens_worker.clone();
+        let interval_secs = unlock_tokens_settings.request_interval_secs;
+        tracing::trace!("unlock_tokens_worker: sleep for {} secs", interval_secs);
 
-        let mut interval =
-            crate::utils::request_interval(unlock_tokens_worker_settings.request_interval_secs)
-                .await;
+        let mut interval = crate::utils::request_interval(interval_secs).await;
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         interval.tick().await;
-        let tx_hashes_queue = redis.get_tx_hashes().await;
-        match tx_hashes_queue {
+
+        match redis.get_tx_hashes().await {
             Ok(queue) => {
-                transactions_traversal(
-                    account.clone(),
-                    gas,
-                    unlock_tokens_worker_settings,
-                    queue,
-                    storage.clone(),
-                    redis.clone(),
-                )
-                .await;
+                for tx_hash in queue {
+                    let res = handle_one_tx(
+                        account.clone(),
+                        gas,
+                        unlock_tokens_settings.clone(),
+                        tx_hash,
+                        storage.clone(),
+                        redis.clone(),
+                    )
+                    .await;
+                    if let Err(err) = res {
+                        tracing::error!(err);
+                    }
+                }
             }
-            Err(error) => tracing::error!(
-                "{}",
-                crate::errors::CustomError::FailedGetTxHashesQueue(error)
-            ),
+            Err(error) => tracing::error!("{}", CustomError::FailedGetTxHashesQueue(error)),
         }
     }
 }

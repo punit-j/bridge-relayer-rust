@@ -13,11 +13,9 @@ pub async fn get_eth_contract_abi(contract_addr: Address) -> String {
     dotenv().ok();
     let etherscan_endpoint_url = "https://api-goerli.etherscan.io";
     let etherscan_api_key = env::var("FAST_BRIDGE_ETHERSCAN_API_KEY").unwrap();
-    get_contract_abi(
-        etherscan_endpoint_url,
-        contract_addr,
-        &etherscan_api_key,
-    ).await.unwrap()
+    get_contract_abi(etherscan_endpoint_url, contract_addr, &etherscan_api_key)
+        .await
+        .unwrap()
 }
 
 pub fn get_eth_erc20_fast_bridge_impl_address() -> web3::types::Address {

@@ -75,9 +75,8 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(
     client: &'a api::Eth<T>,
     tx_hash: &'a H256,
 ) -> Result<U256, Error<'b>> {
-    let receipt = client
-        .transaction_receipt(*tx_hash)
-        .await
+    let receipt = client.transaction_receipt(*tx_hash).await;
+    let receipt = receipt
         .map_err(Error::Web3)?
         .ok_or(Error::Other("Unable to unwrap receipt"))?;
 
@@ -115,7 +114,7 @@ pub async fn get_transaction_log_index<'a, 'b, T: web3::Transport>(
 
 impl ToString for Error<'_> {
     #[allow(unconditional_recursion)]
-    fn to_string(&self) -> std::string::String {
+    fn to_string(&self) -> String {
         format!("{:?}", self)
     }
 }

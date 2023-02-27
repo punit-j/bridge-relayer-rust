@@ -5,7 +5,7 @@ mod ethereum;
 mod event_processor;
 mod last_block;
 mod logs;
-mod near;
+mod near_events_tracker;
 mod pending_transactions_worker;
 mod profit_estimation;
 mod transfer;
@@ -105,51 +105,48 @@ async fn main() {
         Ok(settings) => std::sync::Arc::new(tokio::sync::Mutex::new(settings)),
         Err(msg) => panic!("{}", msg),
     };
+    let locked_settings = settings.lock().await.clone();
 
-    check_system_time(settings.lock().await.near.rpc_url.clone()).await;
+    check_system_time(locked_settings.near.rpc_url.clone()).await;
 
     let mut async_redis =
-        async_redis_wrapper::AsyncRedisWrapper::connect(&settings.lock().await.redis).await;
+        async_redis_wrapper::AsyncRedisWrapper::connect(&locked_settings.redis).await;
 
     let storage = std::sync::Arc::new(tokio::sync::Mutex::new(last_block::Storage::new()));
-    let eth_keypair = get_eth_private_key(&args, &settings.lock().await.clone()).await;
-    let eth_contract_address = std::sync::Arc::new(settings.lock().await.eth.bridge_proxy_address);
+    let eth_keypair = get_eth_private_key(&args, &locked_settings.clone()).await;
+    let eth_contract_address = std::sync::Arc::new(locked_settings.eth.bridge_proxy_address);
 
-    let eth_contract_abi_settings = settings.lock().await.clone();
     let eth_contract_abi = std::sync::Arc::new(
         eth_client::methods::get_contract_abi(
-            eth_contract_abi_settings
-                .etherscan_api
-                .endpoint_url
-                .as_ref(),
-            eth_contract_abi_settings.eth.bridge_impl_address,
-            &eth_contract_abi_settings.etherscan_api.api_key,
+            locked_settings.etherscan_api.endpoint_url.as_ref(),
+            locked_settings.eth.bridge_impl_address,
+            &locked_settings.etherscan_api.api_key,
         )
         .await
         .expect("Failed to get contract abi"),
     );
 
-    let near_account = get_near_private_key(&args, &settings.lock().await.clone()).await;
+    let near_account = get_near_private_key(&args, &locked_settings.clone()).await;
 
-    let near_contract_address = settings.lock().await.near.contract_address.clone();
+    let near_contract_address = locked_settings.near.contract_address.clone();
 
-    let near_worker = near::run_worker(
+    let near_worker = near_events_tracker::run_worker(
         near_contract_address,
         async_redis.clone(),
         {
             if let Some(start_block) = args.near_lake_init_block {
                 start_block
             } else if let Some(start_block) = async_redis
-                .option_get::<u64>(near::OPTION_START_BLOCK)
+                .option_get::<u64>(near_events_tracker::OPTION_START_BLOCK)
                 .await
                 .unwrap()
             {
                 start_block
             } else {
-                settings.lock().await.near.near_lake_init_block
+                locked_settings.near.near_lake_init_block
             }
         },
-        settings.lock().await.near.near_network.clone(),
+        locked_settings.near.near_network.clone(),
     );
 
     let stream = async_redis_wrapper::subscribe::<String>(
@@ -158,7 +155,7 @@ async fn main() {
     )
     .unwrap();
 
-    let subscriber = utils::build_near_events_subscriber(
+    let subscriber = event_processor::build_near_events_subscriber(
         settings.clone(),
         eth_keypair.clone(),
         async_redis.clone(),
@@ -168,9 +165,11 @@ async fn main() {
         near_account.account_id.to_string(),
     );
 
-    let pending_transactions_worker = utils::build_pending_transactions_worker(
-        settings.lock().await.clone(),
+    let pending_transactions_worker = pending_transactions_worker::run(
+        locked_settings.eth.rpc_url.clone(),
+        locked_settings.eth.rainbow_bridge_index_js_path.clone(),
         async_redis.clone(),
+        locked_settings.rpc_timeout_secs.clone(),
     );
 
     let last_block_number_worker =

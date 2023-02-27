@@ -1,7 +1,9 @@
 use crate::config::{NearTokenInfo, Settings};
+use crate::errors::CustomError;
 use crate::logs::EVENT_PROCESSOR_TARGET;
 use fast_bridge_common::TransferMessage;
 use near_sdk::AccountId;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use web3::types::{H160, U256};
 
 pub async fn execute_transfer(
@@ -14,7 +16,7 @@ pub async fn execute_transfer(
     settings: &Settings,
     near_relay_account_id: String,
     transaction_count: web3::types::U256,
-) -> Result<web3::types::H256, crate::errors::CustomError> {
+) -> Result<web3::types::H256, CustomError> {
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
 
@@ -31,26 +33,23 @@ pub async fn execute_transfer(
     )
     .await;
 
-    let estimated_gas = match estimated_gas {
-        Ok(gas) => gas,
-        Err(error) => return Err(crate::errors::CustomError::FailedEstimateGas(error)),
-    };
+    let estimated_gas = estimated_gas.map_err(|err| CustomError::FailedEstimateGas(err))?;
 
     if transfer_message.fee.token != transfer_message.transfer.token_near {
-        return Err(crate::errors::CustomError::InvalidFeeToken);
+        return Err(CustomError::InvalidFeeToken);
     }
 
     let token_info = get_near_token_info(&settings, transfer_message.transfer.token_near)?;
 
     if token_info.eth_address != transfer_message.transfer.token_eth.into() {
-        return Err(crate::errors::CustomError::InvalidEthTokenAddress);
+        return Err(CustomError::InvalidEthTokenAddress);
     }
 
     let min_fee_allowed = estimate_min_fee(&token_info, transfer_message.transfer.amount.0)
-        .ok_or(crate::errors::CustomError::FailedFeeCalculation)?;
+        .ok_or(CustomError::FailedFeeCalculation)?;
 
     if transfer_message.fee.amount.0 < min_fee_allowed {
-        return Err(crate::errors::CustomError::NotEnoughFeeToken(
+        return Err(CustomError::NotEnoughFeeToken(
             transfer_message.fee.amount.0,
             min_fee_allowed,
         ));
@@ -74,10 +73,7 @@ pub async fn execute_transfer(
         );
 
         if profit < profit_threshold {
-            return Err(crate::errors::CustomError::TxNotProfitable(
-                profit,
-                profit_threshold,
-            ));
+            return Err(CustomError::TxNotProfitable(profit, profit_threshold));
         }
     }
 
@@ -96,12 +92,7 @@ pub async fn execute_transfer(
     )
     .await;
 
-    match tx_hash {
-        Ok(hash) => Ok(hash),
-        Err(error) => Err(crate::errors::CustomError::FailedExecuteTransferTokens(
-            error,
-        )),
-    }
+    Ok(tx_hash.map_err(|err| CustomError::FailedExecuteTransferTokens(err))?)
 }
 
 fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u128> {
@@ -119,26 +110,21 @@ fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u1
 fn check_time_before_unlock(
     transfer_message: &TransferMessage,
     min_time_before_unlock: Option<u64>,
-) -> Result<(), crate::errors::CustomError> {
-    match min_time_before_unlock {
-        Some(min_time_before_unlock) => {
-            let transaction_unlock_time_ns = transfer_message.valid_till as u128;
-            let min_time_before_unlock_ns =
-                std::time::Duration::from_secs(min_time_before_unlock).as_nanos();
+) -> Result<(), CustomError> {
+    if let Some(min_time_before_unlock) = min_time_before_unlock {
+        let transaction_unlock_time_ns = transfer_message.valid_till as u128;
+        let min_time_before_unlock_ns = Duration::from_secs(min_time_before_unlock).as_nanos();
+        let current_time_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
 
-            let current_time_ns = std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos();
-
-            if current_time_ns + min_time_before_unlock_ns > transaction_unlock_time_ns {
-                return Err(crate::errors::CustomError::NotEnoughTimeBeforeUnlock);
-            }
-
-            Ok(())
+        if current_time_ns + min_time_before_unlock_ns > transaction_unlock_time_ns {
+            return Err(CustomError::NotEnoughTimeBeforeUnlock);
         }
-        None => Ok(()),
     }
+
+    Ok(())
 }
 
 async fn estimate_profit(
@@ -146,18 +132,14 @@ async fn estimate_profit(
     token_info: NearTokenInfo,
     fee_amount: U256,
     estimated_gas: U256,
-) -> Result<f64, crate::errors::CustomError> {
-    let gas_price_in_wei = match eth_client::methods::gas_price_wei(eth1_rpc_url).await {
-        Ok(gas_price_in_wei) => gas_price_in_wei,
-        Err(error) => return Err(crate::errors::CustomError::FailedFetchGasPrice(error)),
-    };
+) -> Result<f64, CustomError> {
+    let gas_price_in_wei = eth_client::methods::gas_price_wei(eth1_rpc_url)
+        .await
+        .map_err(|err| CustomError::FailedFetchGasPrice(err))?;
 
     let eth_price_in_usd = match eth_client::methods::eth_price_usd().await {
-        Ok(price) => match price {
-            Some(eth_price_in_usd) => eth_price_in_usd,
-            None => return Err(crate::errors::CustomError::FailedFetchEthereumPriceInvalidCoinId),
-        },
-        Err(error) => return Err(crate::errors::CustomError::FailedFetchEthereumPrice(error)),
+        Ok(price) => price.ok_or(CustomError::FailedFetchEthPriceInvalidCoinId)?,
+        Err(error) => return Err(CustomError::FailedFetchEthereumPrice(error)),
     };
 
     let estimated_transfer_execution_price = eth_client::methods::estimate_transfer_execution_usd(
@@ -167,11 +149,8 @@ async fn estimate_profit(
     );
 
     let fee_token_usd = match eth_client::methods::token_price_usd(token_info.exchange_id).await {
-        Ok(price) => match price {
-            Some(fee_token_usd) => fee_token_usd,
-            None => return Err(crate::errors::CustomError::FailedGetTokenPriceInvalidCoinId),
-        },
-        Err(error) => return Err(crate::errors::CustomError::FailedGetTokenPrice(error)),
+        Ok(price) => price.ok_or(CustomError::FailedGetTokenPriceInvalidCoinId)?,
+        Err(error) => return Err(CustomError::FailedGetTokenPrice(error)),
     };
 
     crate::profit_estimation::get_profit_usd(
@@ -182,56 +161,40 @@ async fn estimate_profit(
     )
 }
 
+type MethodArgs = (H160, H160, U256, U256, String);
+
 fn get_transfer_data(
     transfer_event: fast_bridge_common::Event,
     near_relay_account_id: String,
-) -> Result<
-    (
-        U256,
-        String,
-        (H160, H160, U256, U256, String),
-        TransferMessage,
-    ),
-    crate::errors::CustomError,
-> {
-    let method_name = "transferTokens";
-    if let fast_bridge_common::Event::FastBridgeInitTransferEvent {
-        nonce,
-        sender_id: _,
-        transfer_message,
-    } = transfer_event
-    {
-        let token = web3::types::Address::from(transfer_message.transfer.token_eth);
-        let recipient = web3::types::Address::from(transfer_message.recipient);
-        let nonce = web3::types::U256::from(nonce.0);
-        let amount = web3::types::U256::from(transfer_message.transfer.amount.0);
-        let method_args = (token, recipient, nonce, amount, near_relay_account_id);
-
-        Ok((
+) -> Result<(U256, String, MethodArgs, TransferMessage), CustomError> {
+    let method_name = "transferTokens".to_string();
+    match transfer_event {
+        fast_bridge_common::Event::FastBridgeInitTransferEvent {
             nonce,
-            method_name.to_string(),
-            method_args,
+            sender_id: _,
             transfer_message,
-        ))
-    } else {
-        Err(crate::errors::CustomError::ReceivedInvalidEvent)
+        } => {
+            let token = web3::types::Address::from(transfer_message.transfer.token_eth);
+            let recipient = web3::types::Address::from(transfer_message.recipient);
+            let nonce = web3::types::U256::from(nonce.0);
+            let amount = web3::types::U256::from(transfer_message.transfer.amount.0);
+            let method_args = (token, recipient, nonce, amount, near_relay_account_id);
+
+            Ok((nonce, method_name, method_args, transfer_message))
+        }
+        _ => Err(CustomError::ReceivedInvalidEvent),
     }
 }
 
 fn get_near_token_info(
     settings: &Settings,
     fee_token: AccountId,
-) -> Result<NearTokenInfo, crate::errors::CustomError> {
+) -> Result<NearTokenInfo, CustomError> {
     let token_info = settings
         .near_tokens_whitelist
         .get_token_info(fee_token.clone());
 
-    match token_info {
-        Some(coin_id) => Ok(coin_id),
-        None => {
-            Err(crate::errors::CustomError::FailedGetNearTokenInfoByMatching(fee_token.to_string()))
-        }
-    }
+    token_info.ok_or(CustomError::FailedGetNearTokenInfo(fee_token.into()))
 }
 
 #[cfg(test)]

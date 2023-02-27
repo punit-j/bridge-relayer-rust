@@ -1,4 +1,5 @@
-use crate::config::SafeSettings;
+use crate::{config::SafeSettings, errors::CustomError};
+use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_sdk::borsh::BorshDeserialize;
 
 pub type SafeStorage = std::sync::Arc<tokio::sync::Mutex<Storage>>;
@@ -49,27 +50,17 @@ pub async fn last_block_number_worker(settings: SafeSettings, storage: SafeStora
 pub async fn last_block_number(
     server_addr: url::Url,
     contract_account_id: String,
-) -> Result<Option<u64>, crate::errors::CustomError> {
-    let response = near_client::methods::view(
-        server_addr,
-        contract_account_id,
-        "last_block_number".to_string(),
-        near_sdk::serde_json::json!({}),
-    )
-    .await;
-    match response {
-        Ok(response_result) => {
-            if let near_jsonrpc_primitives::types::query::QueryResponseKind::CallResult(result) =
-                response_result.kind
-            {
-                Ok(Some(u64::try_from_slice(&result.result).unwrap()))
-            } else {
-                Ok(None)
-            }
-        }
-        Err(error) => Err(crate::errors::CustomError::FailedExecuteLastBlockNumber(
-            error.to_string(),
-        )),
+) -> Result<Option<u64>, CustomError> {
+    let method_name = "last_block_number".to_string();
+    let args = serde_json::json!({});
+    let response = near_client::methods::view(server_addr, contract_account_id, method_name, args)
+        .await
+        .map_err(|err| CustomError::FailedExecuteLastBlockNumber(err.to_string()))?;
+
+    if let QueryResponseKind::CallResult(result) = response.kind {
+        Ok(Some(u64::try_from_slice(&result.result).unwrap()))
+    } else {
+        Ok(None)
     }
 }
 

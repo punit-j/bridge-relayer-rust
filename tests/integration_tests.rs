@@ -365,7 +365,7 @@ async fn detect_new_near_event(redis: AsyncRedisWrapper, init_block: u64, wait_t
         )
         .unwrap();
 
-    let worker = fast_bridge_service_lib::near::run_worker(
+    let worker = fast_bridge_service_lib::near_events_tracker::run_worker(
         contract_address,
         redis,
         init_block,
@@ -384,7 +384,7 @@ async fn process_events(
     stream: tokio::sync::mpsc::Receiver<String>,
     near_relay_account_id: String,
 ) {
-    let worker = fast_bridge_service_lib::utils::build_near_events_subscriber(
+    let worker = fast_bridge_service_lib::event_processor::build_near_events_subscriber(
         settings.clone(),
         eth_keypair.clone(),
         redis.clone(),
@@ -401,13 +401,17 @@ async fn process_events(
     assert_eq!(pending_transactions.len(), 1);
 }
 
-async fn handle_pending_transaction(
-    settings: SafeSettings,
-    redis: async_redis_wrapper::AsyncRedisWrapper,
-) {
-    fast_bridge_service_lib::utils::build_pending_transactions_worker(
-        settings.lock().await.clone(),
+async fn handle_pending_transaction(settings: SafeSettings, redis: AsyncRedisWrapper) {
+    fast_bridge_service_lib::pending_transactions_worker::run(
+        settings.lock().await.eth.rpc_url.clone(),
+        settings
+            .lock()
+            .await
+            .eth
+            .rainbow_bridge_index_js_path
+            .clone(),
         redis.clone(),
+        settings.lock().await.rpc_timeout_secs.clone(),
     )
     .await;
 

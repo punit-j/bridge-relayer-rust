@@ -25,10 +25,7 @@ pub fn read_private_key_from_file(
 
 #[cfg(test)]
 pub mod tests {
-    use crate::read_private_key::read_private_key_from_file;
     use crate::test_utils::get_near_signer;
-    use std::ffi::OsStr;
-    use std::path::Path;
 
     #[tokio::test]
     async fn smoke_read_private_key_from_file_test() {

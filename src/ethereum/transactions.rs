@@ -1,5 +1,4 @@
-use web3::api;
-use web3::types::TransactionId;
+use web3::{api, error::Error, types::TransactionId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionStatus {
@@ -12,18 +11,15 @@ pub async fn transaction_status<T: web3::Transport>(
     client: &api::Eth<T>,
     tx_hash: web3::types::H256,
 ) -> web3::error::Result<TransactionStatus> {
-    let res = client
-        .transaction(TransactionId::from(tx_hash))
-        .await?
-        .ok_or(web3::error::Error::Unreachable)?;
+    let res = client.transaction(TransactionId::from(tx_hash)).await?;
+    let res = res.ok_or(Error::Unreachable)?;
     if res.block_number.is_none() {
         return Ok(TransactionStatus::Pending);
     }
 
-    let res = client
-        .transaction_receipt(tx_hash)
-        .await?
-        .ok_or(web3::error::Error::Unreachable)?;
+    let res = client.transaction_receipt(tx_hash).await?;
+    let res = res.ok_or(Error::Unreachable)?;
+
     if let Some(s) = res.status {
         let block_number = res.block_number.unwrap();
         return Ok(if s == web3::types::U64::from(0) {
@@ -33,7 +29,7 @@ pub async fn transaction_status<T: web3::Transport>(
         });
     }
 
-    Err(web3::error::Error::Unreachable)
+    Err(Error::Unreachable)
 }
 
 #[cfg(test)]
