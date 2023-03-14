@@ -1,4 +1,5 @@
 use crate::{config::SafeSettings, errors::CustomError};
+use crate::prometheus_metrics::LAST_ETH_BLOCK_ON_NEAR;
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_sdk::borsh::BorshDeserialize;
 
@@ -37,7 +38,8 @@ pub async fn last_block_number_worker(settings: SafeSettings, storage: SafeStora
             match number {
                 Ok(result) => match result {
                     Some(block_number) => {
-                        storage.lock().await.eth_last_block_number_on_near = block_number
+                        storage.lock().await.eth_last_block_number_on_near = block_number;
+                        LAST_ETH_BLOCK_ON_NEAR.inc_by(block_number as i64 - LAST_ETH_BLOCK_ON_NEAR.get());
                     }
                     None => (),
                 },

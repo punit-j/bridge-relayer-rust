@@ -31,6 +31,12 @@ lazy_static! {
     )
     .expect("metric can't be created");
 
+    pub static ref LAST_ETH_BLOCK_ON_NEAR: IntCounter = IntCounter::new(
+        "last_eth_block_on_near",
+        "The last ethereum block on light client on Near"
+    )
+    .expect("metric can't be created");
+
 }
 
 fn register_custom_metrics() {
@@ -49,6 +55,10 @@ fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(UNLOCKED_TRANSACTIONS_COUNT.clone()))
         .expect("unlocked_transactions_count can't be registered");
+
+    REGISTRY
+        .register(Box::new(LAST_ETH_BLOCK_ON_NEAR.clone()))
+        .expect("last_eth_block_on_near can't be registered");
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {
