@@ -1,7 +1,6 @@
 use prometheus::{IntCounter, Registry};
 
 use lazy_static::lazy_static;
-use tokio::runtime::Runtime;
 use warp::Filter;
 use warp::Rejection;
 use warp::Reply;
@@ -58,9 +57,9 @@ pub fn run_prometheus_service(port: u16) {
 
     let metrics_route = warp::path!("metrics").and_then(metrics_handler);
 
-    let rt = Runtime::new().expect("Error on creating runtime for Prometheus service");
+    let rt = tokio_02::runtime::Runtime::new().expect("Error on creating runtime for Prometheus service");
     let handle = rt.handle();
 
-    println!("Started on port {}", port);
+    tracing::info!("Started Prometheus on port {}", port);
     handle.block_on(warp::serve(metrics_route).run(([0, 0, 0, 0], port)));
 }

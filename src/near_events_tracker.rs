@@ -1,4 +1,6 @@
+use fast_bridge_common::Event;
 use crate::{async_redis_wrapper::AsyncRedisWrapper, config::NearNetwork};
+use crate::prometheus_metrics::INIT_TRANSFERS_COUNT;
 use near_lake_framework::{near_indexer_primitives::types::AccountId, LakeConfigBuilder};
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
@@ -54,6 +56,9 @@ pub async fn run_worker(
                                         "New event: {}",
                                         serde_json::to_string(&r).unwrap_or(format!("{:?}", r))
                                     );
+                                    if let Event::FastBridgeInitTransferEvent { .. } = r {
+                                        INIT_TRANSFERS_COUNT.inc_by(1);
+                                    }
                                     redis.event_pub(r).await;
                                 }
                                 Err(e) => {

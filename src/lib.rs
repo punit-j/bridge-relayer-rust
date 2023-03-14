@@ -8,6 +8,7 @@ pub mod logs;
 pub mod near_events_tracker;
 pub mod pending_transactions_worker;
 pub mod profit_estimation;
+pub mod prometheus_metrics;
 pub mod transfer;
 pub mod unlock_tokens;
 pub mod utils;
