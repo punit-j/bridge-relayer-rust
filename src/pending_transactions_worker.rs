@@ -5,7 +5,7 @@ use crate::{
     errors::CustomError,
     ethereum::{transactions::TransactionStatus, RainbowBridgeEthereumClient},
 };
-use crate::prometheus_metrics::SUCCESS_TRANSACTIONS_COUNT;
+use crate::prometheus_metrics::{SUCCESS_TRANSACTIONS_COUNT, FAIL_TRANSACTIONS_COUNT};
 use redis::{AsyncCommands, RedisResult};
 use std::{collections::HashMap, str::FromStr};
 use uint::rustc_hex::ToHex;
@@ -94,6 +94,7 @@ async fn handle_one_tx(
                 .as_secs();
         }
         TransactionStatus::Failure(_block_number) => {
+            FAIL_TRANSACTIONS_COUNT.inc_by(1);
             transactions_to_remove.push(*key);
             return Err(CustomError::FailedTxStatus(format!("{:?}", key)));
         }
