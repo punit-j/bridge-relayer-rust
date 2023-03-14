@@ -12,12 +12,23 @@ lazy_static! {
         "The total number of detected initialized token transfers"
     )
     .expect("metric can't be created");
+
+    pub static ref PENDING_TRANSACTIONS_COUNT: IntCounter = IntCounter::new(
+        "pending_transactions_count",
+        "The total number of pending transactions"
+    )
+    .expect("metric can't be created");
 }
 
 fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(INIT_TRANSFERS_COUNT.clone()))
         .expect("init_transfers_count can't be registered");
+
+    REGISTRY
+        .register(Box::new(PENDING_TRANSACTIONS_COUNT.clone()))
+        .expect("pending_transactions_count can't be registered");
+
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {

@@ -1,6 +1,7 @@
 use crate::async_redis_wrapper::{self, AsyncRedisWrapper};
 use crate::config::{SafeSettings, Settings};
 use crate::{errors::CustomError, utils::get_tx_count};
+use crate::prometheus_metrics::PENDING_TRANSACTIONS_COUNT;
 use fast_bridge_common::Event::FastBridgeInitTransferEvent;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
@@ -69,6 +70,7 @@ pub async fn process_transfer_event(
         )
         .await;
     res.map_err(|e| CustomError::FailedStorePendingTx(e))?;
+    PENDING_TRANSACTIONS_COUNT.inc_by(1);
 
     transaction_count += 1.into();
     redis
