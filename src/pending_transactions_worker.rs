@@ -1,11 +1,11 @@
 use crate::async_redis_wrapper::{
     AsyncRedisWrapper, PendingTransactionData, TxData, PENDING_TRANSACTIONS,
 };
+use crate::prometheus_metrics::{FAIL_TRANSACTIONS_COUNT, SUCCESS_TRANSACTIONS_COUNT};
 use crate::{
     errors::CustomError,
     ethereum::{transactions::TransactionStatus, RainbowBridgeEthereumClient},
 };
-use crate::prometheus_metrics::{SUCCESS_TRANSACTIONS_COUNT, FAIL_TRANSACTIONS_COUNT};
 use redis::{AsyncCommands, RedisResult};
 use std::{collections::HashMap, str::FromStr};
 use uint::rustc_hex::ToHex;

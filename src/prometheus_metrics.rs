@@ -48,6 +48,12 @@ lazy_static! {
         "The total number of skipped transactions (relayer decided don't process these transactions)"
     )
     .expect("metric can't be created");
+
+    pub static ref CONNECTION_ERRORS: IntCounter = IntCounter::new(
+        "connection_errors",
+        "The total number of connection error"
+    )
+    .expect("metric can't be created");
 }
 
 fn register_custom_metrics() {
@@ -78,6 +84,10 @@ fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(SKIP_TRANSACTIONS_COUNT.clone()))
         .expect("skip_transactions_count can't be registered");
+
+    REGISTRY
+        .register(Box::new(CONNECTION_ERRORS.clone()))
+        .expect("connection_errors can't be registered");
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {
@@ -117,7 +127,8 @@ pub fn run_prometheus_service(port: u16) {
 
     let metrics_route = warp::path!("metrics").and_then(metrics_handler);
 
-    let rt = tokio_02::runtime::Runtime::new().expect("Error on creating runtime for Prometheus service");
+    let rt = tokio_02::runtime::Runtime::new()
+        .expect("Error on creating runtime for Prometheus service");
     let handle = rt.handle();
 
     tracing::info!("Started Prometheus on port {}", port);

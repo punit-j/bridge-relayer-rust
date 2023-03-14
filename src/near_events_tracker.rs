@@ -1,6 +1,6 @@
-use fast_bridge_common::Event;
-use crate::{async_redis_wrapper::AsyncRedisWrapper, config::NearNetwork};
 use crate::prometheus_metrics::INIT_TRANSFERS_COUNT;
+use crate::{async_redis_wrapper::AsyncRedisWrapper, config::NearNetwork};
+use fast_bridge_common::Event;
 use near_lake_framework::{near_indexer_primitives::types::AccountId, LakeConfigBuilder};
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";

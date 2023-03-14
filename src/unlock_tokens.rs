@@ -1,8 +1,8 @@
+use crate::prometheus_metrics::UNLOCKED_TRANSACTIONS_COUNT;
 use crate::{
     async_redis_wrapper::AsyncRedisWrapper, config::SafeSettings, errors::CustomError,
     last_block::SafeStorage,
 };
-use crate::prometheus_metrics::UNLOCKED_TRANSACTIONS_COUNT;
 use near_primitives::{
     hash::CryptoHash,
     views::{ExecutionStatusView::Failure, FinalExecutionStatus},

@@ -128,7 +128,11 @@ async fn wait_correct_last_block_number(storage: SafeStorage, mut redis: AsyncRe
         tokio::time::sleep(Duration::from_secs(30)).await;
 
         eth_last_block_number_on_near = storage.lock().await.clone().eth_last_block_number_on_near;
-        tracing::info!("Current last block: {};, tx_block: {}", eth_last_block_number_on_near, tx_block);
+        tracing::info!(
+            "Current last block: {};, tx_block: {}",
+            eth_last_block_number_on_near,
+            tx_block
+        );
     }
 
     if iter_number == MAX_ITERATION_NUMBER {
@@ -292,7 +296,10 @@ async fn increase_fast_bridge_token_balance(signer: InMemorySigner) {
     if let FinalExecutionStatus::SuccessValue(_) = response.status {
         println!("Tokens on NEAR moved to the Bridge Contract successfully");
     } else {
-        panic!("Moving tokens to Bridge Contract on NEAR FAIL {:?}", response);
+        panic!(
+            "Moving tokens to Bridge Contract on NEAR FAIL {:?}",
+            response
+        );
     }
 }
 
@@ -410,9 +417,7 @@ async fn handle_pending_transaction(settings: SafeSettings, redis: AsyncRedisWra
     let locked_settings = settings.lock().await.clone();
     let worker = fast_bridge_service_lib::pending_transactions_worker::run(
         locked_settings.eth.rpc_url,
-        locked_settings.eth
-            .rainbow_bridge_index_js_path
-            .clone(),
+        locked_settings.eth.rainbow_bridge_index_js_path.clone(),
         redis.clone(),
         locked_settings.rpc_timeout_secs,
     );
