@@ -132,6 +132,7 @@ pub struct Settings {
     pub near_tokens_whitelist: NearTokensWhitelist,
     #[serde(default = "default_rpc_timeout_secs")]
     pub rpc_timeout_secs: u64,
+    pub prometheus_metrics_port: Option<u16>,
 }
 
 pub fn default_rpc_timeout_secs() -> u64 {

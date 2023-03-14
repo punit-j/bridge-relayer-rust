@@ -8,6 +8,7 @@ mod logs;
 mod near_events_tracker;
 mod pending_transactions_worker;
 mod profit_estimation;
+mod prometheus_metrics;
 mod transfer;
 mod unlock_tokens;
 mod utils;
@@ -21,6 +22,7 @@ use crate::logs::init_logger;
 use clap::Parser;
 use near_crypto::InMemorySigner;
 use std::str::FromStr;
+use std::thread;
 
 extern crate redis;
 
@@ -106,6 +108,10 @@ async fn main() {
         Err(msg) => panic!("{}", msg),
     };
     let locked_settings = settings.lock().await.clone();
+
+    if let Some(port) = locked_settings.prometheus_metrics_port {
+        thread::spawn(move || prometheus_metrics::run_prometheus_service(port));
+    }
 
     check_system_time(locked_settings.near.rpc_url.clone()).await;
 
