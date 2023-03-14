@@ -24,6 +24,13 @@ lazy_static! {
         "The total number of successful transactions to Ethereum"
     )
     .expect("metric can't be created");
+
+    pub static ref UNLOCKED_TRANSACTIONS_COUNT: IntCounter = IntCounter::new(
+        "unlocked_transactions_count",
+        "The total number of unlocked transactions"
+    )
+    .expect("metric can't be created");
+
 }
 
 fn register_custom_metrics() {
@@ -37,7 +44,11 @@ fn register_custom_metrics() {
 
     REGISTRY
         .register(Box::new(SUCCESS_TRANSACTIONS_COUNT.clone()))
-        .expect("submitted_transactions_count can't be registered");
+        .expect("success_transactions_count can't be registered");
+
+    REGISTRY
+        .register(Box::new(UNLOCKED_TRANSACTIONS_COUNT.clone()))
+        .expect("unlocked_transactions_count can't be registered");
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {

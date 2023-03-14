@@ -2,6 +2,7 @@ use crate::{
     async_redis_wrapper::AsyncRedisWrapper, config::SafeSettings, errors::CustomError,
     last_block::SafeStorage,
 };
+use crate::prometheus_metrics::UNLOCKED_TRANSACTIONS_COUNT;
 use near_primitives::{
     hash::CryptoHash,
     views::{ExecutionStatusView::Failure, FinalExecutionStatus},
@@ -111,6 +112,7 @@ async fn handle_one_tx(
                 tx_data.nonce,
                 near_tx_hash
             );
+            UNLOCKED_TRANSACTIONS_COUNT.inc_by(1);
         }
     }
     Ok(())
