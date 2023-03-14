@@ -42,6 +42,12 @@ lazy_static! {
         "The total number of fail transactions to Ethereum"
     )
     .expect("metric can't be created");
+
+    pub static ref SKIP_TRANSACTIONS_COUNT:  IntCounter = IntCounter::new(
+        "skip_transactions_count",
+        "The total number of skipped transactions (relayer decided don't process these transactions)"
+    )
+    .expect("metric can't be created");
 }
 
 fn register_custom_metrics() {
@@ -68,6 +74,10 @@ fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(FAIL_TRANSACTIONS_COUNT.clone()))
         .expect("fail_transactions_count can't be registered");
+
+    REGISTRY
+        .register(Box::new(SKIP_TRANSACTIONS_COUNT.clone()))
+        .expect("skip_transactions_count can't be registered");
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {

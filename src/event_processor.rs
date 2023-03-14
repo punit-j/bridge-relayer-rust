@@ -1,7 +1,7 @@
 use crate::async_redis_wrapper::{self, AsyncRedisWrapper};
 use crate::config::{SafeSettings, Settings};
 use crate::{errors::CustomError, utils::get_tx_count};
-use crate::prometheus_metrics::PENDING_TRANSACTIONS_COUNT;
+use crate::prometheus_metrics::{PENDING_TRANSACTIONS_COUNT, SKIP_TRANSACTIONS_COUNT};
 use fast_bridge_common::Event::FastBridgeInitTransferEvent;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
@@ -123,6 +123,7 @@ pub async fn build_near_events_subscriber(
                             tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
                             continue;
                         } else {
+                            SKIP_TRANSACTIONS_COUNT.inc_by(1);
                             error!(
                                 "Failed to process tx with nonce {}, err: {:?}. Skip transaction.",
                                 nonce.0, error
