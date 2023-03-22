@@ -94,7 +94,7 @@ async fn handle_one_tx(
                 .as_secs();
         }
         TransactionStatus::Failure(_block_number) => {
-            FAIL_TRANSACTIONS_COUNT.inc_by(1);
+            FAIL_TRANSACTIONS_COUNT.inc();
             transactions_to_remove.push(*key);
             return Err(CustomError::FailedTxStatus(format!("{:?}", key)));
         }
@@ -108,7 +108,7 @@ async fn handle_one_tx(
             };
             let hex_key = key.as_bytes().to_hex::<String>();
             redis.store_tx(hex_key, data).await.unwrap();
-            SUCCESS_TRANSACTIONS_COUNT.inc_by(1);
+            SUCCESS_TRANSACTIONS_COUNT.inc();
             transactions_to_remove.push(*key);
         }
     }

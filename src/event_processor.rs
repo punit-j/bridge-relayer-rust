@@ -72,7 +72,7 @@ pub async fn process_transfer_event(
         )
         .await;
     res.map_err(|e| CustomError::FailedStorePendingTx(e))?;
-    PENDING_TRANSACTIONS_COUNT.inc_by(1);
+    PENDING_TRANSACTIONS_COUNT.inc();
 
     transaction_count += 1.into();
     redis
@@ -121,12 +121,12 @@ pub async fn build_near_events_subscriber(
 
                     if let Err(error) = res {
                         if is_connection_error(&error) {
-                            CONNECTION_ERRORS.inc_by(1);
+                            CONNECTION_ERRORS.inc();
                             error!("Failed to process tx with nonce {}, err: {:?}. Repeat try after 15s.", nonce.0, error);
                             tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
                             continue;
                         } else {
-                            SKIP_TRANSACTIONS_COUNT.inc_by(1);
+                            SKIP_TRANSACTIONS_COUNT.inc();
                             error!(
                                 "Failed to process tx with nonce {}, err: {:?}. Skip transaction.",
                                 nonce.0, error

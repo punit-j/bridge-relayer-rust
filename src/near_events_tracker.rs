@@ -1,4 +1,4 @@
-use crate::prometheus_metrics::INIT_TRANSFERS_COUNT;
+use crate::prometheus_metrics::{INIT_TRANSFERS_COUNT, NEAR_LAST_PROCESSED_BLOCK_HEIGHT};
 use crate::{async_redis_wrapper::AsyncRedisWrapper, config::NearNetwork};
 use fast_bridge_common::Event;
 use near_lake_framework::{near_indexer_primitives::types::AccountId, LakeConfigBuilder};
@@ -43,6 +43,7 @@ pub async fn run_worker(
             "Process near block {}",
             streamer_message.block.header.height
         );
+        NEAR_LAST_PROCESSED_BLOCK_HEIGHT.set(streamer_message.block.header.height);
         for shard in streamer_message.shards {
             for outcome in shard.receipt_execution_outcomes {
                 if contract_name == outcome.receipt.receiver_id {
@@ -57,7 +58,7 @@ pub async fn run_worker(
                                         serde_json::to_string(&r).unwrap_or(format!("{:?}", r))
                                     );
                                     if let Event::FastBridgeInitTransferEvent { .. } = r {
-                                        INIT_TRANSFERS_COUNT.inc_by(1);
+                                        INIT_TRANSFERS_COUNT.inc();
                                     }
                                     redis.event_pub(r).await;
                                 }

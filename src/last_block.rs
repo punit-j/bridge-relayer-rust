@@ -39,8 +39,7 @@ pub async fn last_block_number_worker(settings: SafeSettings, storage: SafeStora
                 Ok(result) => match result {
                     Some(block_number) => {
                         storage.lock().await.eth_last_block_number_on_near = block_number;
-                        LAST_ETH_BLOCK_ON_NEAR
-                            .inc_by(block_number as i64 - LAST_ETH_BLOCK_ON_NEAR.get());
+                        LAST_ETH_BLOCK_ON_NEAR.set(block_number);
                     }
                     None => (),
                 },

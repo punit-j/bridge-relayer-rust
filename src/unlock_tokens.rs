@@ -112,7 +112,7 @@ async fn handle_one_tx(
                 tx_data.nonce,
                 near_tx_hash
             );
-            UNLOCKED_TRANSACTIONS_COUNT.inc_by(1);
+            UNLOCKED_TRANSACTIONS_COUNT.inc();
         }
     }
     Ok(())

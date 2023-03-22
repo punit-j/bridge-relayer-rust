@@ -1,4 +1,5 @@
-use prometheus::{IntCounter, Registry};
+use prometheus::core::{AtomicU64, GenericGauge};
+use prometheus::Registry;
 
 use lazy_static::lazy_static;
 use warp::Filter;
@@ -7,49 +8,56 @@ use warp::Reply;
 
 lazy_static! {
     pub static ref REGISTRY: Registry = Registry::new();
-    pub static ref INIT_TRANSFERS_COUNT: IntCounter = IntCounter::new(
+    pub static ref INIT_TRANSFERS_COUNT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "init_transfers_count",
         "The total number of detected initialized token transfers"
     )
     .expect("metric can't be created");
 
-    pub static ref PENDING_TRANSACTIONS_COUNT: IntCounter = IntCounter::new(
+    pub static ref NEAR_LAST_PROCESSED_BLOCK_HEIGHT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
+        "near_last_processed_block_height",
+        "The height of the near block processed in near events tracer"
+    )
+    .expect("metric can't be created");
+
+
+    pub static ref PENDING_TRANSACTIONS_COUNT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "pending_transactions_count",
         "The total number of of submitted transactions to Ethereum"
     )
     .expect("metric can't be created");
 
-    pub static ref SUCCESS_TRANSACTIONS_COUNT: IntCounter = IntCounter::new(
+    pub static ref SUCCESS_TRANSACTIONS_COUNT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "success_transactions_count",
         "The total number of successful transactions to Ethereum"
     )
     .expect("metric can't be created");
 
-    pub static ref UNLOCKED_TRANSACTIONS_COUNT: IntCounter = IntCounter::new(
+    pub static ref UNLOCKED_TRANSACTIONS_COUNT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "unlocked_transactions_count",
         "The total number of unlocked transactions"
     )
     .expect("metric can't be created");
 
-    pub static ref LAST_ETH_BLOCK_ON_NEAR: IntCounter = IntCounter::new(
+    pub static ref LAST_ETH_BLOCK_ON_NEAR: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "last_eth_block_on_near",
         "The last ethereum block on light client on Near"
     )
     .expect("metric can't be created");
 
-    pub static ref FAIL_TRANSACTIONS_COUNT:  IntCounter = IntCounter::new(
+    pub static ref FAIL_TRANSACTIONS_COUNT:  GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "fail_transactions_count",
         "The total number of fail transactions to Ethereum"
     )
     .expect("metric can't be created");
 
-    pub static ref SKIP_TRANSACTIONS_COUNT:  IntCounter = IntCounter::new(
+    pub static ref SKIP_TRANSACTIONS_COUNT:  GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "skip_transactions_count",
         "The total number of skipped transactions (relayer decided don't process these transactions)"
     )
     .expect("metric can't be created");
 
-    pub static ref CONNECTION_ERRORS: IntCounter = IntCounter::new(
+    pub static ref CONNECTION_ERRORS: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
         "connection_errors",
         "The total number of connection error"
     )
@@ -60,6 +68,10 @@ fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(INIT_TRANSFERS_COUNT.clone()))
         .expect("init_transfers_count can't be registered");
+
+    REGISTRY
+        .register(Box::new(NEAR_LAST_PROCESSED_BLOCK_HEIGHT.clone()))
+        .expect("near_last_processed_block_height can't be registered");
 
     REGISTRY
         .register(Box::new(PENDING_TRANSACTIONS_COUNT.clone()))
