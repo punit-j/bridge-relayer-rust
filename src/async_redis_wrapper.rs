@@ -240,15 +240,16 @@ pub mod tests {
                     valid_till: 0,
                     transfer: TransferDataEthereum {
                         token_near: get_near_token(),
-                        token_eth: EthAddress::from(get_eth_token()),
+                        token_eth: EthAddress(get_eth_token().into()),
                         amount: U128(1),
                     },
                     fee: TransferDataNear {
                         token: get_near_token(),
                         amount: U128(1),
                     },
-                    recipient: EthAddress::from(get_recipient()),
+                    recipient: EthAddress(get_recipient().into()),
                     valid_till_block_height: None,
+                    aurora_sender: None,
                 },
             })
             .await;

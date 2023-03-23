@@ -41,7 +41,7 @@ near-jsonrpc-client = "0.4.1"
 near-primitives = "0.15.0"
 near-jsonrpc-primitives = "0.15.0"
 near-crypto = "0.15.0"
-fast-bridge-common = { git = "https://github.com/aurora-is-near/fast-bridge-common.git", tag = "0.1.2" }
+fast-bridge-common = { git = "https://github.com/aurora-is-near/fast-bridge-common.git", tag = "0.2.0" }
 hex = { version = "0.4", features = ["serde"] }
 near-workspaces = "0.7.0"
 tracing = "0.1.37"

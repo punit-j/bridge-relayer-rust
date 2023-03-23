@@ -176,14 +176,14 @@ pub mod tests {
         let valid_till = test_utils::get_valid_till();
         let transfer = TransferDataEthereum {
             token_near: get_near_token(),
-            token_eth: EthAddress::from(get_eth_token()),
+            token_eth: EthAddress(get_eth_token().into()),
             amount: U128::from(1),
         };
         let fee = TransferDataNear {
             token: get_near_token(),
             amount: U128::from(1_000_000_000),
         };
-        let recipient = EthAddress::from(get_recipient());
+        let recipient = EthAddress(get_recipient().into());
 
         let settings = get_settings();
         let settings = std::sync::Arc::new(tokio::sync::Mutex::new(settings));
@@ -207,6 +207,7 @@ pub mod tests {
                 fee,
                 recipient,
                 valid_till_block_height: None,
+                aurora_sender: None
             },
             &settings.lock().await.clone(),
             &mut redis,

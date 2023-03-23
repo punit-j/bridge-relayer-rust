@@ -41,7 +41,7 @@ pub async fn execute_transfer(
 
     let token_info = get_near_token_info(&settings, transfer_message.transfer.token_near)?;
 
-    if token_info.eth_address != transfer_message.transfer.token_eth.into() {
+    if token_info.eth_address != transfer_message.transfer.token_eth.0.into() {
         return Err(CustomError::InvalidEthTokenAddress);
     }
 
@@ -174,8 +174,8 @@ fn get_transfer_data(
             sender_id: _,
             transfer_message,
         } => {
-            let token = web3::types::Address::from(transfer_message.transfer.token_eth);
-            let recipient = web3::types::Address::from(transfer_message.recipient);
+            let token = web3::types::Address::from(transfer_message.transfer.token_eth.0);
+            let recipient = web3::types::Address::from(transfer_message.recipient.0);
             let nonce = web3::types::U256::from(nonce.0);
             let amount = web3::types::U256::from(transfer_message.transfer.amount.0);
             let method_args = (token, recipient, nonce, amount, near_relay_account_id);
@@ -238,15 +238,16 @@ pub mod tests {
                 valid_till: valid_till,
                 transfer: TransferDataEthereum {
                     token_near: get_near_token(),
-                    token_eth: EthAddress::from(get_eth_token()),
+                    token_eth: EthAddress(get_eth_token().into()),
                     amount: U128::from(1),
                 },
                 fee: TransferDataNear {
                     token: get_near_token(),
                     amount: U128::from(1_000_000_000),
                 },
-                recipient: EthAddress::from(get_recipient()),
+                recipient: EthAddress(get_recipient().into()),
                 valid_till_block_height: Some(0),
+                aurora_sender: None
             },
         };
 
