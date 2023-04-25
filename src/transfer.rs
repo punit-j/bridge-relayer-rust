@@ -161,7 +161,7 @@ async fn estimate_profit(
     )
 }
 
-type MethodArgs = (H160, H160, U256, U256, String);
+type MethodArgs = (H160, H160, U256, U256, String, U256);
 
 fn get_transfer_data(
     transfer_event: fast_bridge_common::Event,
@@ -178,7 +178,19 @@ fn get_transfer_data(
             let recipient = web3::types::Address::from(transfer_message.recipient.0);
             let nonce = web3::types::U256::from(nonce.0);
             let amount = web3::types::U256::from(transfer_message.transfer.amount.0);
-            let method_args = (token, recipient, nonce, amount, near_relay_account_id);
+            let valid_till_block_height = web3::types::U256::from(
+                transfer_message
+                    .valid_till_block_height
+                    .ok_or(CustomError::InvalidValidTillBlockHeight)?,
+            );
+            let method_args = (
+                token,
+                recipient,
+                nonce,
+                amount,
+                near_relay_account_id,
+                valid_till_block_height,
+            );
 
             Ok((nonce, method_name, method_args, transfer_message))
         }
@@ -247,7 +259,7 @@ pub mod tests {
                 },
                 recipient: EthAddress(get_recipient().into()),
                 valid_till_block_height: Some(0),
-                aurora_sender: None
+                aurora_sender: None,
             },
         };
 

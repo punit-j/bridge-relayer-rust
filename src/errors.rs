@@ -87,4 +87,7 @@ pub enum CustomError {
 
     #[error("Not enough time before user unlock")]
     NotEnoughTimeBeforeUnlock,
+
+    #[error("Invalid valid till block height")]
+    InvalidValidTillBlockHeight,
 }
