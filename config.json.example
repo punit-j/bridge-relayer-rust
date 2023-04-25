@@ -34,6 +34,7 @@
   "profit_thershold": 0,
   "max_priority_fee_per_gas": "1500000000",
   "min_time_before_unlock_in_sec": 3600,
+  "min_blocks_before_unlock": 300,
   "redis": {
     "url": "redis://127.0.0.1/"
   },

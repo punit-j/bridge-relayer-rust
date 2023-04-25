@@ -215,6 +215,12 @@ pub async fn token_price_usd(coin_id: String) -> Result<Option<f64>, reqwest::Er
     }
 }
 
+pub async fn get_last_block_number(server_addr: &str) -> web3::contract::Result<u64> {
+    let transport = web3::transports::Http::new(server_addr)?;
+    let client = web3::Web3::new(transport);
+    Ok(client.eth().block_number().await?.as_u64())
+}
+
 #[cfg(test)]
 pub mod tests {
     use crate::methods::{

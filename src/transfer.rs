@@ -20,7 +20,13 @@ pub async fn execute_transfer(
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
 
-    check_time_before_unlock(&transfer_message, settings.min_time_before_unlock_in_sec)?;
+    check_time_before_unlock(
+        &transfer_message,
+        settings.min_time_before_unlock_in_sec,
+        settings.min_blocks_before_unlock,
+        eth1_rpc_url.clone(),
+    )
+    .await?;
 
     let estimated_gas = eth_client::methods::estimate_gas(
         eth1_rpc_url.clone(),
@@ -107,9 +113,11 @@ fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u1
     )
 }
 
-fn check_time_before_unlock(
+async fn check_time_before_unlock(
     transfer_message: &TransferMessage,
     min_time_before_unlock: Option<u64>,
+    min_blocks_before_unlock: Option<u64>,
+    eth1_rpc_url: reqwest::Url,
 ) -> Result<(), CustomError> {
     if let Some(min_time_before_unlock) = min_time_before_unlock {
         let transaction_unlock_time_ns = transfer_message.valid_till as u128;
@@ -121,6 +129,19 @@ fn check_time_before_unlock(
 
         if current_time_ns + min_time_before_unlock_ns > transaction_unlock_time_ns {
             return Err(CustomError::NotEnoughTimeBeforeUnlock);
+        }
+    }
+
+    if let Some(min_blocks_before_unlock) = min_blocks_before_unlock {
+        if let Some(transaction_block_height) = transfer_message.valid_till_block_height {
+            let current_eth_block_height =
+                eth_client::methods::get_last_block_number(eth1_rpc_url.as_str())
+                    .await
+                    .map_err(|err| CustomError::FailedFetchLastBlockNumber(err))?;
+
+            if current_eth_block_height + min_blocks_before_unlock > transaction_block_height {
+                return Err(CustomError::NotEnoughTimeBeforeUnlock);
+            }
         }
     }
 

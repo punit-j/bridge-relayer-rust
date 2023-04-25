@@ -207,7 +207,7 @@ pub mod tests {
                 fee,
                 recipient,
                 valid_till_block_height: None,
-                aurora_sender: None
+                aurora_sender: None,
             },
             &settings.lock().await.clone(),
             &mut redis,

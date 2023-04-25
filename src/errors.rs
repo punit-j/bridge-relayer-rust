@@ -15,6 +15,9 @@ pub enum CustomError {
     #[error("Failed to fetch Ethereum price in USD: {0:?}")]
     FailedFetchEthereumPrice(reqwest::Error),
 
+    #[error("Failed to fetch last block number: {0:?}")]
+    FailedFetchLastBlockNumber(web3::contract::Error),
+
     #[error("Failed to get near token info from whitelist ({0}) by matching")]
     FailedGetNearTokenInfo(String),
 
