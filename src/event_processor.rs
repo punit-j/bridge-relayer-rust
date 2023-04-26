@@ -5,7 +5,7 @@ use fast_bridge_common::Event::FastBridgeInitTransferEvent;
 use near_sdk::AccountId;
 use redis::AsyncCommands;
 use uint::rustc_hex::ToHex;
-use web3::{contract::Error::Api, signing::*, Error::Rpc, Error::Transport};
+use web3::{contract::Error::Api, Error::Rpc, Error::Transport, signing::Key};
 
 macro_rules! info {
     ($($arg:tt)+) => { tracing::info!(target: crate::logs::EVENT_PROCESSOR_TARGET, $($arg)+) }
