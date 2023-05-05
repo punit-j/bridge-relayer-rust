@@ -2,7 +2,7 @@ mod async_redis_wrapper;
 mod config;
 mod errors;
 mod ethereum;
-mod event_processor;
+mod near_event_processor;
 mod last_block;
 mod logs;
 mod near_events_tracker;
@@ -130,7 +130,7 @@ async fn main() {
 
     let near_contract_address = locked_settings.near.contract_address.clone();
 
-    let near_worker = near_events_tracker::run_worker(
+    let near_events_tracker_worker = near_events_tracker::run_worker(
         near_contract_address,
         async_redis.clone(),
         {
@@ -149,19 +149,12 @@ async fn main() {
         locked_settings.near.near_network.clone(),
     );
 
-    let stream = async_redis_wrapper::subscribe::<String>(
-        async_redis_wrapper::EVENTS.to_string(),
-        async_redis.clone(),
-    )
-    .unwrap();
-
-    let subscriber = event_processor::build_near_events_subscriber(
+    let near_events_processor_worker = near_event_processor::process_near_events_worker(
         settings.clone(),
         eth_keypair.clone(),
         async_redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
-        stream,
         near_account.account_id.to_string(),
     );
 
@@ -185,10 +178,10 @@ async fn main() {
 
     let tasks = vec![
         tokio::spawn(last_block_number_worker),
-        tokio::spawn(subscriber),
+        tokio::spawn(near_events_processor_worker),
         tokio::spawn(pending_transactions_worker),
         tokio::spawn(unlock_tokens_worker),
-        tokio::spawn(near_worker),
+        tokio::spawn(near_events_tracker_worker),
     ];
 
     for task in tasks {

@@ -1,11 +1,9 @@
-extern crate core;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use eth_client::methods::get_contract_abi;
 use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
 use fast_bridge_service_lib::async_redis_wrapper::{self, AsyncRedisWrapper};
 use fast_bridge_service_lib::async_redis_wrapper::{
-    subscribe, EVENTS, PENDING_TRANSACTIONS, TRANSACTIONS,
+    subscribe, EVENTS, NEW_EVENTS, PENDING_TRANSACTIONS, TRANSACTIONS,
 };
 
 use fast_bridge_service_lib::config::{
@@ -28,16 +26,16 @@ use std::time::Duration;
 use tokio::time::timeout;
 use url::Url;
 
-const ETH_CONTRACT_PROXY_ADDRESS: &str = "8AC4c4A1015A9A12A9DBA16234A3f7909b9396Eb";
-const ETH_CONTRACT_IMPLEMENTATION_ADDRESS: &str = "B6b5739c390648A0121502ab3c3F4112f3FeAc1a";
+const ETH_CONTRACT_PROXY_ADDRESS: &str = "B8Dc44944f2C3149d6A7477Eb1E61C454AFE2e5e";
+const ETH_CONTRACT_IMPLEMENTATION_ADDRESS: &str = "878b8ADBbDd5D9ca52789F463e8cF27094b534c8";
 const ETH_TOKEN_ADDRESS: &str = "b2d75C5a142A68BDA438e6a318C7FBB2242f9693";
-const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge2.olga24912_3.testnet";
+const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge3.olga24912_3.testnet";
 const NEAR_TOKEN_ADDRESS: &str = "token.olga24912_3.testnet";
 
 const ONE_MINUTE_SEC: u64 = 60;
 const TRANSFER_TOKEN_AMOUNT: u128 = 1000000;
 const FEE_TOKEN_AMOUNT: u128 = 20000000;
-const ONE_HOUR_IN_SECS: u64 = 60*60;
+const ONE_HOUR_IN_SECS: u64 = 60 * 60;
 
 #[tokio::test]
 async fn main_integration_test() {
@@ -61,8 +59,7 @@ async fn main_integration_test() {
     .await;
     remove_all(redis.clone(), PENDING_TRANSACTIONS).await;
     remove_all(redis.clone(), TRANSACTIONS).await;
-
-    let stream = subscribe::<String>(EVENTS.to_string(), redis.clone()).unwrap();
+    remove_all(redis.clone(), NEW_EVENTS).await;
 
     detect_new_near_event(redis.clone(), init_block, 10).await;
 
@@ -86,7 +83,6 @@ async fn main_integration_test() {
         redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
-        stream,
         near_relay_signer.account_id.to_string(),
     )
     .await;
@@ -129,7 +125,11 @@ async fn wait_correct_last_block_number(storage: SafeStorage, mut redis: AsyncRe
         tokio::time::sleep(Duration::from_secs(30)).await;
 
         eth_last_block_number_on_near = storage.lock().await.clone().eth_last_block_number_on_near;
-        tracing::info!("Current last block: {};, tx_block: {}", eth_last_block_number_on_near, tx_block);
+        tracing::info!(
+            "Current last block: {};, tx_block: {}",
+            eth_last_block_number_on_near,
+            tx_block
+        );
     }
 
     if iter_number == MAX_ITERATION_NUMBER {
@@ -293,7 +293,10 @@ async fn increase_fast_bridge_token_balance(signer: InMemorySigner) {
     if let FinalExecutionStatus::SuccessValue(_) = response.status {
         println!("Tokens on NEAR moved to the Bridge Contract successfully");
     } else {
-        panic!("Moving tokens to Bridge Contract on NEAR FAIL {:?}", response);
+        panic!(
+            "Moving tokens to Bridge Contract on NEAR FAIL {:?}",
+            response
+        );
     }
 }
 
@@ -305,7 +308,6 @@ pub struct TransferMessage {
     fee: TransferDataNear,
     recipient: EthAddress,
     valid_till_block_height: Option<u64>,
-    aurora_sender: Option<EthAddress>,
 }
 
 async fn init_token_transfer(signer: InMemorySigner) -> near_primitives::hash::CryptoHash {
@@ -326,7 +328,6 @@ async fn init_token_transfer(signer: InMemorySigner) -> near_primitives::hash::C
         },
         recipient: EthAddress(get_recipient_eth_addr().into()),
         valid_till_block_height: None,
-        aurora_sender: None
     };
 
     let args = json!({ "msg": near_sdk::base64::encode(transfer_message.try_to_vec().unwrap()) });
@@ -388,16 +389,14 @@ async fn process_events(
     mut redis: AsyncRedisWrapper,
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
-    stream: tokio::sync::mpsc::Receiver<String>,
     near_relay_account_id: String,
 ) {
-    let worker = fast_bridge_service_lib::event_processor::build_near_events_subscriber(
+    let worker = fast_bridge_service_lib::near_event_processor::process_near_events_worker(
         settings.clone(),
         eth_keypair.clone(),
         redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
-        stream,
         near_relay_account_id,
     );
     let timeout_duration = std::time::Duration::from_secs(120);
@@ -412,9 +411,7 @@ async fn handle_pending_transaction(settings: SafeSettings, redis: AsyncRedisWra
     let locked_settings = settings.lock().await.clone();
     let worker = fast_bridge_service_lib::pending_transactions_worker::run(
         locked_settings.eth.rpc_url,
-        locked_settings.eth
-            .rainbow_bridge_index_js_path
-            .clone(),
+        locked_settings.eth.rainbow_bridge_index_js_path.clone(),
         redis.clone(),
         locked_settings.rpc_timeout_secs,
     );

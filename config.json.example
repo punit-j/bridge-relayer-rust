@@ -25,10 +25,10 @@
   },
   "near_tokens_whitelist": {
     "mapping": {
-      "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": {"exchange_id": "dai", "fixed_fee": "340282366920938463463374607431768211455", "percent_fee": 0, "decimals": 18, "eth_address": "ba62bcfcaafc6622853cca2be6ac7d845bc0f2dc"},
-      "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near": {"exchange_id": "usd-coin", "fixed_fee": "0", "percent_fee": 0, "decimals": 6, "eth_address": "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"},
-      "dac17f958d2ee523a2206206994597c13d831ec7.factory.bridge.near": {"exchange_id": "tether", "fixed_fee": "0", "percent_fee": 0, "decimals": 6, "eth_address": "dac17f958d2ee523a2206206994597c13d831ec7"},
-      "token.spectrebridge.testnet": {"exchange_id": "wrapped-near", "fixed_fee": "0", "percent_fee": 0, "decimals": 6, "eth_address": "ba62bcfcaafc6622853cca2be6ac7d845bc0f2dc"}
+      "6b175474e89094c44da98b954eedeac495271d0f.factory.bridge.near": {"exchange_id": "dai", "fixed_fee": "340282366920938463463374607431768211455", "percent_fee": 0, "decimals": 18, "eth_address": "ba62bcfcaafc6622853cca2be6ac7d845bc0f2dc", "max_transfer_amount": "1000000000000000000000"},
+      "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.factory.bridge.near": {"exchange_id": "usd-coin", "fixed_fee": "0", "percent_fee": 0, "decimals": 6, "eth_address": "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "max_transfer_amount": "1000000000000"},
+      "dac17f958d2ee523a2206206994597c13d831ec7.factory.bridge.near": {"exchange_id": "tether", "fixed_fee": "0", "percent_fee": 0, "decimals": 6, "eth_address": "dac17f958d2ee523a2206206994597c13d831ec7", "max_transfer_amount": "1000000000000"},
+      "token.spectrebridge.testnet": {"exchange_id": "wrapped-near", "fixed_fee": "0", "percent_fee": 0, "decimals": 6, "eth_address": "ba62bcfcaafc6622853cca2be6ac7d845bc0f2dc", "max_transfer_amount": "1000000000000"}
     }
   },
   "profit_thershold": 0,

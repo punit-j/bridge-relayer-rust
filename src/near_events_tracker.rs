@@ -1,5 +1,8 @@
 use crate::{async_redis_wrapper::AsyncRedisWrapper, config::NearNetwork};
 use near_lake_framework::{near_indexer_primitives::types::AccountId, LakeConfigBuilder};
+use std::thread::sleep;
+use std::time;
+use tracing::log::warn;
 
 pub const OPTION_START_BLOCK: &str = "START_BLOCK";
 
@@ -54,7 +57,15 @@ pub async fn run_worker(
                                         "New event: {}",
                                         serde_json::to_string(&r).unwrap_or(format!("{:?}", r))
                                     );
-                                    redis.event_pub(r).await;
+                                    #[cfg(feature = "integration_tests")]
+                                    redis.event_pub(r.clone()).await;
+                                    loop {
+                                        if let Err(error) = redis.store_new_event(&r.clone()).await {
+                                            warn!("Error on storing new event into redis: {:?}. Try again after 15s.", error);
+                                            sleep(time::Duration::from_secs(15));
+                                        }
+                                        break;
+                                    }
                                 }
                                 Err(e) => {
                                     if !matches!(e, ParceError::NotEvent) {

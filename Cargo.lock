@@ -1773,6 +1773,7 @@ dependencies = [
  "dotenv",
  "eth_client",
  "fast-bridge-common",
+ "fast-bridge-service",
  "futures-util",
  "hex 0.4.3",
  "http-client",

@@ -2,7 +2,7 @@ pub mod async_redis_wrapper;
 pub mod config;
 pub mod errors;
 pub mod ethereum;
-pub mod event_processor;
+pub mod near_event_processor;
 pub mod last_block;
 pub mod logs;
 pub mod near_events_tracker;

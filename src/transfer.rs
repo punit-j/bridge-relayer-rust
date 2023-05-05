@@ -28,6 +28,8 @@ pub async fn execute_transfer(
     )
     .await?;
 
+    check_transfer_amount(&transfer_message, &settings)?;
+
     let estimated_gas = eth_client::methods::estimate_gas(
         eth1_rpc_url.clone(),
         relay_key_on_eth.address(),
@@ -111,6 +113,22 @@ fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u1
             .to_integer()?
             .to_u128()?,
     )
+}
+
+fn check_transfer_amount(
+    transfer_message: &TransferMessage,
+    settings: &Settings,
+) -> Result<(), CustomError> {
+    let transfer_amount = transfer_message.transfer.amount;
+    if let Some(token_info) = settings.near_tokens_whitelist.get_token_info(transfer_message.transfer.token_near.clone()) {
+        if let Some(max_transfer_amount) = token_info.max_transfer_amount {
+            if transfer_amount > max_transfer_amount {
+                return Err(CustomError::ExceedingMaxAllowableTokenAmount(transfer_amount, max_transfer_amount));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn check_time_before_unlock(

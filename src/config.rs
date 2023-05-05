@@ -49,6 +49,7 @@ pub struct NearTokenInfo {
     pub percent_fee: f64,
     pub decimals: Decimals,
     pub eth_address: web3::types::Address,
+    pub max_transfer_amount: Option<near_sdk::json_types::U128>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
