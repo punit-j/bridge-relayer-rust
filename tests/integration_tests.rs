@@ -198,6 +198,7 @@ fn get_settings() -> Settings {
             percent_fee: 0.0,
             decimals: Decimals::try_from(6).unwrap(),
             eth_address: ETH_TOKEN_ADDRESS.parse().unwrap(),
+            max_transfer_amount: None,
         },
     );
 

@@ -97,7 +97,9 @@ pub enum CustomError {
     #[error("Invalid valid till block height")]
     InvalidValidTillBlockHeight,
 
-    #[error("Exceeding the maximum allowable token amount. \
-    Transferred tokens amount: {0:?}, max transfer allowed: {1:?}")]
+    #[error(
+        "Exceeding the maximum allowable token amount. \
+    Transferred tokens amount: {0:?}, max transfer allowed: {1:?}"
+    )]
     ExceedingMaxAllowableTokenAmount(near_sdk::json_types::U128, near_sdk::json_types::U128),
 }
