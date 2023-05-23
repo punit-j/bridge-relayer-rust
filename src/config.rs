@@ -49,6 +49,7 @@ pub struct NearTokenInfo {
     pub percent_fee: f64,
     pub decimals: Decimals,
     pub eth_address: web3::types::Address,
+    pub max_transfer_amount: Option<near_sdk::json_types::U128>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -123,6 +124,7 @@ pub struct Settings {
     pub profit_thershold: Option<f64>,
     pub max_priority_fee_per_gas: Option<web3::types::U256>,
     pub min_time_before_unlock_in_sec: Option<u64>,
+    pub min_blocks_before_unlock: Option<u64>,
     pub vault_addr: Url,
     #[serde(skip)]
     pub config_path: String,

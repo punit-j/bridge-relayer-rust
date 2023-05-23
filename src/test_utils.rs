@@ -48,6 +48,7 @@ pub fn get_settings() -> Settings {
             percent_fee: 0.0,
             decimals: Decimals::try_from(6).unwrap(),
             eth_address: eth_client::test_utils::ETH_TOKEN_ADDRESS.parse().unwrap(),
+            max_transfer_amount: Option::<u64>::None,
         },
     );
     settings

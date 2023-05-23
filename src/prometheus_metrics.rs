@@ -62,6 +62,12 @@ lazy_static! {
         "The total number of connection error"
     )
     .expect("metric can't be created");
+
+    pub static ref BALANCE_ERRORS: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
+        "balance_errors",
+        "The total number of balance error"
+    )
+    .expect("metric can't be created");
 }
 
 fn register_custom_metrics() {
@@ -100,6 +106,10 @@ fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(CONNECTION_ERRORS.clone()))
         .expect("connection_errors can't be registered");
+
+    REGISTRY
+        .register(Box::new(BALANCE_ERRORS.clone()))
+        .expect("balance_errors can't be registered");
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {

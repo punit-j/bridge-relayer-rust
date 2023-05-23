@@ -1,5 +1,8 @@
+#[cfg(feature = "integration_tests")]
 use futures_util::StreamExt;
-use redis::{AsyncCommands, RedisResult};
+use redis::AsyncCommands;
+#[cfg(feature = "integration_tests")]
+use redis::RedisResult;
 use web3::types::U256;
 
 #[derive(Clone)]
@@ -28,9 +31,12 @@ pub const OPTION_ETH_TRANSACTION_COUNT: &str = "ETH_TRANSACTION_COUNT";
 pub const TRANSACTIONS: &str = "transactions";
 
 // Transaction queue
+#[cfg(feature = "integration_tests")]
 pub const EVENTS: &str = "events";
 
 pub const PENDING_TRANSACTIONS: &str = "pending_transactions";
+
+pub const NEW_EVENTS: &str = "new_events";
 
 impl AsyncRedisWrapper {
     pub async fn connect(redis_settings: &crate::config::RedisSettings) -> Self {
@@ -79,12 +85,44 @@ impl AsyncRedisWrapper {
     }
 
     #[allow(clippy::let_unit_value)]
+    #[cfg(feature = "integration_tests")]
     pub async fn event_pub(&mut self, event: fast_bridge_common::Event) {
-        let _: () = self
+        let _: RedisResult<()> = self
             .connection
             .publish(EVENTS, serde_json::to_string(&event).unwrap())
+            .await;
+    }
+
+    pub async fn store_new_event(
+        &mut self,
+        event: &fast_bridge_common::Event,
+    ) -> redis::RedisResult<()> {
+        if let fast_bridge_common::Event::FastBridgeInitTransferEvent { nonce, .. } = event {
+            return match self
+                .connection
+                .hset_nx(
+                    NEW_EVENTS,
+                    &format!("{}", nonce.0),
+                    &serde_json::to_string(&event).expect("REDIS: Failed to serialize event"),
+                )
+                .await
+            {
+                Ok(redis::Value::Int(_)) => Ok(()),
+                storing_status => Err(storing_status.unwrap_err()),
+            };
+        }
+        Ok(())
+    }
+
+    pub async fn remove_new_event(&mut self, nonce: u128) -> redis::RedisResult<()> {
+        match self
+            .connection
+            .hdel(NEW_EVENTS, &format!("{}", nonce))
             .await
-            .unwrap();
+        {
+            Ok(redis::Value::Int(_)) => Ok(()),
+            unstoring_status => Err(unstoring_status.unwrap_err()),
+        }
     }
 
     pub async fn store_tx(&mut self, tx_hash: String, tx_data: TxData) -> redis::RedisResult<()> {
@@ -98,14 +136,14 @@ impl AsyncRedisWrapper {
             )
             .await
         {
-            Ok(redis::Value::Int(1)) => Ok(()),
+            Ok(redis::Value::Int(_)) => Ok(()),
             storing_status => Err(storing_status.unwrap_err()),
         }
     }
 
     pub async fn unstore_tx(&mut self, tx_hash: String) -> redis::RedisResult<()> {
         match self.connection.hdel(TRANSACTIONS, &tx_hash).await {
-            Ok(redis::Value::Int(1)) => Ok(()),
+            Ok(redis::Value::Int(_)) => Ok(()),
             unstoring_status => Err(unstoring_status.unwrap_err()),
         }
     }
@@ -126,6 +164,8 @@ impl AsyncRedisWrapper {
     }
 }
 
+#[allow(dead_code)]
+#[cfg(feature = "integration_tests")]
 pub fn subscribe<T: 'static + redis::FromRedisValue + Send>(
     channel: String,
     redis: AsyncRedisWrapper,
@@ -240,15 +280,16 @@ pub mod tests {
                     valid_till: 0,
                     transfer: TransferDataEthereum {
                         token_near: get_near_token(),
-                        token_eth: EthAddress::from(get_eth_token()),
+                        token_eth: EthAddress(get_eth_token().into()),
                         amount: U128(1),
                     },
                     fee: TransferDataNear {
                         token: get_near_token(),
                         amount: U128(1),
                     },
-                    recipient: EthAddress::from(get_recipient()),
+                    recipient: EthAddress(get_recipient().into()),
                     valid_till_block_height: None,
+                    aurora_sender: None,
                 },
             })
             .await;

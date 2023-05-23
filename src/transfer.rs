@@ -20,7 +20,15 @@ pub async fn execute_transfer(
     let (nonce, method_name, method_args, transfer_message) =
         get_transfer_data(transfer_event, near_relay_account_id)?;
 
-    check_time_before_unlock(&transfer_message, settings.min_time_before_unlock_in_sec)?;
+    check_time_before_unlock(
+        &transfer_message,
+        settings.min_time_before_unlock_in_sec,
+        settings.min_blocks_before_unlock,
+        eth1_rpc_url.clone(),
+    )
+    .await?;
+
+    check_transfer_amount(&transfer_message, &settings)?;
 
     let estimated_gas = eth_client::methods::estimate_gas(
         eth1_rpc_url.clone(),
@@ -41,7 +49,7 @@ pub async fn execute_transfer(
 
     let token_info = get_near_token_info(&settings, transfer_message.transfer.token_near)?;
 
-    if token_info.eth_address != transfer_message.transfer.token_eth.into() {
+    if token_info.eth_address != transfer_message.transfer.token_eth.0.into() {
         return Err(CustomError::InvalidEthTokenAddress);
     }
 
@@ -107,9 +115,27 @@ fn estimate_min_fee(token_info: &NearTokenInfo, token_amount: u128) -> Option<u1
     )
 }
 
-fn check_time_before_unlock(
+fn check_transfer_amount(
+    transfer_message: &TransferMessage,
+    settings: &Settings,
+) -> Result<(), CustomError> {
+    let transfer_amount = transfer_message.transfer.amount;
+    if let Some(token_info) = settings.near_tokens_whitelist.get_token_info(transfer_message.transfer.token_near.clone()) {
+        if let Some(max_transfer_amount) = token_info.max_transfer_amount {
+            if transfer_amount > max_transfer_amount {
+                return Err(CustomError::ExceedingMaxAllowableTokenAmount(transfer_amount, max_transfer_amount));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn check_time_before_unlock(
     transfer_message: &TransferMessage,
     min_time_before_unlock: Option<u64>,
+    min_blocks_before_unlock: Option<u64>,
+    eth1_rpc_url: reqwest::Url,
 ) -> Result<(), CustomError> {
     if let Some(min_time_before_unlock) = min_time_before_unlock {
         let transaction_unlock_time_ns = transfer_message.valid_till as u128;
@@ -121,6 +147,19 @@ fn check_time_before_unlock(
 
         if current_time_ns + min_time_before_unlock_ns > transaction_unlock_time_ns {
             return Err(CustomError::NotEnoughTimeBeforeUnlock);
+        }
+    }
+
+    if let Some(min_blocks_before_unlock) = min_blocks_before_unlock {
+        if let Some(transaction_block_height) = transfer_message.valid_till_block_height {
+            let current_eth_block_height =
+                eth_client::methods::get_last_block_number(eth1_rpc_url.as_str())
+                    .await
+                    .map_err(|err| CustomError::FailedFetchLastBlockNumber(err))?;
+
+            if current_eth_block_height + min_blocks_before_unlock > transaction_block_height {
+                return Err(CustomError::NotEnoughTimeBeforeUnlock);
+            }
         }
     }
 
@@ -161,7 +200,7 @@ async fn estimate_profit(
     )
 }
 
-type MethodArgs = (H160, H160, U256, U256, String);
+type MethodArgs = (H160, H160, U256, U256, String, U256);
 
 fn get_transfer_data(
     transfer_event: fast_bridge_common::Event,
@@ -174,11 +213,23 @@ fn get_transfer_data(
             sender_id: _,
             transfer_message,
         } => {
-            let token = web3::types::Address::from(transfer_message.transfer.token_eth);
-            let recipient = web3::types::Address::from(transfer_message.recipient);
+            let token = web3::types::Address::from(transfer_message.transfer.token_eth.0);
+            let recipient = web3::types::Address::from(transfer_message.recipient.0);
             let nonce = web3::types::U256::from(nonce.0);
             let amount = web3::types::U256::from(transfer_message.transfer.amount.0);
-            let method_args = (token, recipient, nonce, amount, near_relay_account_id);
+            let valid_till_block_height = web3::types::U256::from(
+                transfer_message
+                    .valid_till_block_height
+                    .ok_or(CustomError::InvalidValidTillBlockHeight)?,
+            );
+            let method_args = (
+                token,
+                recipient,
+                nonce,
+                amount,
+                near_relay_account_id,
+                valid_till_block_height,
+            );
 
             Ok((nonce, method_name, method_args, transfer_message))
         }
@@ -238,15 +289,16 @@ pub mod tests {
                 valid_till: valid_till,
                 transfer: TransferDataEthereum {
                     token_near: get_near_token(),
-                    token_eth: EthAddress::from(get_eth_token()),
+                    token_eth: EthAddress(get_eth_token().into()),
                     amount: U128::from(1),
                 },
                 fee: TransferDataNear {
                     token: get_near_token(),
                     amount: U128::from(1_000_000_000),
                 },
-                recipient: EthAddress::from(get_recipient()),
+                recipient: EthAddress(get_recipient().into()),
                 valid_till_block_height: Some(0),
+                aurora_sender: None,
             },
         };
 

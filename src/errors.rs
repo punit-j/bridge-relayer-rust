@@ -15,6 +15,9 @@ pub enum CustomError {
     #[error("Failed to fetch Ethereum price in USD: {0:?}")]
     FailedFetchEthereumPrice(reqwest::Error),
 
+    #[error("Failed to fetch last block number: {0:?}")]
+    FailedFetchLastBlockNumber(web3::contract::Error),
+
     #[error("Failed to get near token info from whitelist ({0}) by matching")]
     FailedGetNearTokenInfo(String),
 
@@ -50,6 +53,9 @@ pub enum CustomError {
 
     #[error("Failed to unstore pending transaction: {0:?}")]
     FailedUnstorePendingTx(redis::RedisError),
+
+    #[error("Failed to unstore new event: {0:?}")]
+    FailedRemoveNewEvent(redis::RedisError),
 
     #[error("Failed to execute last_block_number contract method: {0}")]
     FailedExecuteLastBlockNumber(String),
@@ -87,4 +93,11 @@ pub enum CustomError {
 
     #[error("Not enough time before user unlock")]
     NotEnoughTimeBeforeUnlock,
+
+    #[error("Invalid valid till block height")]
+    InvalidValidTillBlockHeight,
+
+    #[error("Exceeding the maximum allowable token amount. \
+    Transferred tokens amount: {0:?}, max transfer allowed: {1:?}")]
+    ExceedingMaxAllowableTokenAmount(near_sdk::json_types::U128, near_sdk::json_types::U128),
 }

@@ -23,7 +23,6 @@ async fn unlock_tokens(
         contract_account_id,
         "lp_unlock".to_string(),
         near_sdk::serde_json::json!({
-            "nonce": near_sdk::json_types::U128(nonce),
             "proof": proof,
         }),
         gas,

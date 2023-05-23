@@ -1,11 +1,9 @@
-extern crate core;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use eth_client::methods::get_contract_abi;
 use fast_bridge_common::{EthAddress, TransferDataEthereum, TransferDataNear};
 use fast_bridge_service_lib::async_redis_wrapper::{self, AsyncRedisWrapper};
 use fast_bridge_service_lib::async_redis_wrapper::{
-    subscribe, EVENTS, PENDING_TRANSACTIONS, TRANSACTIONS,
+    subscribe, EVENTS, NEW_EVENTS, PENDING_TRANSACTIONS, TRANSACTIONS,
 };
 
 use fast_bridge_service_lib::config::{
@@ -28,15 +26,16 @@ use std::time::Duration;
 use tokio::time::timeout;
 use url::Url;
 
-const ETH_CONTRACT_PROXY_ADDRESS: &str = "8AC4c4A1015A9A12A9DBA16234A3f7909b9396Eb";
-const ETH_CONTRACT_IMPLEMENTATION_ADDRESS: &str = "B6b5739c390648A0121502ab3c3F4112f3FeAc1a";
+const ETH_CONTRACT_PROXY_ADDRESS: &str = "B8Dc44944f2C3149d6A7477Eb1E61C454AFE2e5e";
+const ETH_CONTRACT_IMPLEMENTATION_ADDRESS: &str = "878b8ADBbDd5D9ca52789F463e8cF27094b534c8";
 const ETH_TOKEN_ADDRESS: &str = "b2d75C5a142A68BDA438e6a318C7FBB2242f9693";
-const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge2.olga24912_3.testnet";
+const NEAR_CONTRACT_ADDRESS: &str = "fast-bridge3.olga24912_3.testnet";
 const NEAR_TOKEN_ADDRESS: &str = "token.olga24912_3.testnet";
 
 const ONE_MINUTE_SEC: u64 = 60;
-const TRANSFER_TOKEN_AMOUNT: u128 = 10000000;
-const FEE_TOKEN_AMOUNT: u128 = 10000000;
+const TRANSFER_TOKEN_AMOUNT: u128 = 1000000;
+const FEE_TOKEN_AMOUNT: u128 = 20000000;
+const ONE_HOUR_IN_SECS: u64 = 60 * 60;
 
 #[tokio::test]
 async fn main_integration_test() {
@@ -60,8 +59,7 @@ async fn main_integration_test() {
     .await;
     remove_all(redis.clone(), PENDING_TRANSACTIONS).await;
     remove_all(redis.clone(), TRANSACTIONS).await;
-
-    let stream = subscribe::<String>(EVENTS.to_string(), redis.clone()).unwrap();
+    remove_all(redis.clone(), NEW_EVENTS).await;
 
     detect_new_near_event(redis.clone(), init_block, 10).await;
 
@@ -85,7 +83,6 @@ async fn main_integration_test() {
         redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
-        stream,
         near_relay_signer.account_id.to_string(),
     )
     .await;
@@ -174,7 +171,7 @@ pub fn get_valid_till() -> u64 {
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos()
-        + Duration::from_secs(3 * 60 * 60).as_nanos()) as u64
+        + Duration::from_secs(3 * ONE_HOUR_IN_SECS).as_nanos()) as u64
 }
 
 fn get_eth_rpc_url() -> Url {
@@ -309,7 +306,6 @@ pub struct TransferMessage {
     valid_till: u64,
     transfer: TransferDataEthereum,
     fee: TransferDataNear,
-    #[serde(with = "hex::serde")]
     recipient: EthAddress,
     valid_till_block_height: Option<u64>,
 }
@@ -323,14 +319,14 @@ async fn init_token_transfer(signer: InMemorySigner) -> near_primitives::hash::C
         valid_till: get_valid_till(),
         transfer: TransferDataEthereum {
             token_near: near_addr(NEAR_TOKEN_ADDRESS),
-            token_eth: EthAddress::from(eth_addr(ETH_TOKEN_ADDRESS)),
+            token_eth: EthAddress(eth_addr(ETH_TOKEN_ADDRESS).into()),
             amount: near_sdk::json_types::U128(TRANSFER_TOKEN_AMOUNT),
         },
         fee: TransferDataNear {
             token: near_addr(NEAR_TOKEN_ADDRESS),
             amount: near_sdk::json_types::U128(FEE_TOKEN_AMOUNT),
         },
-        recipient: EthAddress::from(get_recipient_eth_addr()),
+        recipient: EthAddress(get_recipient_eth_addr().into()),
         valid_till_block_height: None,
     };
 
@@ -393,16 +389,14 @@ async fn process_events(
     mut redis: AsyncRedisWrapper,
     eth_contract_abi: std::sync::Arc<String>,
     eth_contract_address: std::sync::Arc<web3::types::Address>,
-    stream: tokio::sync::mpsc::Receiver<String>,
     near_relay_account_id: String,
 ) {
-    let worker = fast_bridge_service_lib::event_processor::build_near_events_subscriber(
+    let worker = fast_bridge_service_lib::near_event_processor::process_near_events_worker(
         settings.clone(),
         eth_keypair.clone(),
         redis.clone(),
         eth_contract_abi.clone(),
         eth_contract_address.clone(),
-        stream,
         near_relay_account_id,
     );
     let timeout_duration = std::time::Duration::from_secs(120);
