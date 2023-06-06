@@ -134,11 +134,15 @@ fn register_custom_metrics() {
         .expect("unlock_tokens_current_near_block_height can't be registered");
 
     REGISTRY
-        .register(Box::new(PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT.clone()))
+        .register(Box::new(
+            PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT.clone(),
+        ))
         .expect("pending_transactions_current_eth_block_height can't be registered");
 
     REGISTRY
-        .register(Box::new(NEAR_EVENTS_PROCESSOR_CURRENT_ETH_BLOCK_HEIGHT.clone()))
+        .register(Box::new(
+            NEAR_EVENTS_PROCESSOR_CURRENT_ETH_BLOCK_HEIGHT.clone(),
+        ))
         .expect("near_events_processor_current_eth_block_height can't be registered");
 }
 

@@ -1,4 +1,6 @@
-use crate::prometheus_metrics::{UNLOCK_TOKENS_CURRENT_NEAR_BLOCK_HEIGHT, UNLOCKED_TRANSACTIONS_COUNT};
+use crate::prometheus_metrics::{
+    UNLOCKED_TRANSACTIONS_COUNT, UNLOCK_TOKENS_CURRENT_NEAR_BLOCK_HEIGHT,
+};
 use crate::{
     async_redis_wrapper::AsyncRedisWrapper, config::SafeSettings, errors::CustomError,
     last_block::SafeStorage,
@@ -161,7 +163,9 @@ pub async fn unlock_tokens_worker(
         }
 
         if let Ok(current_block_height) =
-        near_client::methods::get_last_near_block_height(unlock_tokens_settings.server_addr).await {
+            near_client::methods::get_last_near_block_height(unlock_tokens_settings.server_addr)
+                .await
+        {
             UNLOCK_TOKENS_CURRENT_NEAR_BLOCK_HEIGHT.set(current_block_height);
         }
     }

@@ -1,7 +1,10 @@
 use crate::async_redis_wrapper::{
     AsyncRedisWrapper, PendingTransactionData, TxData, PENDING_TRANSACTIONS,
 };
-use crate::prometheus_metrics::{FAIL_TRANSACTIONS_COUNT, PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT, SUCCESS_TRANSACTIONS_COUNT};
+use crate::prometheus_metrics::{
+    FAIL_TRANSACTIONS_COUNT, PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT,
+    SUCCESS_TRANSACTIONS_COUNT,
+};
 use crate::{
     errors::CustomError,
     ethereum::{transactions::TransactionStatus, RainbowBridgeEthereumClient},
@@ -73,7 +76,8 @@ pub async fn run<'a>(
         }
 
         if let Ok(current_eth_block_height) =
-        eth_client::methods::get_last_block_number(eth_rpc_url.as_str()).await {
+            eth_client::methods::get_last_block_number(eth_rpc_url.as_str()).await
+        {
             PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT.set(current_eth_block_height);
         }
 
