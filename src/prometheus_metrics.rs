@@ -68,6 +68,24 @@ lazy_static! {
         "The total number of balance error"
     )
     .expect("metric can't be created");
+
+    pub static ref UNLOCK_TOKENS_CURRENT_NEAR_BLOCK_HEIGHT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
+        "unlock_tokens_current_near_block_height",
+        "The current block height on near in unlock tokens worker"
+    )
+    .expect("metric can't be created");
+
+    pub static ref PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
+        "pending_transactions_current_eth_block_height",
+        "The current block height on eth in pending transactions worker"
+    )
+    .expect("metric can't be created");
+
+    pub static ref NEAR_EVENTS_PROCESSOR_CURRENT_ETH_BLOCK_HEIGHT: GenericGauge<AtomicU64> = GenericGauge::<AtomicU64>::new(
+        "near_events_processor_current_eth_block_height",
+        "The current block height on eth in near events processor worker"
+    )
+    .expect("metric can't be created");
 }
 
 fn register_custom_metrics() {
@@ -110,6 +128,18 @@ fn register_custom_metrics() {
     REGISTRY
         .register(Box::new(BALANCE_ERRORS.clone()))
         .expect("balance_errors can't be registered");
+
+    REGISTRY
+        .register(Box::new(UNLOCK_TOKENS_CURRENT_NEAR_BLOCK_HEIGHT.clone()))
+        .expect("unlock_tokens_current_near_block_height can't be registered");
+
+    REGISTRY
+        .register(Box::new(PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT.clone()))
+        .expect("pending_transactions_current_eth_block_height can't be registered");
+
+    REGISTRY
+        .register(Box::new(NEAR_EVENTS_PROCESSOR_CURRENT_ETH_BLOCK_HEIGHT.clone()))
+        .expect("near_events_processor_current_eth_block_height can't be registered");
 }
 
 async fn metrics_handler() -> Result<impl Reply, Rejection> {

@@ -1,7 +1,7 @@
 use crate::async_redis_wrapper::{
     AsyncRedisWrapper, PendingTransactionData, TxData, PENDING_TRANSACTIONS,
 };
-use crate::prometheus_metrics::{FAIL_TRANSACTIONS_COUNT, SUCCESS_TRANSACTIONS_COUNT};
+use crate::prometheus_metrics::{FAIL_TRANSACTIONS_COUNT, PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT, SUCCESS_TRANSACTIONS_COUNT};
 use crate::{
     errors::CustomError,
     ethereum::{transactions::TransactionStatus, RainbowBridgeEthereumClient},
@@ -28,7 +28,7 @@ pub async fn run<'a>(
 ) {
     let rb_index = rainbow_bridge_index_js_path.as_str();
     let eth_client =
-        RainbowBridgeEthereumClient::new(eth_rpc_url, rb_index, rpc_timeout_secs).unwrap();
+        RainbowBridgeEthereumClient::new(eth_rpc_url.clone(), rb_index, rpc_timeout_secs).unwrap();
 
     // transaction hash and last processed time
     let mut pending_transactions = HashMap::<H256, PendingTransactionData>::new();
@@ -70,6 +70,11 @@ pub async fn run<'a>(
                 error!("{}", CustomError::FailedUnstorePendingTx(error));
             }
             pending_transactions.remove(&item);
+        }
+
+        if let Ok(current_eth_block_height) =
+        eth_client::methods::get_last_block_number(eth_rpc_url.as_str()).await {
+            PENDING_TRANSACTIONS_CURRENT_ETH_BLOCK_HEIGHT.set(current_eth_block_height);
         }
 
         tokio::time::sleep(core::time::Duration::from_secs(1)).await;

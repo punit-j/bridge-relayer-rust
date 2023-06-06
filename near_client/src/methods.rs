@@ -55,6 +55,18 @@ pub async fn get_final_block_timestamp(
     Ok(block_info.header.timestamp)
 }
 
+pub async fn get_last_near_block_height(
+    server_addr: url::Url,
+) -> Result<u64, Box<dyn std::error::Error>> {
+    let client = DEFAULT_CONNECTOR.connect(server_addr);
+    let request = methods::block::RpcBlockRequest {
+        block_reference: BlockReference::latest(),
+    };
+
+    let block_info = client.call(request).await?;
+    Ok(block_info.header.height as u64)
+}
+
 pub async fn change(
     server_addr: url::Url,
     signer: near_crypto::InMemorySigner,

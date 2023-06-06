@@ -1,6 +1,8 @@
 use crate::async_redis_wrapper::{self, AsyncRedisWrapper, NEW_EVENTS};
 use crate::config::{SafeSettings, Settings};
-use crate::prometheus_metrics::{BALANCE_ERRORS, CONNECTION_ERRORS, PENDING_TRANSACTIONS_COUNT, SKIP_TRANSACTIONS_COUNT};
+use crate::prometheus_metrics::{BALANCE_ERRORS, CONNECTION_ERRORS,
+                                NEAR_EVENTS_PROCESSOR_CURRENT_ETH_BLOCK_HEIGHT,
+                                PENDING_TRANSACTIONS_COUNT, SKIP_TRANSACTIONS_COUNT};
 use crate::{errors::CustomError, utils::get_tx_count};
 use fast_bridge_common::Event::FastBridgeInitTransferEvent;
 use near_sdk::AccountId;
@@ -193,6 +195,13 @@ pub async fn process_near_events_worker(
                 }
             }
         }
+
+        if let Ok(current_eth_block_height) =
+        eth_client::methods::get_last_block_number(settings.eth.rpc_url.as_str())
+            .await {
+            NEAR_EVENTS_PROCESSOR_CURRENT_ETH_BLOCK_HEIGHT.set(current_eth_block_height);
+        }
+
         sleep(Duration::from_secs(SLEEP_TIME_AFTER_EVENTS_PROCESS_SEC));
     }
 }
