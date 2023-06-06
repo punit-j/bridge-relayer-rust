@@ -120,10 +120,16 @@ fn check_transfer_amount(
     settings: &Settings,
 ) -> Result<(), CustomError> {
     let transfer_amount = transfer_message.transfer.amount;
-    if let Some(token_info) = settings.near_tokens_whitelist.get_token_info(transfer_message.transfer.token_near.clone()) {
+    if let Some(token_info) = settings
+        .near_tokens_whitelist
+        .get_token_info(transfer_message.transfer.token_near.clone())
+    {
         if let Some(max_transfer_amount) = token_info.max_transfer_amount {
             if transfer_amount > max_transfer_amount {
-                return Err(CustomError::ExceedingMaxAllowableTokenAmount(transfer_amount, max_transfer_amount));
+                return Err(CustomError::ExceedingMaxAllowableTokenAmount(
+                    transfer_amount,
+                    max_transfer_amount,
+                ));
             }
         }
     }

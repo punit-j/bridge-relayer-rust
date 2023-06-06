@@ -11,7 +11,7 @@ use std::time::Duration;
 use tracing::log::warn;
 use uint::rustc_hex::ToHex;
 use web3::types::{H256, U256};
-use web3::{contract::Error::Api, Error::Rpc, Error::Transport, signing::Key};
+use web3::{contract::Error::Api, signing::Key, Error::Rpc, Error::Transport};
 
 macro_rules! info {
     ($($arg:tt)+) => { tracing::info!(target: crate::logs::EVENT_PROCESSOR_TARGET, $($arg)+) }
@@ -22,7 +22,6 @@ macro_rules! error {
 }
 
 const SLEEP_TIME_AFTER_EVENTS_PROCESS_SEC: u64 = 10;
-const MAX_NEW_EVENTS_BATCH: usize = 1_000_000;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn process_transfer_event(
@@ -148,60 +147,49 @@ pub async fn process_near_events_worker(
     let mut pending_events: HashMap<u128, H256> = HashMap::new();
 
     loop {
-        let mut iter: redis::AsyncIter<(String, String)> = match redis.connection.hscan(NEW_EVENTS).await {
-            Ok(iter) => iter,
-            Err(err) => {
-                warn!("Error on getting new events: {:?}", err);
-                sleep(Duration::from_secs(SLEEP_TIME_AFTER_EVENTS_PROCESS_SEC));
-                continue;
-            }
-        };
-        let mut new_events: Vec<fast_bridge_common::Event> = vec![];
+        let mut redis_connection = redis.connection.clone();
+        let mut iter: redis::AsyncIter<(String, String)> =
+            match redis_connection.hscan(NEW_EVENTS).await {
+                Ok(iter) => iter,
+                Err(err) => {
+                    warn!("Error on getting new events: {:?}", err);
+                    sleep(Duration::from_secs(SLEEP_TIME_AFTER_EVENTS_PROCESS_SEC));
+                    continue;
+                }
+            };
+
         let settings = settings.lock().await.clone();
 
-        loop {
-            if new_events.len() >= MAX_NEW_EVENTS_BATCH {
-                break;
-            }
+        while let Some((_key, event_str)) = iter.next_item().await {
+            if let Ok(event) = serde_json::from_str::<fast_bridge_common::Event>(&event_str) {
+                info!("Process event: {}", event_str);
 
-            if let Some(pair) = iter.next_item().await {
-                if let Ok(event) = serde_json::from_str::<fast_bridge_common::Event>(pair.1.as_str()) {
-                    new_events.push(event);
-                }
-            } else {
-                break;
-            }
-        }
-
-        for event in new_events {
-            let event_str = serde_json::to_string(&event).unwrap_or(format!("{:?}", event));
-            info!("Process event: {}", event_str);
-
-            if let FastBridgeInitTransferEvent {
-                nonce,
-                sender_id,
-                transfer_message,
-            } = event
-            {
-                let res = process_transfer_event(
+                if let FastBridgeInitTransferEvent {
                     nonce,
-                    sender_id.clone(),
-                    transfer_message.clone(),
-                    &settings,
-                    &mut redis,
-                    *eth_contract_address,
-                    eth_keypair.clone(),
-                    eth_contract_abi.clone(),
-                    near_relay_account_id.clone(),
-                    &mut pending_events,
-                )
+                    sender_id,
+                    transfer_message,
+                } = event
+                {
+                    let res = process_transfer_event(
+                        nonce,
+                        sender_id.clone(),
+                        transfer_message.clone(),
+                        &settings,
+                        &mut redis,
+                        *eth_contract_address,
+                        eth_keypair.clone(),
+                        eth_contract_abi.clone(),
+                        near_relay_account_id.clone(),
+                        &mut pending_events,
+                    )
                     .await;
 
-                if let Err(error) = res {
-                    error!(
-                        "Failed to process tx with nonce {}, err: {:?}.",
-                        nonce.0, error
-                    );
+                    if let Err(error) = res {
+                        error!(
+                            "Failed to process tx with nonce {}, err: {:?}.",
+                            nonce.0, error
+                        );
+                    }
                 }
             }
         }
@@ -228,24 +216,28 @@ fn is_balance_error(error: &CustomError) -> bool {
     match error {
         CustomError::FailedEstimateGas(Api(Rpc(ref rpc_error)))
         | CustomError::FailedExecuteTransferTokens(Api(Rpc(ref rpc_error))) => {
-            if rpc_error.message.contains("insufficient allowance") ||
-                rpc_error.message.contains("transfer amount exceeds balance") ||
-                rpc_error.message.contains("insufficient funds for gas * price + value") {
+            if rpc_error.message.contains("insufficient allowance")
+                || rpc_error
+                    .message
+                    .contains("transfer amount exceeds balance")
+                || rpc_error
+                    .message
+                    .contains("insufficient funds for gas * price + value")
+            {
                 true
             } else {
                 false
             }
-        },
+        }
         _ => false,
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use std::collections::HashMap;
     use crate::async_redis_wrapper::{AsyncRedisWrapper, PENDING_TRANSACTIONS};
-    use crate::near_event_processor::process_transfer_event;
     use crate::logs::init_logger;
+    use crate::near_event_processor::process_transfer_event;
     use crate::test_utils;
     use crate::test_utils::get_settings;
     use eth_client::test_utils::{
@@ -257,6 +249,7 @@ pub mod tests {
     use near_sdk::json_types::U128;
     use rand::Rng;
     use redis::AsyncCommands;
+    use std::collections::HashMap;
     use std::time::Duration;
     use web3::types::H256;
 
@@ -309,7 +302,7 @@ pub mod tests {
             relay_eth_key.clone(),
             eth_erc20_fast_bridge_contract_abi.clone(),
             near_account,
-            &mut pending_events
+            &mut pending_events,
         )
         .await
         .unwrap();
